@@ -314,9 +314,11 @@ h3 {
 .import-button,
 .undo-button,
 .contact-form button,
+.contact-edit,
 .contact-delete,
 .archive-list button,
-.export-csv-button {
+.export-csv-button,
+.delete-key-button {
   min-height: 42px;
   padding: 0 14px;
   border-radius: 8px;
@@ -934,7 +936,8 @@ body.is-moving-key .photo-hover {
   display: block;
   overflow: hidden;
   color: var(--ink);
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -943,8 +946,8 @@ body.is-moving-key .photo-hover {
   display: block;
   margin-top: 3px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .contact-actions {
@@ -956,14 +959,22 @@ body.is-moving-key .photo-hover {
 .contact-delete {
   min-height: 34px;
   padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .contact-edit {
-  color: #1e4d2b;
-  background: #dceee1;
+  color: var(--blue);
+  background: #dce8f7;
 }
 
 .contact-delete {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.delete-key-button {
+  width: 100%;
   color: var(--red);
   background: var(--red-soft);
 }

@@ -60,6 +60,7 @@ const checkinBtn = document.querySelector("#checkinBtn");
 const rentedBtn = document.querySelector("#rentedBtn");
 const removedBtn = document.querySelector("#removedBtn");
 const exportKeyCsvBtn = document.querySelector("#exportKeyCsvBtn");
+const deleteSelectedKeyBtn = document.querySelector("#deleteSelectedKeyBtn");
 const signatureCanvas = document.querySelector("#signatureCanvas");
 const clearSignatureBtn = document.querySelector("#clearSignatureBtn");
 const historyList = document.querySelector("#historyList");
@@ -2079,6 +2080,11 @@ exportKeyCsvBtn.addEventListener("click", () => {
   const key = getSelectedKey();
   if (!key) return;
   exportKeyCsv(key);
+});
+deleteSelectedKeyBtn.addEventListener("click", () => {
+  const key = getSelectedKey();
+  if (!key) return;
+  deleteKeyWithoutArchive(key.id);
 });
 keySetPhotoList.addEventListener("change", (event) => {
   const input = event.target;
