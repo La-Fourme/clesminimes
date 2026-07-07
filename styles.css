@@ -455,7 +455,10 @@ h3 {
 }
 
 .undo-tab-icon {
+  width: 20px;
+  height: 20px;
   stroke-width: 2.2;
+  transform: translateY(-2px);
 }
 
 .undo-button span {
@@ -934,6 +937,12 @@ body.is-moving-key .photo-hover {
 
 .contacts-list li[draggable="true"] {
   cursor: grab;
+  touch-action: pan-y;
+}
+
+.contacts-list.is-touch-dragging {
+  touch-action: none;
+  user-select: none;
 }
 
 .contacts-list li.dragging {
@@ -1494,6 +1503,10 @@ body.is-moving-key .photo-hover {
   .undo-button {
     justify-content: center;
     text-align: center;
+  }
+
+  .detail-panel .photo-box {
+    display: none;
   }
 }
 

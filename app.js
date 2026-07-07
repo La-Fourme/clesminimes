@@ -114,6 +114,7 @@ let contactsCloseTimer = null;
 let archivesCloseTimer = null;
 let detailCloseTimer = null;
 let draggedContactId = null;
+let touchContactDrag = null;
 let editingContactId = null;
 let hoveredKeyId = null;
 let isDetailPanelHovered = false;
@@ -503,6 +504,10 @@ function getContactDisplayName(contact) {
   return [contact.firstName, contact.name].filter(Boolean).join(" - ");
 }
 
+function getContactSelectName(contact) {
+  return contact.type === "external" ? contact.name : getContactDisplayName(contact);
+}
+
 function normalizeContact(contact) {
   const type = contact.type === "external" ? "external" : "internal";
 
@@ -680,8 +685,13 @@ function isDetailPanelBusy() {
   return isPhotoImporting || form.contains(document.activeElement);
 }
 
+function isTouchLayout() {
+  return window.matchMedia("(max-width: 1040px), (pointer: coarse)").matches;
+}
+
 function scheduleDetailPanelClose() {
   clearTimeout(detailCloseTimer);
+  if (isTouchLayout()) return;
   if (!selectedId) return;
 
   detailCloseTimer = setTimeout(() => {
@@ -713,7 +723,7 @@ function renderContactSelect() {
     groupedContacts.forEach((contact) => {
       const option = document.createElement("option");
       option.value = contact.id;
-      option.textContent = contact.phone ? `${getContactDisplayName(contact)} - ${contact.phone}` : getContactDisplayName(contact);
+      option.textContent = contact.phone ? `${getContactSelectName(contact)} - ${contact.phone}` : getContactSelectName(contact);
       group.append(option);
     });
     contactSelect.append(group);
@@ -821,6 +831,37 @@ function saveContactOrderFromList() {
   saveContacts();
   renderContactSelect();
   renderContactsPanel();
+}
+
+function moveDraggedContactToPoint(clientY) {
+  const draggedItem = contactsList.querySelector(".dragging");
+  if (!draggedItem) return;
+
+  const target = [...contactsList.querySelectorAll("[data-contact-id]:not(.dragging)")].find((item) => {
+    const rect = item.getBoundingClientRect();
+    return clientY < rect.top + rect.height / 2;
+  });
+  contactsList.insertBefore(draggedItem, target || null);
+}
+
+function startTouchContactDrag(item, pointerId, clientY) {
+  touchContactDrag = { item, pointerId };
+  draggedContactId = item.dataset.contactId;
+  contactsList.classList.add("is-touch-dragging");
+  item.classList.add("dragging");
+  item.setPointerCapture?.(pointerId);
+  moveDraggedContactToPoint(clientY);
+}
+
+function stopTouchContactDrag() {
+  if (!touchContactDrag) return;
+
+  saveContactOrderFromList();
+  touchContactDrag.item.releasePointerCapture?.(touchContactDrag.pointerId);
+  touchContactDrag.item.classList.remove("dragging");
+  contactsList.classList.remove("is-touch-dragging");
+  draggedContactId = null;
+  touchContactDrag = null;
 }
 
 function formatArchiveDate(value) {
@@ -1455,7 +1496,7 @@ function renderGrid() {
           selectedId = key.id;
           selectedSetId = key.sets[0]?.id || "main";
           render();
-          scheduleDetailPanelClose();
+          if (!isTouchLayout()) scheduleDetailPanelClose();
         });
         button.addEventListener("mouseenter", () => {
           hoveredKeyId = key.id;
@@ -1978,6 +2019,51 @@ contactsList.addEventListener("dragover", (event) => {
 contactsList.addEventListener("drop", (event) => {
   event.preventDefault();
   saveContactOrderFromList();
+});
+contactsList.addEventListener("pointerdown", (event) => {
+  if (event.pointerType === "mouse") return;
+  if (event.target.closest("button")) return;
+
+  const item = event.target.closest("[data-contact-id]");
+  if (!item) return;
+
+  const timer = setTimeout(() => startTouchContactDrag(item, event.pointerId, event.clientY), 220);
+  touchContactDrag = {
+    item,
+    pointerId: event.pointerId,
+    timer,
+    startX: event.clientX,
+    startY: event.clientY,
+  };
+});
+contactsList.addEventListener("pointermove", (event) => {
+  if (!touchContactDrag || touchContactDrag.pointerId !== event.pointerId) return;
+
+  if (touchContactDrag.timer) {
+    const moved = Math.hypot(event.clientX - touchContactDrag.startX, event.clientY - touchContactDrag.startY);
+    if (moved > 10) {
+      clearTimeout(touchContactDrag.timer);
+      touchContactDrag = null;
+    }
+    return;
+  }
+
+  event.preventDefault();
+  moveDraggedContactToPoint(event.clientY);
+});
+contactsList.addEventListener("pointerup", (event) => {
+  if (!touchContactDrag || touchContactDrag.pointerId !== event.pointerId) return;
+  if (touchContactDrag.timer) {
+    clearTimeout(touchContactDrag.timer);
+    touchContactDrag = null;
+    return;
+  }
+  stopTouchContactDrag();
+});
+contactsList.addEventListener("pointercancel", (event) => {
+  if (!touchContactDrag || touchContactDrag.pointerId !== event.pointerId) return;
+  if (touchContactDrag.timer) clearTimeout(touchContactDrag.timer);
+  stopTouchContactDrag();
 });
 registryToggleBtn.addEventListener("click", switchRegistry);
 compromisesTabBtn.addEventListener("click", openCompromisesPanel);
