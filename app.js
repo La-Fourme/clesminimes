@@ -1,0 +1,1906 @@
+const categories = ["T1", "T2", "T3", "T4+", "Maison", "Autre"];
+const slotsPerCategory = 20;
+const registryStorageKey = "cles-location-active-registry-v1";
+const sharedContactsStorageKey = "cles-location-intervenants-v1";
+const registryConfig = {
+  location: {
+    title: "CENTURY 21 LES MINIMES - CL\u00c9S LOCATION",
+    toggleLabel: "BASCULER VERS\nTABLEAU CL\u00c9S TRANSACTION",
+    keysStorageKey: "cles-immobilieres-v1",
+    archivesStorageKey: "cles-location-archives-v1",
+    archiveActionLabel: "Loué",
+    rentedArchiveTitle: "Biens loués",
+    rentedArchiveEmpty: "Aucun bien loué.",
+    rentedArchiveText: "Loué",
+  },
+  transaction: {
+    title: "CENTURY 21 LES MINIMES - CL\u00c9S TRANSACTION",
+    toggleLabel: "BASCULER VERS\nTABLEAU CL\u00c9S LOCATION",
+    keysStorageKey: "cles-transaction-v1",
+    archivesStorageKey: "cles-transaction-archives-v1",
+    archiveActionLabel: "Compromis",
+    rentedArchiveTitle: "Biens compromis",
+    rentedArchiveEmpty: "Aucun bien en compromis.",
+    rentedArchiveText: "Compromis",
+  },
+};
+
+const keySetOptions = [
+  { id: "main", label: "Jeu 1" },
+  { id: "double", label: "Jeu 2" },
+  { id: "triple", label: "Jeu 3" },
+];
+
+const appTitle = document.querySelector("#appTitle");
+const appTitleText = document.querySelector(".app-title-text");
+const registryToggleBtn = document.querySelector("#registryToggleBtn");
+const grid = document.querySelector("#keyGrid");
+const detailPanel = document.querySelector("#detailPanel");
+const form = document.querySelector("#keyForm");
+const selectedTitle = document.querySelector("#selectedTitle");
+const statusPill = document.querySelector("#statusPill");
+const keySetCountSelect = document.querySelector("#keySetCountSelect");
+const propertyInput = document.querySelector("#propertyInput");
+const postalCodeInput = document.querySelector("#postalCodeInput");
+const cityInput = document.querySelector("#cityInput");
+const ownerInput = document.querySelector("#ownerInput");
+const notesInput = document.querySelector("#notesInput");
+const keySetPhotoList = document.querySelector("#keySetPhotoList");
+const keySetSelect = document.querySelector("#keySetSelect");
+const contactSelect = document.querySelector("#contactSelect");
+const movementPersonInput = document.querySelector("#movementPersonInput");
+const movementPhoneInput = document.querySelector("#movementPhoneInput");
+const movementNoteInput = document.querySelector("#movementNoteInput");
+const checkoutBtn = document.querySelector("#checkoutBtn");
+const checkinBtn = document.querySelector("#checkinBtn");
+const rentedBtn = document.querySelector("#rentedBtn");
+const removedBtn = document.querySelector("#removedBtn");
+const exportKeyCsvBtn = document.querySelector("#exportKeyCsvBtn");
+const signatureCanvas = document.querySelector("#signatureCanvas");
+const clearSignatureBtn = document.querySelector("#clearSignatureBtn");
+const historyList = document.querySelector("#historyList");
+const searchInput = document.querySelector("#searchInput");
+const statusFilter = document.querySelector("#statusFilter");
+const closePanelBtn = document.querySelector("#closePanelBtn");
+const saleCelebration = document.querySelector("#saleCelebration");
+const celebrationSky = saleCelebration?.querySelector(".celebration-sky");
+const compromisesTabBtn = document.querySelector("#compromisesTabBtn");
+const compromisesPanel = document.querySelector("#compromisesPanel");
+const closeCompromisesBtn = document.querySelector("#closeCompromisesBtn");
+const compromisesList = document.querySelector("#compromisesList");
+const archivesTabBtn = document.querySelector("#archivesTabBtn");
+const archivesPanel = document.querySelector("#archivesPanel");
+const closeArchivesBtn = document.querySelector("#closeArchivesBtn");
+const rentedArchiveSection = document.querySelector("#rentedArchiveSection");
+const authenticatedArchiveSection = document.querySelector("#authenticatedArchiveSection");
+const rentedArchiveTitle = document.querySelector("#rentedArchiveTitle");
+const rentedList = document.querySelector("#rentedList");
+const removedList = document.querySelector("#removedList");
+const authenticatedList = document.querySelector("#authenticatedList");
+const contactsTabBtn = document.querySelector("#contactsTabBtn");
+const contactsPanel = document.querySelector("#contactsPanel");
+const closeContactsBtn = document.querySelector("#closeContactsBtn");
+const contactForm = document.querySelector("#contactForm");
+const contactNameInput = document.querySelector("#contactNameInput");
+const contactPhoneInput = document.querySelector("#contactPhoneInput");
+const contactsList = document.querySelector("#contactsList");
+const contactTabs = [...document.querySelectorAll(".contact-tab")];
+const undoBtn = document.querySelector("#undoBtn");
+const exportFilledDataBtn = document.querySelector("#exportFilledDataBtn");
+const backupDataBtn = document.querySelector("#backupDataBtn");
+const importDataBtn = document.querySelector("#importDataBtn");
+const backupFileInput = document.querySelector("#backupFileInput");
+
+let activeRegistry = loadActiveRegistry();
+let keys = loadKeys();
+let archives = loadArchives();
+let contacts = loadContacts();
+let selectedId = null;
+let selectedSetId = "main";
+let draggedKeyId = null;
+let activeContactType = "internal";
+let isSigning = false;
+let hasSignature = false;
+let contactsCloseTimer = null;
+let archivesCloseTimer = null;
+let detailCloseTimer = null;
+let hoveredKeyId = null;
+let isDetailPanelHovered = false;
+let isPhotoImporting = false;
+let undoSnapshot = null;
+let saleCelebrationTimer = null;
+const celebrationAudioFiles = ["Ados.mp3", "Adultes.mp3", "Langue.mp3"];
+let celebrationAudioPlayers = [];
+
+function makeKeySet(id) {
+  const option = keySetOptions.find((set) => set.id === id) || keySetOptions[0];
+  return {
+    id: option.id,
+    label: option.label,
+    photo: "",
+    holder: "",
+    status: "available",
+    history: [],
+  };
+}
+
+function loadActiveRegistry() {
+  const saved = localStorage.getItem(registryStorageKey);
+  return saved === "transaction" ? "transaction" : "location";
+}
+
+function saveActiveRegistry() {
+  localStorage.setItem(registryStorageKey, activeRegistry);
+}
+
+function getBackupStorageKeys() {
+  return [
+    registryStorageKey,
+    sharedContactsStorageKey,
+    registryConfig.location.keysStorageKey,
+    registryConfig.location.archivesStorageKey,
+    registryConfig.transaction.keysStorageKey,
+    registryConfig.transaction.archivesStorageKey,
+  ];
+}
+
+function updateUndoButton() {
+  undoBtn.disabled = !undoSnapshot;
+}
+
+function createUndoSnapshot() {
+  const storage = {};
+  getBackupStorageKeys().forEach((key) => {
+    storage[key] = localStorage.getItem(key);
+  });
+
+  return {
+    storage,
+    selectedId,
+    selectedSetId,
+    activeContactType,
+  };
+}
+
+function rememberUndoStep() {
+  undoSnapshot = createUndoSnapshot();
+  updateUndoButton();
+}
+
+function restoreStorageSnapshot(snapshot) {
+  getBackupStorageKeys().forEach((key) => {
+    const value = snapshot.storage[key];
+    if (typeof value === "string") {
+      localStorage.setItem(key, value);
+    } else {
+      localStorage.removeItem(key);
+    }
+  });
+}
+
+function undoPreviousStep() {
+  if (!undoSnapshot) return;
+
+  const snapshot = undoSnapshot;
+  undoSnapshot = null;
+  restoreStorageSnapshot(snapshot);
+  activeRegistry = loadActiveRegistry();
+  keys = loadKeys();
+  archives = loadArchives();
+  contacts = loadContacts();
+  selectedId = snapshot.selectedId;
+  selectedSetId = snapshot.selectedSetId || "main";
+  activeContactType = snapshot.activeContactType || "internal";
+  hoveredKeyId = null;
+  isDetailPanelHovered = false;
+  clearSignature();
+  updateRegistryHeader();
+  render();
+  updateUndoButton();
+}
+
+function getRegistryConfig() {
+  return registryConfig[activeRegistry] || registryConfig.location;
+}
+
+function updateRegistryHeader() {
+  const config = getRegistryConfig();
+  appTitleText.textContent = config.title;
+  document.title = config.title;
+  registryToggleBtn.textContent = config.toggleLabel;
+  rentedBtn.textContent = config.archiveActionLabel;
+  rentedArchiveTitle.textContent = config.rentedArchiveTitle;
+  compromisesTabBtn.hidden = activeRegistry !== "transaction";
+  rentedArchiveSection.hidden = activeRegistry === "transaction";
+  authenticatedArchiveSection.hidden = activeRegistry !== "transaction";
+  if (activeRegistry !== "transaction") compromisesPanel.hidden = true;
+  registryToggleBtn.title =
+    activeRegistry === "location" ? "Basculer vers le registre Transaction" : "Basculer vers le registre Location";
+}
+
+function switchRegistry() {
+  activeRegistry = activeRegistry === "location" ? "transaction" : "location";
+  saveActiveRegistry();
+  keys = loadKeys();
+  archives = loadArchives();
+  contacts = loadContacts();
+  selectedId = null;
+  selectedSetId = "main";
+  hoveredKeyId = null;
+  isDetailPanelHovered = false;
+  contactsPanel.hidden = true;
+  compromisesPanel.hidden = true;
+  archivesPanel.hidden = true;
+  clearTimeout(detailCloseTimer);
+  clearTimeout(contactsCloseTimer);
+  clearTimeout(archivesCloseTimer);
+  clearSignature();
+  migrateArchivedSlots();
+  updateRegistryHeader();
+  render();
+}
+
+function makeInitialKeys() {
+  return categories.flatMap((category) =>
+    Array.from({ length: slotsPerCategory }, (_, index) => ({
+      id: `${category}-${index + 1}`,
+      category,
+      number: index + 1,
+      property: "",
+      postalCode: "",
+      city: "",
+      owner: "",
+      notes: "",
+      photo: "",
+      archived: false,
+      sets: [makeKeySet("main")],
+    })),
+  );
+}
+
+function makeEmptyKey(key) {
+  return {
+    id: key.id,
+    category: key.category,
+    number: key.number,
+    property: "",
+    postalCode: "",
+    city: "",
+    owner: "",
+    notes: "",
+    photo: "",
+    archived: false,
+    sets: [makeKeySet("main")],
+  };
+}
+
+function normalizeSet(set, index = 0) {
+  const fallback = keySetOptions[index] || keySetOptions[0];
+  const id = keySetOptions.some((option) => option.id === set.id) ? set.id : fallback.id;
+  const option = keySetOptions.find((savedOption) => savedOption.id === id) || fallback;
+
+  return {
+    id: option.id,
+    label: option.label,
+    photo: set.photo || "",
+    holder: set.holder || "",
+    status: set.status === "out" ? "out" : "available",
+    history: Array.isArray(set.history) ? set.history : [],
+  };
+}
+
+function normalizeKey(key) {
+  let sets =
+    Array.isArray(key.sets) && key.sets.length
+      ? key.sets.slice(0, 3).map(normalizeSet)
+      : [
+          {
+            ...makeKeySet("main"),
+            photo: key.photo || "",
+            holder: key.holder || "",
+            status: key.status === "out" ? "out" : "available",
+            history: Array.isArray(key.history) ? key.history : [],
+          },
+        ];
+
+  if (key.photo && !sets.some((set) => set.photo)) {
+    sets = sets.map((set, index) => (index === 0 ? { ...set, photo: key.photo } : set));
+  }
+
+  return {
+    id: key.id,
+    category: key.category,
+    number: key.number,
+    property: key.property || "",
+    postalCode: key.postalCode || "",
+    city: key.city || "",
+    owner: key.owner || "",
+    notes: key.notes || "",
+    photo: "",
+    archived: Boolean(key.archived),
+    sets,
+  };
+}
+
+function loadKeys() {
+  const saved = localStorage.getItem(getRegistryConfig().keysStorageKey);
+  if (!saved) return makeInitialKeys();
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed.map(normalizeKey) : makeInitialKeys();
+  } catch {
+    return makeInitialKeys();
+  }
+}
+
+function saveKeys() {
+  try {
+    localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
+  } catch (error) {
+    alert("La sauvegarde a échoué. Une photo est probablement trop lourde : essayez une image plus légère.");
+    throw error;
+  }
+}
+
+function normalizeArchive(record) {
+  return {
+    id: record.id || `archive-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    reason: record.reason || record.archiveReason || "rented",
+    archivedAt: record.archivedAt || new Date().toISOString(),
+    key: normalizeKey(record.key || record),
+  };
+}
+
+function loadArchives() {
+  const saved = localStorage.getItem(getRegistryConfig().archivesStorageKey);
+  if (!saved) return [];
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed.map(normalizeArchive) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveArchives() {
+  localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
+}
+
+function migrateArchivedSlots() {
+  const archivedKeys = keys.filter((key) => key.archived);
+  if (!archivedKeys.length) return;
+
+  const existingArchiveIds = new Set(archives.map((record) => record.id));
+  const migratedArchives = archivedKeys
+    .map((key) => ({
+      id: `${key.id}-${key.archivedAt || Date.now()}`,
+      reason: key.archiveReason || "rented",
+      archivedAt: key.archivedAt || new Date().toISOString(),
+      key: { ...key, archived: false },
+    }))
+    .filter((record) => !existingArchiveIds.has(record.id));
+
+  archives = [...archives, ...migratedArchives];
+  keys = keys.map((key) => (key.archived ? makeEmptyKey(key) : key));
+  saveArchives();
+  saveKeys();
+}
+
+function createContactId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `contact-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeContact(contact) {
+  const type = contact.type === "external" ? "external" : "internal";
+
+  return {
+    id: contact.id || createContactId(),
+    name: (contact.name || "").trim(),
+    phone: (contact.phone || "").trim(),
+    type,
+  };
+}
+
+function loadContacts() {
+  const saved = localStorage.getItem(sharedContactsStorageKey);
+  if (!saved) return [];
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed.map(normalizeContact).filter((contact) => contact.name) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveContacts() {
+  localStorage.setItem(sharedContactsStorageKey, JSON.stringify(contacts));
+}
+
+function getSelectedKey() {
+  return keys.find((key) => key.id === selectedId);
+}
+
+function getSelectedSet(key = getSelectedKey()) {
+  if (!key) return null;
+  return key.sets.find((set) => set.id === selectedSetId) || key.sets[0];
+}
+
+function keyLabel(key) {
+  return `${key.category} #${key.number}`;
+}
+
+function tilePrefix(key) {
+  if (key.category === "Maison") return "M";
+  if (key.category === "Autre") return "A";
+  return key.category;
+}
+
+function tileLabel(key) {
+  return `${tilePrefix(key)} #${key.number}`;
+}
+
+function formatOwner(owner) {
+  return (owner || "").trim().toLocaleUpperCase("fr-FR");
+}
+
+function getStatus(key) {
+  if (key.archived) return "archived";
+  return key.sets.some((set) => set.status === "out") ? "out" : "available";
+}
+
+function isKeyFilled(key) {
+  return Boolean(
+    key.property?.trim() ||
+      key.postalCode?.trim() ||
+      key.city?.trim() ||
+      key.owner?.trim() ||
+      key.notes?.trim() ||
+      key.sets?.some((set) => set.photo || set.holder?.trim() || set.history?.length),
+  );
+}
+
+function getTileStatus(key) {
+  if (key.archived) return "archived";
+  if (key.sets.some((set) => set.status === "out")) return "out";
+  return isKeyFilled(key) ? "available" : "empty";
+}
+
+function statusText(key) {
+  if (key.archived) return "Archivée";
+  const outCount = key.sets.filter((set) => set.status === "out").length;
+  if (!outCount) return "Disponible";
+  return key.sets.length === 1 ? "Sortie" : `${outCount} jeu${outCount > 1 ? "x" : ""} sorti${outCount > 1 ? "s" : ""}`;
+}
+
+function cloneKeyContent(key) {
+  return {
+    property: key.property || "",
+    postalCode: key.postalCode || "",
+    city: key.city || "",
+    owner: key.owner || "",
+    notes: key.notes || "",
+    photo: key.photo || "",
+    archived: false,
+    sets: JSON.parse(JSON.stringify(key.sets || [makeKeySet("main")])),
+  };
+}
+
+function applyKeyContent(slot, content) {
+  return {
+    ...slot,
+    property: content.property || "",
+    postalCode: content.postalCode || "",
+    city: content.city || "",
+    owner: content.owner || "",
+    notes: content.notes || "",
+    photo: content.photo || "",
+    archived: false,
+    sets: JSON.parse(JSON.stringify(content.sets || [makeKeySet("main")])),
+  };
+}
+
+function moveKeyToSlot(sourceId, targetId, options = {}) {
+  if (!sourceId || !targetId || sourceId === targetId) return;
+
+  const sourceKey = keys.find((key) => key.id === sourceId);
+  const targetKey = keys.find((key) => key.id === targetId);
+  if (!sourceKey || !targetKey || !isKeyFilled(sourceKey)) return;
+
+  const shouldCopy = Boolean(options.copy);
+  const sourceContent = cloneKeyContent(sourceKey);
+  const targetContent = cloneKeyContent(targetKey);
+  const targetIsFilled = isKeyFilled(targetKey);
+  const message = shouldCopy
+    ? targetIsFilled
+      ? `Copier ${keyLabel(sourceKey)} vers ${keyLabel(targetKey)} ?\n\nLa case de destination est déjà renseignée : elle sera remplacée.`
+      : `Copier ${keyLabel(sourceKey)} vers ${keyLabel(targetKey)} ?`
+    : targetIsFilled
+      ? `Déplacer ${keyLabel(sourceKey)} vers ${keyLabel(targetKey)} ?\n\nLa case de destination est déjà renseignée : les deux fiches seront échangées.`
+      : `Déplacer ${keyLabel(sourceKey)} vers ${keyLabel(targetKey)} ?`;
+
+  if (!confirm(message)) return;
+  rememberUndoStep();
+
+  keys = keys.map((key) => {
+    if (key.id === targetId) return applyKeyContent(key, sourceContent);
+    if (shouldCopy) return key;
+    if (key.id === sourceId) return targetIsFilled ? applyKeyContent(key, targetContent) : makeEmptyKey(key);
+    return key;
+  });
+
+  selectedId = targetId;
+  selectedSetId = sourceContent.sets[0]?.id || "main";
+  saveKeys();
+  render();
+}
+
+function deleteKeyWithoutArchive(keyId) {
+  const key = keys.find((savedKey) => savedKey.id === keyId);
+  if (!key || !isKeyFilled(key)) return;
+
+  const confirmed = confirm(`Supprimer définitivement la fiche ${keyLabel(key)} sans l'archiver ?`);
+  if (!confirmed) return;
+  rememberUndoStep();
+
+  keys = keys.map((savedKey) => (savedKey.id === keyId ? makeEmptyKey(savedKey) : savedKey));
+  if (selectedId === keyId) {
+    selectedId = null;
+    selectedSetId = "main";
+    clearSignature();
+  }
+  saveKeys();
+  render();
+}
+
+function render() {
+  renderGrid();
+  renderPanel();
+  renderContactSelect();
+  renderArchivesPanel();
+  renderCompromisesPanel();
+}
+
+function isDetailPanelBusy() {
+  return isPhotoImporting || form.contains(document.activeElement);
+}
+
+function scheduleDetailPanelClose() {
+  clearTimeout(detailCloseTimer);
+  if (!selectedId) return;
+
+  detailCloseTimer = setTimeout(() => {
+    if (hoveredKeyId === selectedId || isDetailPanelHovered || isDetailPanelBusy()) {
+      scheduleDetailPanelClose();
+      return;
+    }
+
+    selectedId = null;
+    clearSignature();
+    render();
+  }, 1000);
+}
+
+function renderContactSelect() {
+  const currentValue = contactSelect.value;
+  contactSelect.innerHTML = '<option value="">Choisir dans la liste</option>';
+
+  [
+    ["internal", "Intervenants internes"],
+    ["external", "Intervenants externes"],
+  ].forEach(([type, label]) => {
+    const groupedContacts = contacts
+      .filter((contact) => contact.type === type)
+      .slice()
+      .sort((first, second) => first.name.localeCompare(second.name, "fr"));
+
+    if (!groupedContacts.length) return;
+
+    const group = document.createElement("optgroup");
+    group.label = label;
+    groupedContacts.forEach((contact) => {
+      const option = document.createElement("option");
+      option.value = contact.id;
+      option.textContent = contact.phone ? `${contact.name} - ${contact.phone}` : contact.name;
+      group.append(option);
+    });
+    contactSelect.append(group);
+  });
+
+  contactSelect.value = contacts.some((contact) => contact.id === currentValue) ? currentValue : "";
+}
+
+function renderContactsPanel() {
+  contactTabs.forEach((tab) => {
+    const isActive = tab.dataset.contactType === activeContactType;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+
+  contactsList.innerHTML = "";
+  const visibleContacts = contacts.filter((contact) => contact.type === activeContactType);
+
+  if (!visibleContacts.length) {
+    const item = document.createElement("li");
+    item.textContent =
+      activeContactType === "internal"
+        ? "Aucun intervenant interne enregistré."
+        : "Aucun intervenant externe enregistré.";
+    contactsList.append(item);
+    return;
+  }
+
+  visibleContacts
+    .slice()
+    .sort((first, second) => first.name.localeCompare(second.name, "fr"))
+    .forEach((contact) => {
+      const item = document.createElement("li");
+      const details = document.createElement("span");
+      const name = document.createElement("span");
+      const phone = document.createElement("span");
+      const deleteButton = document.createElement("button");
+
+      name.className = "contact-name";
+      phone.className = "contact-phone";
+      deleteButton.className = "contact-delete";
+      deleteButton.type = "button";
+
+      name.textContent = contact.name;
+      phone.textContent = contact.phone || "Téléphone non renseigné";
+      deleteButton.textContent = "Supprimer";
+      deleteButton.addEventListener("click", () => {
+        const confirmed = confirm(`Supprimer l'intervenant ${contact.name} ?`);
+        if (!confirmed) return;
+
+        rememberUndoStep();
+        contacts = contacts.filter((savedContact) => savedContact.id !== contact.id);
+        saveContacts();
+        renderContactSelect();
+        renderContactsPanel();
+      });
+
+      details.append(name, phone);
+      item.append(details, deleteButton);
+      contactsList.append(item);
+    });
+}
+
+function formatArchiveDate(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function archiveReasonText(reason) {
+  if (reason === "rented") return getRegistryConfig().rentedArchiveText;
+  if (reason === "removed") return "Retiré";
+  if (reason === "authenticated") return "Acte authentique";
+  return "";
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function keyToCsvRows(key, archive = null) {
+  const rows = [];
+  const base = {
+    emplacement: keyLabel(key),
+    adresse: key.property || "",
+    codePostal: key.postalCode || "",
+    ville: key.city || "",
+    proprietaire: key.owner || "",
+    notes: key.notes || "",
+    archive: archive ? archiveReasonText(archive.reason) : "",
+    dateArchive: archive ? formatArchiveDate(archive.archivedAt) : "",
+  };
+
+  key.sets.forEach((set) => {
+    if (!set.history.length) {
+      rows.push({
+        ...base,
+        jeu: set.label,
+        statutJeu: set.status === "out" ? "Sortie" : "Disponible",
+        mouvement: "",
+        intervenant: set.holder || "",
+        telephone: "",
+        commentaire: "",
+        dateMouvement: "",
+        signature: "",
+      });
+      return;
+    }
+
+    set.history.forEach((entry) => {
+      rows.push({
+        ...base,
+        jeu: set.label,
+        statutJeu: set.status === "out" ? "Sortie" : "Disponible",
+        mouvement: entry.type === "out" ? "Sortie" : "Entrée",
+        intervenant: entry.person || "",
+        telephone: entry.phone || "",
+        commentaire: entry.note || "",
+        dateMouvement: entry.date || "",
+        signature: entry.signature ? "Oui" : "Non",
+      });
+    });
+  });
+
+  return rows;
+}
+
+function exportKeyCsv(key, archive = null) {
+  const headers = [
+    "Emplacement",
+    "Adresse",
+    "Code postal",
+    "Ville",
+    "Propriétaire",
+    "Notes",
+    "Archive",
+    "Date archive",
+    "Jeu",
+    "Statut du jeu",
+    "Mouvement",
+    "Intervenant",
+    "Téléphone",
+    "Commentaire",
+    "Date mouvement",
+    "Signature",
+  ];
+  const rows = keyToCsvRows(key, archive).map((row) => [
+    row.emplacement,
+    row.adresse,
+    row.codePostal,
+    row.ville,
+    row.proprietaire,
+    row.notes,
+    row.archive,
+    row.dateArchive,
+    row.jeu,
+    row.statutJeu,
+    row.mouvement,
+    row.intervenant,
+    row.telephone,
+    row.commentaire,
+    row.dateMouvement,
+    row.signature,
+  ]);
+  const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(";")).join("\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const archiveSuffix = archive ? `-${archive.reason}` : "";
+  link.href = url;
+  link.download = `${key.id}${archiveSuffix}-export.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportFilledDataCsv() {
+  const filledKeys = keys.filter((key) => isKeyFilled(key));
+  if (!filledKeys.length) {
+    alert("Aucune donnée renseignée à exporter dans ce registre.");
+    return;
+  }
+
+  const headers = [
+    "Registre",
+    "Emplacement",
+    "Catégorie",
+    "Numéro",
+    "Propriétaire",
+    "Adresse",
+    "Code postal",
+    "Ville",
+    "Notes",
+    "Nombre de jeux",
+    "Statut général",
+    "Jeux sortis",
+    "Détenteurs actuels",
+    "Photos",
+  ];
+  const registryLabel = activeRegistry === "location" ? "Location" : "Transaction";
+  const rows = filledKeys.map((key) => {
+    const outSets = key.sets.filter((set) => set.status === "out");
+    const holders = key.sets
+      .filter((set) => set.holder)
+      .map((set) => `${set.label} : ${set.holder}`)
+      .join(" | ");
+    const photos = key.sets
+      .map((set) => `${set.label} : ${set.photo ? "Oui" : "Non"}`)
+      .join(" | ");
+
+    return [
+      registryLabel,
+      keyLabel(key),
+      key.category,
+      key.number,
+      key.owner || "",
+      key.property || "",
+      key.postalCode || "",
+      key.city || "",
+      key.notes || "",
+      key.sets.length,
+      statusText(key),
+      outSets.map((set) => set.label).join(" | "),
+      holders,
+      photos,
+    ];
+  });
+  const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(";")).join("\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `donnees-renseignees-${activeRegistry}-${stamp}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportAllDataBackup() {
+  const data = {};
+  getBackupStorageKeys().forEach((key) => {
+    data[key] = localStorage.getItem(key);
+  });
+
+  const payload = {
+    app: "century21-les-minimes-cles",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data,
+  };
+  const stamp = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `sauvegarde-cles-${stamp}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function refreshDataFromStorage() {
+  activeRegistry = loadActiveRegistry();
+  keys = loadKeys();
+  archives = loadArchives();
+  contacts = loadContacts();
+  selectedId = null;
+  selectedSetId = "main";
+  hoveredKeyId = null;
+  isDetailPanelHovered = false;
+  contactsPanel.hidden = true;
+  archivesPanel.hidden = true;
+  clearSignature();
+  updateRegistryHeader();
+  render();
+}
+
+function importAllDataBackup(file) {
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(reader.result);
+    } catch {
+      alert("Le fichier de sauvegarde n'est pas lisible.");
+      return;
+    }
+
+    if (parsed?.app !== "century21-les-minimes-cles" || !parsed.data || typeof parsed.data !== "object") {
+      alert("Ce fichier ne correspond pas à une sauvegarde du registre de clés.");
+      return;
+    }
+
+    const confirmed = confirm("Importer cette sauvegarde remplacera les données actuelles. Continuer ?");
+    if (!confirmed) return;
+
+    rememberUndoStep();
+    getBackupStorageKeys().forEach((key) => {
+      const value = parsed.data[key];
+      if (typeof value === "string") {
+        localStorage.setItem(key, value);
+      } else {
+        localStorage.removeItem(key);
+      }
+    });
+
+    refreshDataFromStorage();
+    alert("Sauvegarde importée.");
+  });
+  reader.readAsText(file);
+}
+
+function buildCelebrationPieces() {
+  if (!celebrationSky) return;
+
+  const colors = ["#ffd94f", "#ff5c7a", "#46d37d", "#4eb6ff", "#ff8a2a", "#c8b98d", "#ffffff", "#9b7cff"];
+  celebrationSky.innerHTML = "";
+
+  const fragment = document.createDocumentFragment();
+  const balloonCount = 140;
+  const confettiCount = window.innerWidth > 1200 ? 1400 : 900;
+
+  Array.from({ length: balloonCount }, (_, index) => {
+    const balloon = document.createElement("span");
+    const size = 34 + Math.round(Math.random() * 54);
+    balloon.className = "balloon";
+    balloon.style.left = `${Math.random() * 100}%`;
+    balloon.style.width = `${size}px`;
+    balloon.style.height = `${Math.round(size * 1.28)}px`;
+    balloon.style.background = colors[index % colors.length];
+    balloon.style.animationDelay = `${Math.random() * 2.2}s`;
+    balloon.style.animationDuration = `${6.2 + Math.random() * 2.4}s`;
+    balloon.style.opacity = `${0.72 + Math.random() * 0.28}`;
+    fragment.append(balloon);
+  });
+
+  Array.from({ length: confettiCount }, (_, index) => {
+    const confetti = document.createElement("span");
+    const size = 4 + Math.round(Math.random() * 10);
+    confetti.className = "confetti";
+    confetti.style.left = `${Math.random() * 100}%`;
+    confetti.style.width = `${size}px`;
+    confetti.style.height = `${Math.round(size * (1.2 + Math.random()))}px`;
+    confetti.style.background = colors[index % colors.length];
+    confetti.style.animationDelay = `${Math.random() * 2.4}s`;
+    confetti.style.animationDuration = `${4.8 + Math.random() * 3.4}s`;
+    confetti.style.borderRadius = Math.random() > 0.55 ? "999px" : "3px";
+    fragment.append(confetti);
+  });
+
+  celebrationSky.append(fragment);
+}
+
+function playCelebrationSound() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  const audioContext = new AudioContextClass();
+  const masterGain = audioContext.createGain();
+  masterGain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+  masterGain.gain.exponentialRampToValueAtTime(0.42, audioContext.currentTime + 0.03);
+  masterGain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 6.8);
+  masterGain.connect(audioContext.destination);
+
+  [0, 0.1, 0.2, 0.32, 0.46, 0.62, 0.8, 1, 1.24, 1.5, 1.82, 2.18].forEach((offset, index) => {
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const start = audioContext.currentTime + offset;
+    oscillator.type = "square";
+    oscillator.frequency.setValueAtTime(820 + index * 55, start);
+    oscillator.frequency.exponentialRampToValueAtTime(1680 + index * 90, start + 0.14);
+    oscillator.frequency.exponentialRampToValueAtTime(690 + index * 45, start + 0.34);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.28, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.44);
+    oscillator.connect(gain);
+    gain.connect(masterGain);
+    oscillator.start(start);
+    oscillator.stop(start + 0.46);
+  });
+
+  const applauseDuration = 6.4;
+  const sampleRate = audioContext.sampleRate;
+  const noiseBuffer = audioContext.createBuffer(1, sampleRate * applauseDuration, sampleRate);
+  const output = noiseBuffer.getChannelData(0);
+  for (let index = 0; index < output.length; index += 1) {
+    output[index] = Math.random() * 2 - 1;
+  }
+
+  Array.from({ length: 180 }, () => {
+    const start = audioContext.currentTime + 0.08 + Math.random() * 5.2;
+    const source = audioContext.createBufferSource();
+    const filter = audioContext.createBiquadFilter();
+    const gain = audioContext.createGain();
+    source.buffer = noiseBuffer;
+    filter.type = "bandpass";
+    filter.frequency.value = 900 + Math.random() * 1800;
+    filter.Q.value = 0.9 + Math.random() * 1.2;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.2 + Math.random() * 0.12, start + 0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.12 + Math.random() * 0.12);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    source.start(start, Math.random() * (applauseDuration - 0.3));
+    source.stop(start + 0.3);
+  });
+
+  window.setTimeout(() => audioContext.close(), 7200);
+}
+
+function playCelebrationAudioFiles() {
+  celebrationAudioPlayers.forEach((player) => {
+    player.pause();
+    player.currentTime = 0;
+  });
+
+  celebrationAudioPlayers = celebrationAudioFiles.map((fileName) => {
+    const player = new Audio(fileName);
+    player.volume = 1;
+    player.currentTime = 0;
+    player.play().catch(() => {});
+    return player;
+  });
+}
+
+function showSaleCelebration() {
+  if (!saleCelebration) return;
+
+  clearTimeout(saleCelebrationTimer);
+  buildCelebrationPieces();
+  saleCelebration.hidden = true;
+  saleCelebration.getBoundingClientRect();
+  saleCelebration.hidden = false;
+  playCelebrationSound();
+  playCelebrationAudioFiles();
+
+  saleCelebrationTimer = window.setTimeout(() => {
+    saleCelebration.hidden = true;
+    if (celebrationSky) celebrationSky.innerHTML = "";
+    celebrationAudioPlayers.forEach((player) => {
+      player.pause();
+      player.currentTime = 0;
+    });
+  }, 11200);
+}
+
+function markCompromiseAsAuthenticated(recordId) {
+  const record = archives.find((archive) => archive.id === recordId && archive.reason === "rented");
+  if (!record) return;
+
+  const confirmed = confirm(`Passer ${keyLabel(record.key)} en acte authentique et l'envoyer dans Archives ?`);
+  if (!confirmed) return;
+
+  rememberUndoStep();
+  archives = archives.map((archive) =>
+    archive.id === recordId
+      ? {
+          ...archive,
+          reason: "authenticated",
+          archivedAt: new Date().toISOString(),
+        }
+      : archive,
+  );
+  saveArchives();
+  render();
+  showSaleCelebration();
+}
+
+function renderArchiveList(list, reason, emptyText, options = {}) {
+  const archivedRecords = archives.filter((record) => record.reason === reason);
+  list.innerHTML = "";
+
+  if (!archivedRecords.length) {
+    const item = document.createElement("li");
+    item.textContent = emptyText;
+    list.append(item);
+    return;
+  }
+
+  archivedRecords.forEach((record) => {
+    const key = record.key;
+    const item = document.createElement("li");
+    const details = document.createElement("span");
+    const title = document.createElement("strong");
+    const meta = document.createElement("small");
+    const actions = document.createElement("span");
+    const exportButton = document.createElement("button");
+    const restoreButton = document.createElement("button");
+    const archiveCity = [key.postalCode, key.city].filter(Boolean).join(" ");
+    const address = [key.property, archiveCity].filter(Boolean).join(" - ");
+
+    title.textContent = `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`;
+    meta.textContent = [address || "Adresse non renseignée", formatArchiveDate(record.archivedAt)].filter(Boolean).join(" | ");
+    actions.className = "archive-item-actions";
+    exportButton.type = "button";
+    exportButton.textContent = "Exporter";
+    exportButton.title = "Exporter cette archive en CSV";
+    exportButton.addEventListener("click", () => exportKeyCsv(key, record));
+    restoreButton.type = "button";
+    restoreButton.textContent = "Restaurer";
+    restoreButton.addEventListener("click", () => {
+      const confirmed = confirm(`Restaurer ${keyLabel(key)} dans le tableau ?`);
+      if (!confirmed) return;
+
+      restoreArchive(record.id);
+      renderArchivesPanel();
+    });
+
+    details.append(title, meta);
+    actions.append(exportButton, restoreButton);
+    item.append(details, actions);
+
+    if (options.showAuthenticatedAction) {
+      const authenticatedButton = document.createElement("button");
+      item.classList.add("has-full-action");
+      authenticatedButton.className = "authenticated-button";
+      authenticatedButton.type = "button";
+      authenticatedButton.textContent = "R\u00c9IT\u00c9RATION PAR\nACTE AUTHENTIQUE";
+      authenticatedButton.addEventListener("click", () => markCompromiseAsAuthenticated(record.id));
+      item.append(authenticatedButton);
+    }
+
+    list.append(item);
+  });
+}
+
+function renderArchivesPanel() {
+  renderArchiveList(rentedList, "rented", getRegistryConfig().rentedArchiveEmpty);
+  renderArchiveList(removedList, "removed", "Aucun bien retiré.");
+  renderArchiveList(authenticatedList, "authenticated", "Aucun acte authentique archivé.");
+}
+
+function renderCompromisesPanel() {
+  renderArchiveList(compromisesList, "rented", "Aucun bien en compromis.", {
+    showAuthenticatedAction: true,
+  });
+}
+
+function findRestoreSlot(archivedKey) {
+  const originalSlot = keys.find((key) => key.id === archivedKey.id);
+  if (originalSlot && !isKeyFilled(originalSlot)) return originalSlot;
+
+  return keys
+    .filter((key) => key.category === archivedKey.category)
+    .sort((first, second) => first.number - second.number)
+    .find((key) => !isKeyFilled(key));
+}
+
+function restoreArchive(recordId) {
+  const record = archives.find((archive) => archive.id === recordId);
+  if (!record) return;
+
+  const targetKey = findRestoreSlot(record.key);
+  if (!targetKey) {
+    alert("Aucune case libre n'est disponible sur cette ligne pour restaurer ce bien.");
+    return;
+  }
+
+  const restoredKey = {
+    ...normalizeKey(record.key),
+    id: targetKey.id,
+    category: targetKey.category,
+    number: targetKey.number,
+  };
+
+  rememberUndoStep();
+  keys = keys.map((key) => (key.id === targetKey.id ? restoredKey : key));
+  archives = archives.filter((archive) => archive.id !== recordId);
+  selectedId = targetKey.id;
+  selectedSetId = record.key.sets?.[0]?.id || "main";
+  saveKeys();
+  saveArchives();
+  render();
+}
+
+function matchesFilter(key) {
+  const query = searchInput.value.trim().toLowerCase();
+  const status = statusFilter?.value || "active";
+  const haystack = [
+    keyLabel(key),
+    key.property,
+    key.postalCode,
+    key.city,
+    key.owner,
+    key.notes,
+    ...key.sets.flatMap((set) => [
+      set.label,
+      set.holder,
+      ...set.history.flatMap((entry) => [entry.person, entry.phone, entry.note]),
+    ]),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const statusMatches =
+    status === "all" ||
+    (status === "active" && !key.archived) ||
+    (status === "archived" && key.archived) ||
+    (status === "available" && !key.archived && key.sets.some((set) => set.status === "available")) ||
+    (status === "out" && !key.archived && key.sets.some((set) => set.status === "out"));
+
+  return statusMatches && (!query || haystack.includes(query));
+}
+
+function renderGrid() {
+  grid.innerHTML = "";
+
+  categories.forEach((category) => {
+    const row = document.createElement("section");
+    row.className = "category-row";
+
+    const title = document.createElement("div");
+    title.className = "category-title";
+    title.textContent = category;
+
+    const keyRow = document.createElement("div");
+    keyRow.className = "key-row";
+
+    keys
+      .filter((key) => key.category === category)
+      .forEach((key) => {
+        if (!matchesFilter(key)) return;
+
+        const tileShell = document.createElement("span");
+        const button = document.createElement("button");
+        const ownerName = formatOwner(key.owner);
+        const hasTileDetails = Boolean(ownerName && key.property?.trim());
+        const shouldShowSetStrip = isKeyFilled(key);
+        tileShell.className = "key-tile-shell";
+        button.type = "button";
+        button.draggable = shouldShowSetStrip;
+        button.className = `key-tile ${getTileStatus(key)}${hasTileDetails ? " has-details" : ""}${
+          shouldShowSetStrip ? " has-set-strip" : ""
+        }${key.id === selectedId ? " is-selected" : ""}`;
+        button.title = `${keyLabel(key)} - ${statusText(key)}`;
+
+        if (hasTileDetails) {
+          const details = document.createElement("span");
+          const heading = document.createElement("span");
+          const number = document.createElement("span");
+          const owner = document.createElement("span");
+          const address = document.createElement("span");
+          const city = document.createElement("span");
+          details.className = "key-details";
+          heading.className = "key-heading";
+          number.className = "key-number";
+          owner.className = "key-owner";
+          address.className = "key-address";
+          city.className = "key-city";
+          number.textContent = `${tileLabel(key)} :`;
+          owner.textContent = ownerName;
+          address.textContent = key.property.trim();
+          city.textContent = [key.postalCode, key.city].filter(Boolean).join(" ");
+          heading.append(number, owner);
+          details.append(heading, address);
+          if (city.textContent) details.append(city);
+          button.append(details);
+        } else {
+          const number = document.createElement("span");
+          number.className = "key-number";
+          number.textContent = tileLabel(key);
+          button.append(number);
+        }
+
+        const previewSet = key.sets.find((set) => set.photo);
+        if (previewSet?.photo) {
+          const preview = document.createElement("span");
+          const previewImage = document.createElement("img");
+          button.classList.add("has-photo");
+          preview.className = "photo-hover";
+          previewImage.src = previewSet.photo;
+          previewImage.alt = `Photo ${previewSet.label} de ${keyLabel(key)}`;
+          preview.append(previewImage);
+          button.append(preview);
+        }
+
+        if (shouldShowSetStrip) {
+          const strip = document.createElement("span");
+          strip.className = "key-set-strip";
+          key.sets.forEach((set) => {
+            const segment = document.createElement("span");
+            segment.className = `key-set-segment ${set.status}`;
+            segment.title = `${set.label} - ${set.status === "out" ? "Sortie" : "Disponible"}`;
+            strip.append(segment);
+          });
+          button.append(strip);
+        }
+
+        button.addEventListener("click", () => {
+          selectedId = key.id;
+          selectedSetId = key.sets[0]?.id || "main";
+          render();
+          scheduleDetailPanelClose();
+        });
+        button.addEventListener("mouseenter", () => {
+          hoveredKeyId = key.id;
+          if (selectedId === key.id) clearTimeout(detailCloseTimer);
+        });
+        button.addEventListener("mouseleave", () => {
+          if (hoveredKeyId === key.id) hoveredKeyId = null;
+          if (selectedId === key.id) scheduleDetailPanelClose();
+        });
+        button.addEventListener("dragstart", (event) => {
+          if (!isKeyFilled(key)) {
+            event.preventDefault();
+            return;
+          }
+
+          draggedKeyId = key.id;
+          document.body.classList.add("is-moving-key");
+          button.classList.add("is-dragging");
+          event.dataTransfer.effectAllowed = "copyMove";
+          event.dataTransfer.setData("text/plain", key.id);
+
+          const dragImage = document.createElement("span");
+          dragImage.style.position = "fixed";
+          dragImage.style.left = "-9999px";
+          dragImage.style.top = "-9999px";
+          dragImage.style.width = "1px";
+          dragImage.style.height = "1px";
+          document.body.append(dragImage);
+          event.dataTransfer.setDragImage(dragImage, 0, 0);
+          setTimeout(() => dragImage.remove(), 0);
+        });
+        button.addEventListener("dragend", () => {
+          draggedKeyId = null;
+          document.body.classList.remove("is-moving-key");
+          button.classList.remove("is-dragging");
+          document.querySelectorAll(".key-tile.is-drop-target").forEach((tile) => {
+            tile.classList.remove("is-drop-target");
+          });
+        });
+        button.addEventListener("dragover", (event) => {
+          if (!draggedKeyId || draggedKeyId === key.id) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = event.ctrlKey ? "copy" : "move";
+          button.classList.add("is-drop-target");
+        });
+        button.addEventListener("dragleave", () => {
+          button.classList.remove("is-drop-target");
+        });
+        button.addEventListener("drop", (event) => {
+          event.preventDefault();
+          button.classList.remove("is-drop-target");
+          moveKeyToSlot(event.dataTransfer.getData("text/plain") || draggedKeyId, key.id, {
+            copy: event.ctrlKey,
+          });
+        });
+
+        tileShell.append(button);
+        if (shouldShowSetStrip) {
+          const deleteButton = document.createElement("button");
+          deleteButton.className = "key-delete-button";
+          deleteButton.type = "button";
+          deleteButton.textContent = "\u00d7";
+          deleteButton.title = `Supprimer ${keyLabel(key)} sans archiver`;
+          deleteButton.setAttribute("aria-label", `Supprimer ${keyLabel(key)} sans archiver`);
+          deleteButton.addEventListener("click", (event) => {
+            event.stopPropagation();
+            deleteKeyWithoutArchive(key.id);
+          });
+          tileShell.append(deleteButton);
+        }
+
+        keyRow.append(tileShell);
+      });
+
+    row.append(title, keyRow);
+    grid.append(row);
+  });
+}
+
+function renderKeySetSelect(key) {
+  const selectedSet = getSelectedSet(key);
+  keySetSelect.innerHTML = "";
+
+  key.sets.forEach((set) => {
+    const option = document.createElement("option");
+    option.value = set.id;
+    option.textContent = set.label;
+    keySetSelect.append(option);
+  });
+
+  selectedSetId = selectedSet?.id || key.sets[0].id;
+  keySetSelect.value = selectedSetId;
+}
+
+function compressPhotoFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("error", () => reject(new Error("Photo illisible.")));
+    reader.addEventListener("load", () => {
+      const image = new Image();
+      image.addEventListener("error", () => reject(new Error("Photo illisible.")));
+      image.addEventListener("load", () => {
+        const maxSize = 1200;
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        canvas.width = width;
+        canvas.height = height;
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      });
+      image.src = reader.result;
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderKeySetPhotos(key) {
+  keySetPhotoList.innerHTML = "";
+
+  key.sets.forEach((set) => {
+    const item = document.createElement("article");
+    const title = document.createElement("strong");
+    const preview = document.createElement("div");
+    const actions = document.createElement("div");
+    const button = document.createElement("label");
+    const buttonText = document.createElement("span");
+    const input = document.createElement("input");
+
+    item.className = `key-set-photo-card${set.id === selectedSetId ? " is-selected" : ""}`;
+    title.textContent = set.label;
+    preview.className = "photo-preview";
+    preview.innerHTML = set.photo
+      ? `<img src="${set.photo}" alt="Photo du jeu ${set.label} de ${keyLabel(key)}" />`
+      : `<span>Aucune photo</span>`;
+    actions.className = `photo-actions${set.photo ? "" : " single-action"}`;
+    button.className = "photo-button";
+    buttonText.textContent = set.photo ? "Changer la photo" : "Ajouter une photo";
+    input.type = "file";
+    input.accept = "image/*";
+    input.setAttribute("capture", "environment");
+    input.dataset.setId = set.id;
+    input.addEventListener("click", () => {
+      isPhotoImporting = true;
+      clearTimeout(detailCloseTimer);
+      setTimeout(() => {
+        window.addEventListener(
+          "focus",
+          () => {
+            setTimeout(() => {
+              if (!input.files?.length) {
+                isPhotoImporting = false;
+                scheduleDetailPanelClose();
+              }
+            }, 300);
+          },
+          { once: true },
+        );
+      }, 0);
+    });
+
+    button.append(buttonText, input);
+    actions.append(button);
+
+    if (set.photo) {
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "photo-delete-button";
+      deleteButton.type = "button";
+      deleteButton.textContent = "Supprimer la photo";
+      deleteButton.addEventListener("click", () => {
+        const confirmed = confirm(`Supprimer la photo du ${set.label} ?`);
+        if (!confirmed) return;
+
+        const currentKey = getSelectedKey();
+        if (!currentKey) return;
+
+        const sets = currentKey.sets.map((savedSet) =>
+          savedSet.id === set.id ? { ...savedSet, photo: "" } : savedSet,
+        );
+        updateSelectedKey({ sets });
+      });
+      actions.append(deleteButton);
+    }
+
+    item.append(title, preview, actions);
+    keySetPhotoList.append(item);
+  });
+}
+
+function renderPanel() {
+  const key = getSelectedKey();
+  if (!key) {
+    detailPanel.hidden = true;
+    form.hidden = true;
+    return;
+  }
+
+  const selectedSet = getSelectedSet(key);
+  selectedSetId = selectedSet.id;
+  detailPanel.hidden = false;
+  form.hidden = false;
+  selectedTitle.textContent = keyLabel(key);
+  statusPill.textContent = `${selectedSet.label} : ${selectedSet.status === "out" ? "Sortie" : "Disponible"}`;
+  statusPill.className = `status-pill ${selectedSet.status}`;
+  keySetCountSelect.value = String(key.sets.length);
+  renderKeySetSelect(key);
+  renderKeySetPhotos(key);
+  propertyInput.value = key.property;
+  postalCodeInput.value = key.postalCode || "";
+  cityInput.value = key.city || "";
+  ownerInput.value = formatOwner(key.owner);
+  notesInput.value = key.notes;
+  checkoutBtn.disabled = key.archived;
+  checkinBtn.disabled = key.archived;
+  rentedBtn.disabled = key.archived;
+  removedBtn.disabled = key.archived;
+
+  historyList.innerHTML = "";
+  if (!selectedSet.history.length) {
+    const item = document.createElement("li");
+    item.textContent = "Aucun mouvement enregistré pour ce jeu.";
+    historyList.append(item);
+    return;
+  }
+
+  selectedSet.history.forEach((entry) => {
+    const item = document.createElement("li");
+    const title = document.createElement("strong");
+    const date = document.createElement("small");
+    title.textContent = `${entry.type === "out" ? "Sortie" : "Entrée"} - ${entry.person || "Intervenant non précisé"}`;
+    date.textContent = entry.date;
+    item.append(title, date);
+    if (entry.phone) {
+      const phone = document.createElement("p");
+      phone.className = "history-phone";
+      phone.textContent = `Téléphone : ${entry.phone}`;
+      item.append(phone);
+    }
+    if (entry.note) {
+      const note = document.createElement("p");
+      note.textContent = entry.note;
+      item.append(note);
+    }
+    if (entry.signature) {
+      const signature = document.createElement("img");
+      signature.className = "history-signature";
+      signature.src = entry.signature;
+      signature.alt = `Signature ${entry.type === "out" ? "Sortie" : "Entrée"}`;
+      item.append(signature);
+    }
+    historyList.append(item);
+  });
+}
+
+function updateSelectedKey(changes) {
+  rememberUndoStep();
+  keys = keys.map((key) => (key.id === selectedId ? { ...key, ...changes } : key));
+  saveKeys();
+  render();
+}
+
+function updateSelectedSet(changes) {
+  const key = getSelectedKey();
+  if (!key) return;
+
+  const sets = key.sets.map((set) => (set.id === selectedSetId ? { ...set, ...changes } : set));
+  updateSelectedKey({ sets });
+}
+
+function setKeySetCount(count) {
+  const key = getSelectedKey();
+  if (!key) return;
+
+  const nextCount = Math.max(1, Math.min(3, count));
+  const nextIds = keySetOptions.slice(0, nextCount).map((option) => option.id);
+  const removedSets = key.sets.filter((set) => !nextIds.includes(set.id));
+  const removedHasData = removedSets.some((set) => set.status === "out" || set.holder || set.history.length);
+
+  if (removedHasData) {
+    const confirmed = confirm("Réduire le nombre de jeux supprimera l'historique des jeux retirés. Continuer ?");
+    if (!confirmed) {
+      keySetCountSelect.value = String(key.sets.length);
+      return;
+    }
+  }
+
+  const nextSets = nextIds.map((id) => key.sets.find((set) => set.id === id) || makeKeySet(id));
+  selectedSetId = nextSets.some((set) => set.id === selectedSetId) ? selectedSetId : nextSets[0].id;
+  updateSelectedKey({ sets: nextSets });
+}
+
+function addMovement(type) {
+  const key = getSelectedKey();
+  const selectedSet = getSelectedSet(key);
+  if (!key || !selectedSet || key.archived) return;
+
+  const entry = {
+    type,
+    person: movementPersonInput.value.trim(),
+    phone: movementPhoneInput.value.trim(),
+    note: movementNoteInput.value.trim(),
+    signature: hasSignature ? signatureCanvas.toDataURL("image/png") : "",
+    date: new Intl.DateTimeFormat("fr-FR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date()),
+  };
+
+  updateSelectedSet({
+    status: type === "out" ? "out" : "available",
+    holder: entry.person || selectedSet.holder,
+    history: [entry, ...selectedSet.history],
+  });
+
+  movementPersonInput.value = "";
+  movementPhoneInput.value = "";
+  movementNoteInput.value = "";
+  contactSelect.value = "";
+  clearSignature();
+  selectedId = null;
+  selectedSetId = "main";
+  render();
+}
+
+function archiveSelectedKey(reason) {
+  const key = getSelectedKey();
+  if (!key || key.archived) return;
+
+  const actionLabel = reason === "rented" ? getRegistryConfig().archiveActionLabel : "Retiré";
+  const confirmed = confirm(`${actionLabel} ${keyLabel(key)} et libérer la case ?`);
+  if (!confirmed) return;
+  rememberUndoStep();
+
+  const archivedAt = new Date().toISOString();
+  archives = [
+    {
+      id: `${key.id}-${archivedAt}`,
+      reason,
+      archivedAt,
+      key: { ...key, archived: false },
+    },
+    ...archives,
+  ];
+  keys = keys.map((savedKey) => (savedKey.id === key.id ? makeEmptyKey(savedKey) : savedKey));
+  selectedId = null;
+  selectedSetId = "main";
+  saveArchives();
+  saveKeys();
+  render();
+}
+
+function openContactsPanel() {
+  clearTimeout(contactsCloseTimer);
+  clearTimeout(archivesCloseTimer);
+  compromisesPanel.hidden = true;
+  archivesPanel.hidden = true;
+  contactsPanel.hidden = false;
+  renderContactsPanel();
+}
+
+function openCompromisesPanel() {
+  clearTimeout(contactsCloseTimer);
+  clearTimeout(archivesCloseTimer);
+  contactsPanel.hidden = true;
+  archivesPanel.hidden = true;
+  compromisesPanel.hidden = false;
+  renderCompromisesPanel();
+}
+
+function openArchivesPanel() {
+  clearTimeout(contactsCloseTimer);
+  clearTimeout(archivesCloseTimer);
+  contactsPanel.hidden = true;
+  compromisesPanel.hidden = true;
+  archivesPanel.hidden = false;
+  renderArchivesPanel();
+}
+
+function scheduleCloseContactsPanel() {
+  clearTimeout(contactsCloseTimer);
+  contactsCloseTimer = setTimeout(() => {
+    contactsPanel.hidden = true;
+  }, 1000);
+}
+
+function scheduleCloseArchivesPanel() {
+  clearTimeout(archivesCloseTimer);
+  archivesCloseTimer = setTimeout(() => {
+    archivesPanel.hidden = true;
+    compromisesPanel.hidden = true;
+  }, 1000);
+}
+
+function debounce(callback, delay = 250) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => callback(...args), delay);
+  };
+}
+
+function getSignatureContext() {
+  const context = signatureCanvas.getContext("2d");
+  context.lineWidth = 2.4;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeStyle = "#1e2528";
+  return context;
+}
+
+function getSignaturePoint(event) {
+  const rect = signatureCanvas.getBoundingClientRect();
+  const source = event.touches?.[0] || event;
+  const clampedX = Math.min(Math.max(source.clientX, rect.left), rect.right);
+  const clampedY = Math.min(Math.max(source.clientY, rect.top), rect.bottom);
+
+  return {
+    x: ((clampedX - rect.left) / rect.width) * signatureCanvas.width,
+    y: ((clampedY - rect.top) / rect.height) * signatureCanvas.height,
+  };
+}
+
+function startSignature(event) {
+  event.preventDefault();
+  isSigning = true;
+  hasSignature = true;
+  signatureCanvas.setPointerCapture?.(event.pointerId);
+  const point = getSignaturePoint(event);
+  const context = getSignatureContext();
+  context.beginPath();
+  context.moveTo(point.x, point.y);
+}
+
+function drawSignature(event) {
+  if (!isSigning) return;
+  event.preventDefault();
+  const point = getSignaturePoint(event);
+  const context = getSignatureContext();
+  context.lineTo(point.x, point.y);
+  context.stroke();
+}
+
+function stopSignature(event) {
+  if (event?.pointerId !== undefined) signatureCanvas.releasePointerCapture?.(event.pointerId);
+  isSigning = false;
+}
+
+function clearSignature() {
+  const context = signatureCanvas.getContext("2d");
+  context.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+  hasSignature = false;
+}
+
+propertyInput.addEventListener("input", debounce(() => updateSelectedKey({ property: propertyInput.value })));
+postalCodeInput.addEventListener("input", debounce(() => updateSelectedKey({ postalCode: postalCodeInput.value })));
+cityInput.addEventListener("input", debounce(() => updateSelectedKey({ city: cityInput.value })));
+ownerInput.addEventListener(
+  "input",
+  debounce(() => updateSelectedKey({ owner: formatOwner(ownerInput.value) })),
+);
+notesInput.addEventListener("input", debounce(() => updateSelectedKey({ notes: notesInput.value })));
+keySetCountSelect.addEventListener("change", () => setKeySetCount(Number(keySetCountSelect.value)));
+keySetSelect.addEventListener("change", () => {
+  selectedSetId = keySetSelect.value;
+  clearSignature();
+  render();
+});
+checkoutBtn.addEventListener("click", () => addMovement("out"));
+checkinBtn.addEventListener("click", () => addMovement("in"));
+rentedBtn.addEventListener("click", () => archiveSelectedKey("rented"));
+removedBtn.addEventListener("click", () => archiveSelectedKey("removed"));
+clearSignatureBtn.addEventListener("click", clearSignature);
+contactSelect.addEventListener("change", () => {
+  const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
+  if (!contact) return;
+
+  movementPersonInput.value = contact.name;
+  movementPhoneInput.value = contact.phone;
+});
+contactsTabBtn.addEventListener("click", openContactsPanel);
+contactsPanel.addEventListener("mouseenter", () => clearTimeout(contactsCloseTimer));
+contactsPanel.addEventListener("mouseleave", scheduleCloseContactsPanel);
+closeContactsBtn.addEventListener("click", () => {
+  contactsPanel.hidden = true;
+});
+registryToggleBtn.addEventListener("click", switchRegistry);
+compromisesTabBtn.addEventListener("click", openCompromisesPanel);
+compromisesPanel.addEventListener("mouseenter", () => clearTimeout(archivesCloseTimer));
+compromisesPanel.addEventListener("mouseleave", scheduleCloseArchivesPanel);
+closeCompromisesBtn.addEventListener("click", () => {
+  compromisesPanel.hidden = true;
+});
+archivesTabBtn.addEventListener("click", openArchivesPanel);
+archivesPanel.addEventListener("mouseenter", () => clearTimeout(archivesCloseTimer));
+archivesPanel.addEventListener("mouseleave", scheduleCloseArchivesPanel);
+closeArchivesBtn.addEventListener("click", () => {
+  archivesPanel.hidden = true;
+});
+contactTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    activeContactType = tab.dataset.contactType === "external" ? "external" : "internal";
+    renderContactsPanel();
+  });
+});
+contactForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const name = contactNameInput.value.trim();
+  const phone = contactPhoneInput.value.trim();
+  if (!name) return;
+
+  rememberUndoStep();
+  contacts = [
+    ...contacts,
+    {
+      id: createContactId(),
+      name,
+      phone,
+      type: activeContactType,
+    },
+  ];
+  saveContacts();
+  contactForm.reset();
+  renderContactSelect();
+  renderContactsPanel();
+});
+signatureCanvas.addEventListener("pointerdown", startSignature);
+signatureCanvas.addEventListener("pointermove", drawSignature);
+signatureCanvas.addEventListener("pointerup", stopSignature);
+signatureCanvas.addEventListener("pointercancel", stopSignature);
+searchInput.addEventListener("input", render);
+statusFilter?.addEventListener("change", render);
+undoBtn.addEventListener("click", undoPreviousStep);
+exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
+backupDataBtn.addEventListener("click", exportAllDataBackup);
+importDataBtn.addEventListener("click", () => {
+  backupFileInput.value = "";
+  backupFileInput.click();
+});
+backupFileInput.addEventListener("change", () => {
+  const file = backupFileInput.files?.[0];
+  if (!file) return;
+
+  importAllDataBackup(file);
+  backupFileInput.value = "";
+});
+closePanelBtn.addEventListener("click", () => {
+  clearTimeout(detailCloseTimer);
+  selectedId = null;
+  render();
+});
+form.addEventListener("focusin", () => clearTimeout(detailCloseTimer));
+form.addEventListener("focusout", scheduleDetailPanelClose);
+detailPanel.addEventListener("mouseenter", () => {
+  isDetailPanelHovered = true;
+  clearTimeout(detailCloseTimer);
+});
+detailPanel.addEventListener("mouseleave", () => {
+  isDetailPanelHovered = false;
+  scheduleDetailPanelClose();
+});
+exportKeyCsvBtn.addEventListener("click", () => {
+  const key = getSelectedKey();
+  if (!key) return;
+  exportKeyCsv(key);
+});
+keySetPhotoList.addEventListener("change", (event) => {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement) || input.type !== "file") return;
+
+  const file = input.files?.[0];
+  const setId = input.dataset.setId;
+  if (!file) {
+    isPhotoImporting = false;
+    scheduleDetailPanelClose();
+    return;
+  }
+
+  compressPhotoFile(file)
+    .then((photo) => {
+      const key = getSelectedKey();
+      if (!key) return;
+
+      const sets = key.sets.map((set) => (set.id === setId ? { ...set, photo } : set));
+      updateSelectedKey({ sets });
+    })
+    .catch(() => {
+      alert("La photo n'a pas pu être importée.");
+    })
+    .finally(() => {
+      isPhotoImporting = false;
+      scheduleDetailPanelClose();
+    });
+  input.value = "";
+});
+
+migrateArchivedSlots();
+updateRegistryHeader();
+updateUndoButton();
+render();

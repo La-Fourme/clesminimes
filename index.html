@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CENTURY 21 LES MINIMES - TABLEAUX DE GESTION DES CL&Eacute;S</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="saleCelebration" class="sale-celebration" aria-live="polite" hidden>
+      <div class="celebration-sky" aria-hidden="true">
+      </div>
+      <div class="celebration-card">
+        <p class="celebration-kicker">Vente conclue</p>
+        <h2>F&eacute;licitations pour cette nouvelle vente !</h2>
+        <p>N'oublie pas de remercier tes clients !</p>
+      </div>
+    </div>
+    <main class="app-shell">
+      <section class="workspace">
+        <header class="topbar">
+          <button id="registryToggleBtn" class="registry-toggle-button" type="button">BASCULER VERS
+TABLEAU CL&Eacute;S TRANSACTION</button>
+          <div>
+            <h1 id="appTitle">
+              <span class="app-title-text">CENTURY 21 LES MINIMES - CL&Eacute;S LOCATION</span>
+            </h1>
+          </div>
+          <div class="top-actions">
+            <button id="compromisesTabBtn" class="archive-tab-button compromise-tab-button" type="button" aria-label="Compromis" hidden>
+              Compromis
+              <svg class="tab-icon check-tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4" y="4" width="14" height="14" rx="2"></rect>
+                <path d="M9 12.5 12 15.5 21 6.5"></path>
+              </svg>
+            </button>
+            <button id="archivesTabBtn" class="archive-tab-button" type="button" aria-label="Archives">
+              Archives
+              <svg class="tab-icon archive-tab-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7h16"></path>
+                <path d="M6 7v12h12V7"></path>
+                <path d="M8 4h8l2 3H6l2-3Z"></path>
+                <path d="M10 11h4"></path>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <section class="filters" aria-label="Filtres">
+          <div class="undo-filter-action">
+            <span>Retour</span>
+            <button id="undoBtn" class="undo-button" type="button" disabled>
+              <span aria-hidden="true">↶</span>
+              Annulation
+            </button>
+          </div>
+          <label>
+            Recherche
+            <input id="searchInput" type="search" placeholder="T1 #1, intervenant, adresse..." />
+          </label>
+          <div class="filter-action">
+            <span>Répertoire</span>
+            <button id="contactsTabBtn" class="tab-button contacts-filter-button" type="button">Intervenants</button>
+          </div>
+        </section>
+
+        <section id="keyGrid" class="key-grid" aria-label="Jeux de cles"></section>
+        <section class="backup-panel" aria-label="Sauvegarde et export des données">
+          <div>
+            <span class="backup-panel-title">Données</span>
+            <span class="backup-panel-subtitle">Sauvegarde complète et exports du registre</span>
+          </div>
+          <div class="backup-actions">
+            <button id="exportFilledDataBtn" class="filled-export-button icon-button" type="button">
+              <span aria-hidden="true">▤</span>
+              Exporter données renseignées
+            </button>
+            <button id="backupDataBtn" class="backup-button icon-button" type="button">
+              <span aria-hidden="true">✓</span>
+              Sauvegarder tout
+            </button>
+            <button id="importDataBtn" class="import-button icon-button" type="button">
+              <span aria-hidden="true">↓</span>
+              Importer sauvegarde
+            </button>
+          </div>
+          <input id="backupFileInput" type="file" accept="application/json,.json" hidden />
+        </section>
+      </section>
+
+      <aside id="detailPanel" class="detail-panel" aria-label="Detail du jeu de cles" hidden>
+        <form id="keyForm" class="key-form" hidden>
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Fiche clé</p>
+              <h2 id="selectedTitle">T1 #1</h2>
+            </div>
+            <div class="panel-actions">
+              <span id="statusPill" class="status-pill">Disponible</span>
+              <button id="closePanelBtn" class="close-button" type="button" aria-label="Fermer la fiche">x</button>
+            </div>
+          </div>
+
+          <label>
+            Nombre total de jeux de clé
+            <select id="keySetCountSelect">
+              <option value="1">1 jeu</option>
+              <option value="2">2 jeux</option>
+              <option value="3">3 jeux</option>
+            </select>
+          </label>
+
+          <label>
+            Propriétaire
+            <input id="ownerInput" type="text" placeholder="Nom du propriétaire" />
+          </label>
+
+          <label>
+            Adresse
+            <input id="propertyInput" type="text" placeholder="Ex. 12 rue Victor Hugo" />
+          </label>
+
+          <label>
+            Code postal
+            <input id="postalCodeInput" type="text" inputmode="numeric" placeholder="Ex. 31000" />
+          </label>
+
+          <label>
+            Ville
+            <input id="cityInput" type="text" placeholder="Ex. Toulouse" />
+          </label>
+
+          <label>
+            Notes
+            <textarea id="notesInput" rows="2" placeholder="Badge, boîte aux lettres, remarques..."></textarea>
+          </label>
+
+          <section class="photo-box">
+            <h3>Photos des jeux</h3>
+            <div id="keySetPhotoList" class="key-set-photo-list"></div>
+          </section>
+
+          <fieldset class="movement-box">
+            <legend>Entrée / Sortie</legend>
+            <label>
+              Jeu concerné
+              <select id="keySetSelect"></select>
+            </label>
+            <label>
+              Sélectionner un intervenant
+              <select id="contactSelect">
+                <option value="">Choisir dans la liste</option>
+              </select>
+            </label>
+            <label>
+              Intervenant
+              <input id="movementPersonInput" type="text" placeholder="Qui prend ou rend les clés ?" />
+            </label>
+            <label>
+              Numéro de téléphone de l'intervenant
+              <input id="movementPhoneInput" type="tel" placeholder="Ex. 06 12 34 56 78" />
+            </label>
+            <label>
+              Commentaire
+              <input id="movementNoteInput" type="text" placeholder="Motif, rendez-vous, référence..." />
+            </label>
+            <div class="signature-field">
+              <div class="signature-label">
+                <span>Signature</span>
+                <button id="clearSignatureBtn" type="button">Effacer</button>
+              </div>
+              <canvas id="signatureCanvas" width="320" height="110" aria-label="Zone de signature"></canvas>
+            </div>
+            <div class="movement-actions">
+              <button id="checkinBtn" type="button">Entrée</button>
+              <button id="checkoutBtn" type="button">Sortie</button>
+            </div>
+            <div class="archive-actions">
+              <button id="rentedBtn" class="rented-button" type="button">Loué</button>
+              <button id="removedBtn" class="removed-button" type="button">Retiré</button>
+            </div>
+          </fieldset>
+
+          <section class="history-section">
+            <h3>Historique</h3>
+            <ol id="historyList" class="history-list"></ol>
+          </section>
+
+          <button id="exportKeyCsvBtn" class="export-csv-button" type="button">Exporter</button>
+        </form>
+      </aside>
+
+      <aside id="contactsPanel" class="contacts-panel" aria-label="Intervenants" hidden>
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Répertoire</p>
+            <h2>Intervenants</h2>
+          </div>
+          <button id="closeContactsBtn" class="close-button" type="button" aria-label="Fermer les intervenants">x</button>
+        </div>
+
+        <div class="contact-tabs" role="tablist" aria-label="Catégories d'intervenants">
+          <button id="internalContactsTab" class="contact-tab active" type="button" data-contact-type="internal">
+            Intervenants internes
+          </button>
+          <button id="externalContactsTab" class="contact-tab" type="button" data-contact-type="external">
+            Intervenants externes
+          </button>
+        </div>
+
+        <form id="contactForm" class="contact-form">
+          <label>
+            Nom
+            <input id="contactNameInput" type="text" placeholder="Nom de l'intervenant" />
+          </label>
+          <label>
+            Téléphone
+            <input id="contactPhoneInput" type="tel" placeholder="Ex. 06 12 34 56 78" />
+          </label>
+          <button id="addContactBtn" type="submit">Ajouter</button>
+        </form>
+
+        <ol id="contactsList" class="contacts-list"></ol>
+      </aside>
+
+      <aside id="compromisesPanel" class="archives-panel" aria-label="Compromis" hidden>
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Transaction</p>
+            <h2>Compromis</h2>
+          </div>
+          <button id="closeCompromisesBtn" class="close-button" type="button" aria-label="Fermer les compromis">x</button>
+        </div>
+
+        <section class="archive-section">
+          <h3>Biens dont les compromis sont sign&eacute;s</h3>
+          <ol id="compromisesList" class="archive-list"></ol>
+        </section>
+      </aside>
+
+      <aside id="archivesPanel" class="archives-panel" aria-label="Archives" hidden>
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Page annexe</p>
+            <h2>Archives</h2>
+          </div>
+          <button id="closeArchivesBtn" class="close-button" type="button" aria-label="Fermer les archives">x</button>
+        </div>
+
+        <section id="rentedArchiveSection" class="archive-section">
+          <h3 id="rentedArchiveTitle">Biens loués</h3>
+          <ol id="rentedList" class="archive-list"></ol>
+        </section>
+
+        <section class="archive-section">
+          <h3>Biens retirés</h3>
+          <ol id="removedList" class="archive-list"></ol>
+        </section>
+
+        <section id="authenticatedArchiveSection" class="archive-section" hidden>
+          <h3>Actes authentiques</h3>
+          <ol id="authenticatedList" class="archive-list"></ol>
+        </section>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
+
+
