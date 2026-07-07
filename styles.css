@@ -936,7 +936,7 @@ body.is-moving-key .photo-hover {
   display: block;
   overflow: hidden;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -946,7 +946,7 @@ body.is-moving-key .photo-hover {
   display: block;
   margin-top: 3px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -969,12 +969,6 @@ body.is-moving-key .photo-hover {
 }
 
 .contact-delete {
-  color: var(--red);
-  background: var(--red-soft);
-}
-
-.delete-key-button {
-  width: 100%;
   color: var(--red);
   background: var(--red-soft);
 }
@@ -1045,13 +1039,20 @@ body.is-moving-key .photo-hover {
   white-space: pre-line;
 }
 
-.export-csv-button {
+.export-csv-button,
+.delete-key-button {
   display: grid;
   place-items: center;
   width: 100%;
   border: 2px solid #7c8781;
   color: #30383b;
   background: #cbd1cd;
+}
+
+.delete-key-button {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-soft);
 }
 
 .panel-header {
@@ -1448,6 +1449,10 @@ body.is-moving-key .photo-hover {
   .detail-panel {
     width: min(380px, 100vw);
   }
+
+  .registry-toggle-button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1466,6 +1471,11 @@ body.is-moving-key .photo-hover {
   .top-actions {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .registry-toggle-button,
+  .archive-tab-button {
+    width: 100%;
   }
 
   .filter-action,
