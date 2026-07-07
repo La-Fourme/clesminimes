@@ -916,6 +916,20 @@ body.is-moving-key .photo-hover {
   background: #d8dcd8;
 }
 
+.contacts-list li[draggable="true"] {
+  cursor: grab;
+}
+
+.contacts-list li.dragging {
+  cursor: grabbing;
+  opacity: 0.55;
+}
+
+.contacts-list li.drag-over {
+  border-color: var(--blue);
+  box-shadow: inset 0 3px 0 var(--blue);
+}
+
 .contact-name {
   display: block;
   overflow: hidden;

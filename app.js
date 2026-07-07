@@ -108,6 +108,7 @@ let hasSignature = false;
 let contactsCloseTimer = null;
 let archivesCloseTimer = null;
 let detailCloseTimer = null;
+let draggedContactId = null;
 let hoveredKeyId = null;
 let isDetailPanelHovered = false;
 let isPhotoImporting = false;
@@ -484,13 +485,19 @@ function createContactId() {
   return `contact-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function formatPhoneNumber(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.match(/.{1,2}/g).join(" ");
+}
+
 function normalizeContact(contact) {
   const type = contact.type === "external" ? "external" : "internal";
 
   return {
     id: contact.id || createContactId(),
     name: (contact.name || "").trim(),
-    phone: (contact.phone || "").trim(),
+    phone: formatPhoneNumber(contact.phone),
     type,
   };
 }
@@ -684,10 +691,7 @@ function renderContactSelect() {
     ["internal", "Intervenants internes"],
     ["external", "Intervenants externes"],
   ].forEach(([type, label]) => {
-    const groupedContacts = contacts
-      .filter((contact) => contact.type === type)
-      .slice()
-      .sort((first, second) => first.name.localeCompare(second.name, "fr"));
+    const groupedContacts = contacts.filter((contact) => contact.type === type);
 
     if (!groupedContacts.length) return;
 
@@ -725,16 +729,15 @@ function renderContactsPanel() {
     return;
   }
 
-  visibleContacts
-    .slice()
-    .sort((first, second) => first.name.localeCompare(second.name, "fr"))
-    .forEach((contact) => {
+  visibleContacts.forEach((contact) => {
       const item = document.createElement("li");
       const details = document.createElement("span");
       const name = document.createElement("span");
       const phone = document.createElement("span");
       const deleteButton = document.createElement("button");
 
+      item.draggable = true;
+      item.dataset.contactId = contact.id;
       name.className = "contact-name";
       phone.className = "contact-phone";
       deleteButton.className = "contact-delete";
@@ -758,6 +761,27 @@ function renderContactsPanel() {
       item.append(details, deleteButton);
       contactsList.append(item);
     });
+}
+
+function moveContact(draggedId, targetId, placeAfter = false) {
+  if (!draggedId || !targetId || draggedId === targetId) return;
+
+  const draggedContact = contacts.find((contact) => contact.id === draggedId);
+  const targetContact = contacts.find((contact) => contact.id === targetId);
+  if (!draggedContact || !targetContact || draggedContact.type !== targetContact.type) return;
+
+  rememberUndoStep();
+  const sameTypeContacts = contacts.filter((contact) => contact.type === draggedContact.type && contact.id !== draggedId);
+  const targetIndex = sameTypeContacts.findIndex((contact) => contact.id === targetId);
+  sameTypeContacts.splice(targetIndex + (placeAfter ? 1 : 0), 0, draggedContact);
+
+  let sameTypeIndex = 0;
+  contacts = contacts.map((contact) =>
+    contact.type === draggedContact.type ? sameTypeContacts[sameTypeIndex++] : contact,
+  );
+  saveContacts();
+  renderContactSelect();
+  renderContactsPanel();
 }
 
 function formatArchiveDate(value) {
@@ -1882,6 +1906,46 @@ contactsPanel.addEventListener("mouseleave", scheduleCloseContactsPanel);
 closeContactsBtn.addEventListener("click", () => {
   contactsPanel.hidden = true;
 });
+contactPhoneInput.addEventListener("input", () => {
+  contactPhoneInput.value = formatPhoneNumber(contactPhoneInput.value);
+});
+contactsList.addEventListener("dragstart", (event) => {
+  const item = event.target.closest("[data-contact-id]");
+  if (!item) return;
+
+  draggedContactId = item.dataset.contactId;
+  item.classList.add("dragging");
+  event.dataTransfer.effectAllowed = "move";
+});
+contactsList.addEventListener("dragend", () => {
+  draggedContactId = null;
+  contactsList.querySelectorAll(".drag-over, .dragging").forEach((item) => {
+    item.classList.remove("drag-over", "dragging");
+  });
+});
+contactsList.addEventListener("dragover", (event) => {
+  const item = event.target.closest("[data-contact-id]");
+  if (!item || item.dataset.contactId === draggedContactId) return;
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  contactsList.querySelectorAll(".drag-over").forEach((contactItem) => contactItem.classList.remove("drag-over"));
+  item.classList.add("drag-over");
+});
+contactsList.addEventListener("dragleave", (event) => {
+  const item = event.target.closest("[data-contact-id]");
+  if (item && !item.contains(event.relatedTarget)) item.classList.remove("drag-over");
+});
+contactsList.addEventListener("drop", (event) => {
+  const item = event.target.closest("[data-contact-id]");
+  if (!item) return;
+
+  event.preventDefault();
+  const rect = item.getBoundingClientRect();
+  const placeAfter = event.clientY > rect.top + rect.height / 2;
+  item.classList.remove("drag-over");
+  moveContact(draggedContactId, item.dataset.contactId, placeAfter);
+});
 registryToggleBtn.addEventListener("click", switchRegistry);
 compromisesTabBtn.addEventListener("click", openCompromisesPanel);
 compromisesPanel.addEventListener("mouseenter", () => clearTimeout(archivesCloseTimer));
@@ -1905,7 +1969,7 @@ contactForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
   const name = contactNameInput.value.trim();
-  const phone = contactPhoneInput.value.trim();
+  const phone = formatPhoneNumber(contactPhoneInput.value);
   if (!name) return;
 
   rememberUndoStep();
