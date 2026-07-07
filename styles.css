@@ -911,8 +911,8 @@ body.is-moving-key .photo-hover {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 7px 9px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #d8dcd8;
@@ -944,7 +944,7 @@ body.is-moving-key .photo-hover {
 
 .contact-phone {
   display: block;
-  margin-top: 3px;
+  margin-top: 1px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 600;
@@ -952,13 +952,13 @@ body.is-moving-key .photo-hover {
 
 .contact-actions {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .contact-edit,
 .contact-delete {
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 9px;
   font-size: 12px;
   font-weight: 700;
 }
