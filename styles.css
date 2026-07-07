@@ -881,12 +881,13 @@ body.is-moving-key .photo-hover {
   color: var(--muted);
   background: transparent;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 650;
 }
 
 .contact-tab.active {
   color: var(--c21-gold);
   background: var(--c21-charcoal);
+  font-weight: 650;
 }
 
 .contact-form {
