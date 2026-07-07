@@ -8,7 +8,7 @@ const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const registryConfig = {
   location: {
-    title: "CENTURY 21 LES MINIMES - CL\u00c9S LOCATION",
+    title: "CENTURY 21 LES MINIMES\nCL\u00c9S LOCATION",
     toggleLabel: "BASCULER VERS\nTABLEAU CL\u00c9S TRANSACTION",
     keysStorageKey: "cles-immobilieres-v1",
     archivesStorageKey: "cles-location-archives-v1",
@@ -18,7 +18,7 @@ const registryConfig = {
     rentedArchiveText: "Loué",
   },
   transaction: {
-    title: "CENTURY 21 LES MINIMES - CL\u00c9S TRANSACTION",
+    title: "CENTURY 21 LES MINIMES\nCL\u00c9S TRANSACTION",
     toggleLabel: "BASCULER VERS\nTABLEAU CL\u00c9S LOCATION",
     keysStorageKey: "cles-transaction-v1",
     archivesStorageKey: "cles-transaction-archives-v1",
@@ -302,7 +302,7 @@ function getRegistryConfig() {
 function updateRegistryHeader() {
   const config = getRegistryConfig();
   appTitleText.textContent = config.title;
-  document.title = config.title;
+  document.title = config.title.replace(/\n/g, " - ");
   registryToggleBtn.textContent = config.toggleLabel;
   rentedBtn.textContent = config.archiveActionLabel;
   rentedArchiveTitle.textContent = config.rentedArchiveTitle;
