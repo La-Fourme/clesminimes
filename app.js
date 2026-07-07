@@ -1,5 +1,9 @@
 const categories = ["T1", "T2", "T3", "T4+", "Maison", "Autre"];
 const slotsPerCategory = 20;
+const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
+const supabaseAnonKey =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
+const supabaseClient = globalThis.supabase?.createClient(supabaseUrl, supabaseAnonKey);
 const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const registryConfig = {
@@ -111,6 +115,7 @@ let undoSnapshot = null;
 let saleCelebrationTimer = null;
 const celebrationAudioFiles = ["Ados.mp3", "Adultes.mp3", "Langue.mp3"];
 let celebrationAudioPlayers = [];
+let lastCloudSnapshot = "";
 
 function makeKeySet(id) {
   const option = keySetOptions.find((set) => set.id === id) || keySetOptions[0];
@@ -131,6 +136,7 @@ function loadActiveRegistry() {
 
 function saveActiveRegistry() {
   localStorage.setItem(registryStorageKey, activeRegistry);
+  syncStorageKeyToCloud(registryStorageKey);
 }
 
 function getBackupStorageKeys() {
@@ -142,6 +148,92 @@ function getBackupStorageKeys() {
     registryConfig.transaction.keysStorageKey,
     registryConfig.transaction.archivesStorageKey,
   ];
+}
+
+function parseStorageValue(value) {
+  if (typeof value !== "string") return null;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function stringifyCloudValue(value) {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function saveStorageValue(storageKey, value) {
+  if (typeof value === "string") {
+    localStorage.setItem(storageKey, value);
+  } else {
+    localStorage.removeItem(storageKey);
+  }
+}
+
+function syncStorageKeyToCloud(storageKey) {
+  if (!supabaseClient) return Promise.resolve();
+
+  const value = localStorage.getItem(storageKey);
+  const request =
+    value === null
+      ? supabaseClient.from("app_state").delete().eq("key", storageKey)
+      : supabaseClient.from("app_state").upsert({
+          key: storageKey,
+          value: parseStorageValue(value),
+          updated_at: new Date().toISOString(),
+        });
+
+  return request.then(({ error }) => {
+    if (error) console.warn("Supabase sync failed", storageKey, error.message);
+  });
+}
+
+function syncAllStorageToCloud() {
+  return Promise.all(getBackupStorageKeys().map(syncStorageKeyToCloud));
+}
+
+function getCloudSnapshot(rows) {
+  return JSON.stringify(
+    [...rows]
+      .map((row) => ({ key: row.key, value: row.value }))
+      .sort((first, second) => first.key.localeCompare(second.key)),
+  );
+}
+
+async function loadStorageFromCloud() {
+  if (!supabaseClient) return;
+
+  const { data, error } = await supabaseClient.from("app_state").select("key,value");
+  if (error) {
+    console.warn("Supabase load failed", error.message);
+    return;
+  }
+
+  if (!Array.isArray(data) || !data.length) {
+    localStorage.setItem(registryStorageKey, activeRegistry);
+    localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
+    localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
+    localStorage.setItem(sharedContactsStorageKey, JSON.stringify(contacts));
+    await syncAllStorageToCloud();
+    return;
+  }
+
+  const cloudSnapshot = getCloudSnapshot(data);
+  if (cloudSnapshot === lastCloudSnapshot) return;
+  lastCloudSnapshot = cloudSnapshot;
+
+  const cloudRows = new Map(data.map((row) => [row.key, row.value]));
+  getBackupStorageKeys().forEach((storageKey) => {
+    if (cloudRows.has(storageKey)) {
+      saveStorageValue(storageKey, stringifyCloudValue(cloudRows.get(storageKey)));
+    } else {
+      localStorage.removeItem(storageKey);
+    }
+  });
+
+  refreshDataFromStorage({ keepSelection: true });
 }
 
 function updateUndoButton() {
@@ -170,12 +262,9 @@ function rememberUndoStep() {
 function restoreStorageSnapshot(snapshot) {
   getBackupStorageKeys().forEach((key) => {
     const value = snapshot.storage[key];
-    if (typeof value === "string") {
-      localStorage.setItem(key, value);
-    } else {
-      localStorage.removeItem(key);
-    }
+    saveStorageValue(key, value);
   });
+  syncAllStorageToCloud();
 }
 
 function undoPreviousStep() {
@@ -337,6 +426,7 @@ function loadKeys() {
 function saveKeys() {
   try {
     localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
+    syncStorageKeyToCloud(getRegistryConfig().keysStorageKey);
   } catch (error) {
     alert("La sauvegarde a échoué. Une photo est probablement trop lourde : essayez une image plus légère.");
     throw error;
@@ -366,6 +456,7 @@ function loadArchives() {
 
 function saveArchives() {
   localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
+  syncStorageKeyToCloud(getRegistryConfig().archivesStorageKey);
 }
 
 function migrateArchivedSlots() {
@@ -418,6 +509,7 @@ function loadContacts() {
 
 function saveContacts() {
   localStorage.setItem(sharedContactsStorageKey, JSON.stringify(contacts));
+  syncStorageKeyToCloud(sharedContactsStorageKey);
 }
 
 function getSelectedKey() {
@@ -867,18 +959,22 @@ function exportAllDataBackup() {
   URL.revokeObjectURL(url);
 }
 
-function refreshDataFromStorage() {
+function refreshDataFromStorage({ keepSelection = false } = {}) {
+  const previousSelectedId = selectedId;
+  const previousSelectedSetId = selectedSetId;
   activeRegistry = loadActiveRegistry();
   keys = loadKeys();
   archives = loadArchives();
   contacts = loadContacts();
-  selectedId = null;
-  selectedSetId = "main";
+  selectedId = keepSelection && keys.some((key) => key.id === previousSelectedId) ? previousSelectedId : null;
+  selectedSetId = keepSelection ? previousSelectedSetId || "main" : "main";
   hoveredKeyId = null;
   isDetailPanelHovered = false;
-  contactsPanel.hidden = true;
-  archivesPanel.hidden = true;
-  clearSignature();
+  if (!keepSelection) {
+    contactsPanel.hidden = true;
+    archivesPanel.hidden = true;
+    clearSignature();
+  }
   updateRegistryHeader();
   render();
 }
@@ -905,12 +1001,9 @@ function importAllDataBackup(file) {
     rememberUndoStep();
     getBackupStorageKeys().forEach((key) => {
       const value = parsed.data[key];
-      if (typeof value === "string") {
-        localStorage.setItem(key, value);
-      } else {
-        localStorage.removeItem(key);
-      }
+      saveStorageValue(key, value);
     });
+    syncAllStorageToCloud();
 
     refreshDataFromStorage();
     alert("Sauvegarde importée.");
@@ -1904,3 +1997,5 @@ migrateArchivedSlots();
 updateRegistryHeader();
 updateUndoButton();
 render();
+loadStorageFromCloud();
+setInterval(loadStorageFromCloud, 7000);
