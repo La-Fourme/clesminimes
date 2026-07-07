@@ -85,8 +85,12 @@ const contactsTabBtn = document.querySelector("#contactsTabBtn");
 const contactsPanel = document.querySelector("#contactsPanel");
 const closeContactsBtn = document.querySelector("#closeContactsBtn");
 const contactForm = document.querySelector("#contactForm");
+const contactFirstNameLabel = document.querySelector("#contactFirstNameLabel");
+const contactFirstNameInput = document.querySelector("#contactFirstNameInput");
+const contactNameLabel = document.querySelector("#contactNameLabel");
 const contactNameInput = document.querySelector("#contactNameInput");
 const contactPhoneInput = document.querySelector("#contactPhoneInput");
+const addContactBtn = document.querySelector("#addContactBtn");
 const contactsList = document.querySelector("#contactsList");
 const contactTabs = [...document.querySelectorAll(".contact-tab")];
 const undoBtn = document.querySelector("#undoBtn");
@@ -109,6 +113,7 @@ let contactsCloseTimer = null;
 let archivesCloseTimer = null;
 let detailCloseTimer = null;
 let draggedContactId = null;
+let editingContactId = null;
 let hoveredKeyId = null;
 let isDetailPanelHovered = false;
 let isPhotoImporting = false;
@@ -491,11 +496,18 @@ function formatPhoneNumber(value) {
   return digits.match(/.{1,2}/g).join(" ");
 }
 
+function getContactDisplayName(contact) {
+  if (contact.type !== "external") return contact.name;
+
+  return [contact.firstName, contact.name].filter(Boolean).join(" - ");
+}
+
 function normalizeContact(contact) {
   const type = contact.type === "external" ? "external" : "internal";
 
   return {
     id: contact.id || createContactId(),
+    firstName: type === "external" ? (contact.firstName || "").trim() : "",
     name: (contact.name || "").trim(),
     phone: formatPhoneNumber(contact.phone),
     type,
@@ -700,7 +712,7 @@ function renderContactSelect() {
     groupedContacts.forEach((contact) => {
       const option = document.createElement("option");
       option.value = contact.id;
-      option.textContent = contact.phone ? `${contact.name} - ${contact.phone}` : contact.name;
+      option.textContent = contact.phone ? `${getContactDisplayName(contact)} - ${contact.phone}` : getContactDisplayName(contact);
       group.append(option);
     });
     contactSelect.append(group);
@@ -715,6 +727,7 @@ function renderContactsPanel() {
     tab.classList.toggle("active", isActive);
     tab.setAttribute("aria-selected", String(isActive));
   });
+  updateContactFormMode();
 
   contactsList.innerHTML = "";
   const visibleContacts = contacts.filter((contact) => contact.type === activeContactType);
@@ -734,20 +747,36 @@ function renderContactsPanel() {
       const details = document.createElement("span");
       const name = document.createElement("span");
       const phone = document.createElement("span");
+      const actions = document.createElement("span");
+      const editButton = document.createElement("button");
       const deleteButton = document.createElement("button");
 
       item.draggable = true;
       item.dataset.contactId = contact.id;
       name.className = "contact-name";
       phone.className = "contact-phone";
+      actions.className = "contact-actions";
+      editButton.className = "contact-edit";
+      editButton.type = "button";
       deleteButton.className = "contact-delete";
       deleteButton.type = "button";
 
-      name.textContent = contact.name;
+      name.textContent = getContactDisplayName(contact);
       phone.textContent = contact.phone || "Téléphone non renseigné";
+      editButton.textContent = "Modifier";
+      editButton.addEventListener("click", () => {
+        editingContactId = contact.id;
+        activeContactType = contact.type;
+        contactFirstNameInput.value = contact.firstName || "";
+        contactNameInput.value = contact.name;
+        contactPhoneInput.value = contact.phone;
+        updateContactFormMode();
+        renderContactsPanel();
+        (contactFirstNameLabel.hidden ? contactNameInput : contactFirstNameInput).focus();
+      });
       deleteButton.textContent = "Supprimer";
       deleteButton.addEventListener("click", () => {
-        const confirmed = confirm(`Supprimer l'intervenant ${contact.name} ?`);
+        const confirmed = confirm(`Supprimer l'intervenant ${getContactDisplayName(contact)} ?`);
         if (!confirmed) return;
 
         rememberUndoStep();
@@ -758,26 +787,35 @@ function renderContactsPanel() {
       });
 
       details.append(name, phone);
-      item.append(details, deleteButton);
+      actions.append(editButton, deleteButton);
+      item.append(details, actions);
       contactsList.append(item);
     });
 }
 
-function moveContact(draggedId, targetId, placeAfter = false) {
-  if (!draggedId || !targetId || draggedId === targetId) return;
+function updateContactFormMode() {
+  const isExternal = activeContactType === "external";
+  contactFirstNameLabel.hidden = !isExternal;
+  contactNameLabel.firstChild.textContent = isExternal ? "Nom de la société\n            " : "Nom\n            ";
+  contactNameInput.placeholder = isExternal ? "Nom de la société" : "Nom de l'intervenant";
+  addContactBtn.textContent = editingContactId ? "Enregistrer" : "Ajouter";
+}
 
-  const draggedContact = contacts.find((contact) => contact.id === draggedId);
-  const targetContact = contacts.find((contact) => contact.id === targetId);
-  if (!draggedContact || !targetContact || draggedContact.type !== targetContact.type) return;
+function saveContactOrderFromList() {
+  const orderedIds = [...contactsList.querySelectorAll("[data-contact-id]")].map((item) => item.dataset.contactId);
+  if (!orderedIds.length) return;
+  const previousIds = contacts.filter((contact) => contact.type === activeContactType).map((contact) => contact.id);
+  if (orderedIds.join("|") === previousIds.join("|")) return;
+
+  const orderedContacts = orderedIds
+    .map((id) => contacts.find((contact) => contact.id === id))
+    .filter(Boolean);
+  if (!orderedContacts.length) return;
 
   rememberUndoStep();
-  const sameTypeContacts = contacts.filter((contact) => contact.type === draggedContact.type && contact.id !== draggedId);
-  const targetIndex = sameTypeContacts.findIndex((contact) => contact.id === targetId);
-  sameTypeContacts.splice(targetIndex + (placeAfter ? 1 : 0), 0, draggedContact);
-
-  let sameTypeIndex = 0;
+  let orderedIndex = 0;
   contacts = contacts.map((contact) =>
-    contact.type === draggedContact.type ? sameTypeContacts[sameTypeIndex++] : contact,
+    contact.type === activeContactType ? orderedContacts[orderedIndex++] || contact : contact,
   );
   saveContacts();
   renderContactSelect();
@@ -1897,7 +1935,7 @@ contactSelect.addEventListener("change", () => {
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
   if (!contact) return;
 
-  movementPersonInput.value = contact.name;
+  movementPersonInput.value = getContactDisplayName(contact);
   movementPhoneInput.value = contact.phone;
 });
 contactsTabBtn.addEventListener("click", openContactsPanel);
@@ -1918,33 +1956,27 @@ contactsList.addEventListener("dragstart", (event) => {
   event.dataTransfer.effectAllowed = "move";
 });
 contactsList.addEventListener("dragend", () => {
+  saveContactOrderFromList();
   draggedContactId = null;
   contactsList.querySelectorAll(".drag-over, .dragging").forEach((item) => {
     item.classList.remove("drag-over", "dragging");
   });
 });
 contactsList.addEventListener("dragover", (event) => {
-  const item = event.target.closest("[data-contact-id]");
-  if (!item || item.dataset.contactId === draggedContactId) return;
-
   event.preventDefault();
   event.dataTransfer.dropEffect = "move";
-  contactsList.querySelectorAll(".drag-over").forEach((contactItem) => contactItem.classList.remove("drag-over"));
-  item.classList.add("drag-over");
-});
-contactsList.addEventListener("dragleave", (event) => {
-  const item = event.target.closest("[data-contact-id]");
-  if (item && !item.contains(event.relatedTarget)) item.classList.remove("drag-over");
-});
-contactsList.addEventListener("drop", (event) => {
-  const item = event.target.closest("[data-contact-id]");
-  if (!item) return;
 
-  event.preventDefault();
+  const draggedItem = contactsList.querySelector(".dragging");
+  const item = event.target.closest("[data-contact-id]");
+  if (!draggedItem || !item || item === draggedItem) return;
+
   const rect = item.getBoundingClientRect();
   const placeAfter = event.clientY > rect.top + rect.height / 2;
-  item.classList.remove("drag-over");
-  moveContact(draggedContactId, item.dataset.contactId, placeAfter);
+  contactsList.insertBefore(draggedItem, placeAfter ? item.nextSibling : item);
+});
+contactsList.addEventListener("drop", (event) => {
+  event.preventDefault();
+  saveContactOrderFromList();
 });
 registryToggleBtn.addEventListener("click", switchRegistry);
 compromisesTabBtn.addEventListener("click", openCompromisesPanel);
@@ -1962,6 +1994,9 @@ closeArchivesBtn.addEventListener("click", () => {
 contactTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     activeContactType = tab.dataset.contactType === "external" ? "external" : "internal";
+    editingContactId = null;
+    contactForm.reset();
+    updateContactFormMode();
     renderContactsPanel();
   });
 });
@@ -1969,21 +2004,39 @@ contactForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
   const name = contactNameInput.value.trim();
+  const firstName = activeContactType === "external" ? contactFirstNameInput.value.trim() : "";
   const phone = formatPhoneNumber(contactPhoneInput.value);
   if (!name) return;
 
   rememberUndoStep();
-  contacts = [
-    ...contacts,
-    {
-      id: createContactId(),
-      name,
-      phone,
-      type: activeContactType,
-    },
-  ];
+  if (editingContactId) {
+    contacts = contacts.map((contact) =>
+      contact.id === editingContactId
+        ? {
+            ...contact,
+            firstName,
+            name,
+            phone,
+            type: activeContactType,
+          }
+        : contact,
+    );
+  } else {
+    contacts = [
+      ...contacts,
+      {
+        id: createContactId(),
+        firstName,
+        name,
+        phone,
+        type: activeContactType,
+      },
+    ];
+  }
+  editingContactId = null;
   saveContacts();
   contactForm.reset();
+  updateContactFormMode();
   renderContactSelect();
   renderContactsPanel();
 });

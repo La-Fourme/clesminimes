@@ -947,9 +947,23 @@ body.is-moving-key .photo-hover {
   font-weight: 700;
 }
 
+.contact-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.contact-edit,
 .contact-delete {
   min-height: 34px;
   padding: 0 10px;
+}
+
+.contact-edit {
+  color: #1e4d2b;
+  background: #dceee1;
+}
+
+.contact-delete {
   color: var(--red);
   background: var(--red-soft);
 }
