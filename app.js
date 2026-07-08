@@ -2430,7 +2430,12 @@ closeGlobalHistoryBtn.addEventListener("click", () => {
 });
 exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
 backupDataBtn.addEventListener("click", exportAllDataBackup);
-importDataBtn.addEventListener("click", () => {
+importDataBtn.addEventListener("click", (event) => {
+  if (!event.ctrlKey || !event.shiftKey) {
+    alert("Maintenez Ctrl + Maj en cliquant pour importer une sauvegarde.");
+    return;
+  }
+
   backupFileInput.value = "";
   backupFileInput.click();
 });

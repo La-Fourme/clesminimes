@@ -523,9 +523,9 @@ h3 {
 }
 
 .history-data-button {
-  color: #3f3322;
-  background: #d8c4a0;
-  border-color: #a88755;
+  color: #f4f7f5;
+  background: #8f6f45;
+  border-color: #b79a6d;
 }
 
 .history-button-icon {
@@ -902,6 +902,10 @@ body.is-moving-key .photo-hover {
 
 #compromisesPanel {
   width: min(468px, 100vw);
+}
+
+#globalHistoryPanel {
+  width: min(432px, 100vw);
 }
 
 .contact-tabs {
