@@ -877,6 +877,10 @@ body.is-moving-key .photo-hover {
   gap: 14px;
 }
 
+#compromisesPanel {
+  width: min(720px, 100vw);
+}
+
 .contact-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1008,7 +1012,7 @@ body.is-moving-key .photo-hover {
 .archive-list li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--line);
@@ -1267,8 +1271,9 @@ body.is-moving-key .photo-hover {
   right: -10px;
   top: -10px;
   z-index: 1;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
   border: 2px solid var(--red);
@@ -1277,7 +1282,8 @@ body.is-moving-key .photo-hover {
   background: var(--red-soft);
   font-size: 19px;
   font-weight: 900;
-  line-height: 1;
+  line-height: 30px;
+  padding: 0 0 2px;
 }
 
 .date-dialog {
@@ -1566,6 +1572,11 @@ body.is-moving-key .photo-hover {
 @media (max-width: 1040px) {
   .detail-panel {
     width: min(380px, 100vw);
+  }
+
+  #compromisesPanel {
+    width: 100vw;
+    border-left: 0;
   }
 
   .topbar {

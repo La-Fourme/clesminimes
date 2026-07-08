@@ -1294,6 +1294,26 @@ function markCompromiseAsAuthenticated(recordId) {
   showSaleCelebration();
 }
 
+async function editCompromiseDate(recordId) {
+  const record = archives.find((archive) => archive.id === recordId && archive.reason === "rented");
+  if (!record) return;
+
+  const nextDate = await promptCompromiseDate(record.compromiseSignedAt || new Date().toISOString().slice(0, 10));
+  if (!nextDate) return;
+
+  rememberUndoStep();
+  archives = archives.map((archive) =>
+    archive.id === recordId
+      ? {
+          ...archive,
+          compromiseSignedAt: nextDate,
+        }
+      : archive,
+  );
+  saveArchives();
+  renderCompromisesPanel();
+}
+
 function renderArchiveList(list, reason, emptyText, options = {}) {
   const archivedRecords = archives
     .filter((record) => record.reason === reason)
@@ -1323,14 +1343,18 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     const restoreButton = document.createElement("button");
     const archiveCity = [key.postalCode, key.city].filter(Boolean).join(" ");
     const address = [key.property, archiveCity].filter(Boolean).join(" - ");
+    const compromiseAddress = [
+      key.property || "Adresse non renseignée",
+      key.postalCode || "Code postal non renseigné",
+      key.city ? key.city.toUpperCase() : "VILLE NON RENSEIGNÉE",
+    ].join(" - ");
 
     title.textContent = `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`;
     if (options.showCompromiseDetails) {
       const compromiseDate = formatDateOnly(record.compromiseSignedAt) || formatArchiveDate(record.archivedAt);
       [
-        key.property || "Adresse non renseignée",
-        archiveCity || "Code postal / ville non renseignés",
-        compromiseDate ? `Compromis signé le ${compromiseDate}` : "Date de signature non renseignée",
+        compromiseAddress,
+        compromiseDate ? `Compromis signé le : ${compromiseDate}` : "Date de signature non renseignée",
       ]
         .forEach((line) => {
           const lineElement = document.createElement("span");
@@ -1344,10 +1368,14 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     exportButton.type = "button";
     exportButton.textContent = "Exporter";
     exportButton.title = "Exporter cette archive en CSV";
-    exportButton.addEventListener("click", () => exportKeyCsv(key, record));
+    exportButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      exportKeyCsv(key, record);
+    });
     restoreButton.type = "button";
     restoreButton.textContent = "Restaurer";
-    restoreButton.addEventListener("click", () => {
+    restoreButton.addEventListener("click", (event) => {
+      event.stopPropagation();
       const confirmed = confirm(`Restaurer ${keyLabel(key)} dans le tableau ?`);
       if (!confirmed) return;
 
@@ -1356,8 +1384,17 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     });
 
     details.append(title, meta);
-    actions.append(exportButton, restoreButton);
+    if (!options.hideExport) actions.append(exportButton);
+    actions.append(restoreButton);
     item.append(details, actions);
+    if (options.showCompromiseDetails) {
+      item.title = "Ctrl + clic pour modifier la date du compromis";
+      item.addEventListener("click", (event) => {
+        if (!event.ctrlKey) return;
+        event.preventDefault();
+        editCompromiseDate(record.id);
+      });
+    }
 
     if (options.showAuthenticatedAction) {
       const authenticatedButton = document.createElement("button");
@@ -1365,7 +1402,10 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
       authenticatedButton.className = "authenticated-button";
       authenticatedButton.type = "button";
       authenticatedButton.textContent = "R\u00c9IT\u00c9RATION PAR\nACTE AUTHENTIQUE";
-      authenticatedButton.addEventListener("click", () => markCompromiseAsAuthenticated(record.id));
+      authenticatedButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        markCompromiseAsAuthenticated(record.id);
+      });
       item.append(authenticatedButton);
     }
 
@@ -1384,6 +1424,7 @@ function renderCompromisesPanel() {
     showAuthenticatedAction: true,
     showCompromiseDetails: true,
     sortByCompromiseDate: true,
+    hideExport: true,
   });
 }
 
@@ -1644,7 +1685,7 @@ function compressPhotoFile(file) {
       const image = new Image();
       image.addEventListener("error", () => reject(new Error("Photo illisible.")));
       image.addEventListener("load", () => {
-        const maxSize = 900;
+        const maxSize = 720;
         const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
         const width = Math.max(1, Math.round(image.width * scale));
         const height = Math.max(1, Math.round(image.height * scale));
@@ -1655,7 +1696,7 @@ function compressPhotoFile(file) {
         context.fillStyle = "#ffffff";
         context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.62));
+        resolve(canvas.toDataURL("image/jpeg", 0.48));
       });
       image.src = reader.result;
     });
@@ -1910,14 +1951,13 @@ function addMovement(type) {
   render();
 }
 
-function promptCompromiseDate() {
+function promptCompromiseDate(defaultValue = new Date().toISOString().slice(0, 10)) {
   const dialog = document.createElement("dialog");
-  const today = new Date().toISOString().slice(0, 10);
   dialog.className = "date-dialog";
   dialog.innerHTML = `
     <form method="dialog">
       <h3>Date de signature du compromis</h3>
-      <input type="date" value="${today}" required />
+      <input type="date" value="${defaultValue}" required />
       <div>
         <button value="cancel" type="submit">Annuler</button>
         <button value="confirm" type="submit">Valider</button>
@@ -2275,6 +2315,18 @@ backupFileInput.addEventListener("change", () => {
 closePanelBtn.addEventListener("click", () => {
   clearTimeout(detailCloseTimer);
   selectedId = null;
+  render();
+});
+document.addEventListener("pointerdown", (event) => {
+  if (!selectedId) return;
+  if (detailPanel.hidden) return;
+  if (detailPanel.contains(event.target)) return;
+  if (event.target.closest(".key-tile")) return;
+  if (event.target.closest(".photo-viewer, .date-dialog")) return;
+
+  clearTimeout(detailCloseTimer);
+  selectedId = null;
+  clearSignature();
   render();
 });
 form.addEventListener("focusin", () => clearTimeout(detailCloseTimer));
