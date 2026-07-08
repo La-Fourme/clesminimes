@@ -887,11 +887,12 @@ function formatArchiveDate(value) {
 
 function formatDateOnly(value) {
   if (!value) return "";
+  const date = String(value).includes("T") ? new Date(value) : new Date(`${value}T00:00:00`);
   return new Intl.DateTimeFormat("fr-FR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  }).format(new Date(`${value}T00:00:00`));
+  }).format(date);
 }
 
 function archiveReasonText(reason) {
@@ -1350,7 +1351,7 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
 
     title.textContent = `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`;
     if (options.showCompromiseDetails) {
-      const compromiseDate = formatDateOnly(record.compromiseSignedAt) || formatArchiveDate(record.archivedAt);
+      const compromiseDate = formatDateOnly(record.compromiseSignedAt || record.archivedAt);
       [
         compromiseAddress,
         compromiseDate ? `Compromis signé le : ${compromiseDate}` : "Date de signature non renseignée",
