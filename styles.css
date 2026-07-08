@@ -694,10 +694,7 @@ textarea {
   object-fit: cover;
 }
 
-.key-tile.is-selected:hover .photo-hover {
-  display: block;
-}
-
+.key-tile.is-selected:hover .photo-hover,
 body.is-moving-key .photo-hover {
   display: none !important;
 }
@@ -1041,6 +1038,10 @@ body.is-moving-key .photo-hover {
   color: var(--muted);
 }
 
+.archive-list small span {
+  display: block;
+}
+
 .archive-list button {
   min-height: 34px;
   padding: 0 10px;
@@ -1188,11 +1189,15 @@ body.is-moving-key .photo-hover {
   background: #d8dcd8;
 }
 
+.photo-preview[role="button"] {
+  cursor: zoom-in;
+}
+
 .photo-preview img {
   width: 100%;
   height: 100%;
   max-height: 160px;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .photo-button {
@@ -1224,6 +1229,96 @@ body.is-moving-key .photo-hover {
   font-weight: 700;
   line-height: 1.1;
   text-align: center;
+}
+
+.photo-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(30, 37, 40, 0.72);
+}
+
+.photo-viewer[hidden] {
+  display: none;
+}
+
+.photo-viewer-content {
+  position: relative;
+  display: grid;
+  place-items: center;
+  max-width: min(920px, 100%);
+  max-height: 92vh;
+}
+
+.photo-viewer-content img {
+  max-width: 100%;
+  max-height: 92vh;
+  border: 3px solid #daddda;
+  border-radius: 8px;
+  background: #daddda;
+  object-fit: contain;
+}
+
+.photo-viewer-close {
+  position: absolute;
+  right: -10px;
+  top: -10px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--red);
+  border-radius: 999px;
+  color: var(--red);
+  background: var(--red-soft);
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.date-dialog {
+  width: min(340px, calc(100vw - 32px));
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: #eef1ef;
+  box-shadow: var(--panel-shadow);
+}
+
+.date-dialog::backdrop {
+  background: rgba(30, 37, 40, 0.48);
+}
+
+.date-dialog form {
+  display: grid;
+  gap: 14px;
+}
+
+.date-dialog h3 {
+  margin-bottom: 0;
+}
+
+.date-dialog input {
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9faf9;
+}
+
+.date-dialog div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.date-dialog button {
+  min-height: 40px;
+  border-radius: 8px;
+  font-weight: 700;
 }
 
 .movement-box {

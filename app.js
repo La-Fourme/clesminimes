@@ -124,6 +124,7 @@ let saleCelebrationTimer = null;
 const celebrationAudioFiles = ["Ados.mp3", "Adultes.mp3", "Langue.mp3"];
 let celebrationAudioPlayers = [];
 let lastCloudSnapshot = "";
+let photoViewer = null;
 
 function makeKeySet(id) {
   const option = keySetOptions.find((set) => set.id === id) || keySetOptions[0];
@@ -230,6 +231,7 @@ async function loadStorageFromCloud() {
 
   const cloudSnapshot = getCloudSnapshot(data);
   if (cloudSnapshot === lastCloudSnapshot) return;
+  if (isKeyFormBeingEdited()) return;
   lastCloudSnapshot = cloudSnapshot;
 
   const cloudRows = new Map(data.map((row) => [row.key, row.value]));
@@ -446,6 +448,7 @@ function normalizeArchive(record) {
     id: record.id || `archive-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     reason: record.reason || record.archiveReason || "rented",
     archivedAt: record.archivedAt || new Date().toISOString(),
+    compromiseSignedAt: record.compromiseSignedAt || "",
     key: normalizeKey(record.key || record),
   };
 }
@@ -685,6 +688,16 @@ function isDetailPanelBusy() {
   return isPhotoImporting || form.contains(document.activeElement);
 }
 
+function isKeyFormBeingEdited() {
+  const activeElement = document.activeElement;
+  return Boolean(
+    selectedId &&
+      activeElement &&
+      form.contains(activeElement) &&
+      ["INPUT", "TEXTAREA", "SELECT"].includes(activeElement.tagName),
+  );
+}
+
 function isTouchLayout() {
   return window.matchMedia("(max-width: 1040px), (pointer: coarse)").matches;
 }
@@ -870,6 +883,15 @@ function formatArchiveDate(value) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatDateOnly(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00`));
 }
 
 function archiveReasonText(reason) {
@@ -1273,7 +1295,14 @@ function markCompromiseAsAuthenticated(recordId) {
 }
 
 function renderArchiveList(list, reason, emptyText, options = {}) {
-  const archivedRecords = archives.filter((record) => record.reason === reason);
+  const archivedRecords = archives
+    .filter((record) => record.reason === reason)
+    .sort((first, second) => {
+      if (!options.sortByCompromiseDate) return 0;
+      return String(first.compromiseSignedAt || first.archivedAt).localeCompare(
+        String(second.compromiseSignedAt || second.archivedAt),
+      );
+    });
   list.innerHTML = "";
 
   if (!archivedRecords.length) {
@@ -1296,7 +1325,21 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     const address = [key.property, archiveCity].filter(Boolean).join(" - ");
 
     title.textContent = `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`;
-    meta.textContent = [address || "Adresse non renseignée", formatArchiveDate(record.archivedAt)].filter(Boolean).join(" | ");
+    if (options.showCompromiseDetails) {
+      const compromiseDate = formatDateOnly(record.compromiseSignedAt) || formatArchiveDate(record.archivedAt);
+      [
+        key.property || "Adresse non renseignée",
+        archiveCity || "Code postal / ville non renseignés",
+        compromiseDate ? `Compromis signé le ${compromiseDate}` : "Date de signature non renseignée",
+      ]
+        .forEach((line) => {
+          const lineElement = document.createElement("span");
+          lineElement.textContent = line;
+          meta.append(lineElement);
+        });
+    } else {
+      meta.textContent = [address || "Adresse non renseignée", formatArchiveDate(record.archivedAt)].filter(Boolean).join(" | ");
+    }
     actions.className = "archive-item-actions";
     exportButton.type = "button";
     exportButton.textContent = "Exporter";
@@ -1339,6 +1382,8 @@ function renderArchivesPanel() {
 function renderCompromisesPanel() {
   renderArchiveList(compromisesList, "rented", "Aucun bien en compromis.", {
     showAuthenticatedAction: true,
+    showCompromiseDetails: true,
+    sortByCompromiseDate: true,
   });
 }
 
@@ -1599,7 +1644,7 @@ function compressPhotoFile(file) {
       const image = new Image();
       image.addEventListener("error", () => reject(new Error("Photo illisible.")));
       image.addEventListener("load", () => {
-        const maxSize = 1200;
+        const maxSize = 900;
         const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
         const width = Math.max(1, Math.round(image.width * scale));
         const height = Math.max(1, Math.round(image.height * scale));
@@ -1610,7 +1655,7 @@ function compressPhotoFile(file) {
         context.fillStyle = "#ffffff";
         context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.82));
+        resolve(canvas.toDataURL("image/jpeg", 0.62));
       });
       image.src = reader.result;
     });
@@ -1636,6 +1681,17 @@ function renderKeySetPhotos(key) {
     preview.innerHTML = set.photo
       ? `<img src="${set.photo}" alt="Photo du jeu ${set.label} de ${keyLabel(key)}" />`
       : `<span>Aucune photo</span>`;
+    if (set.photo) {
+      preview.tabIndex = 0;
+      preview.setAttribute("role", "button");
+      preview.setAttribute("aria-label", `Afficher la photo du ${set.label}`);
+      preview.addEventListener("click", () => openPhotoViewer(set.photo, `${set.label} - ${keyLabel(key)}`));
+      preview.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openPhotoViewer(set.photo, `${set.label} - ${keyLabel(key)}`);
+      });
+    }
     actions.className = `photo-actions${set.photo ? "" : " single-action"}`;
     button.className = "photo-button";
     buttonText.textContent = set.photo ? "Changer la photo" : "Ajouter une photo";
@@ -1688,6 +1744,35 @@ function renderKeySetPhotos(key) {
     item.append(title, preview, actions);
     keySetPhotoList.append(item);
   });
+}
+
+function closePhotoViewer() {
+  if (!photoViewer) return;
+  photoViewer.hidden = true;
+}
+
+function openPhotoViewer(src, label) {
+  if (!photoViewer) {
+    photoViewer = document.createElement("div");
+    photoViewer.className = "photo-viewer";
+    photoViewer.hidden = true;
+    photoViewer.innerHTML = `
+      <div class="photo-viewer-content" role="dialog" aria-modal="true">
+        <button class="photo-viewer-close" type="button" aria-label="Fermer la photo">x</button>
+        <img alt="" />
+      </div>
+    `;
+    photoViewer.querySelector(".photo-viewer-close").addEventListener("click", closePhotoViewer);
+    photoViewer.addEventListener("click", (event) => {
+      if (event.target === photoViewer) closePhotoViewer();
+    });
+    document.body.append(photoViewer);
+  }
+
+  const image = photoViewer.querySelector("img");
+  image.src = src;
+  image.alt = label;
+  photoViewer.hidden = false;
 }
 
 function renderPanel() {
@@ -1825,11 +1910,50 @@ function addMovement(type) {
   render();
 }
 
-function archiveSelectedKey(reason) {
+function promptCompromiseDate() {
+  const dialog = document.createElement("dialog");
+  const today = new Date().toISOString().slice(0, 10);
+  dialog.className = "date-dialog";
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h3>Date de signature du compromis</h3>
+      <input type="date" value="${today}" required />
+      <div>
+        <button value="cancel" type="submit">Annuler</button>
+        <button value="confirm" type="submit">Valider</button>
+      </div>
+    </form>
+  `;
+  document.body.append(dialog);
+
+  const input = dialog.querySelector("input");
+  dialog.showModal();
+  input.focus();
+
+  return new Promise((resolve) => {
+    dialog.addEventListener(
+      "close",
+      () => {
+        const value = dialog.returnValue === "confirm" ? input.value : "";
+        dialog.remove();
+        resolve(value);
+      },
+      { once: true },
+    );
+  });
+}
+
+async function archiveSelectedKey(reason) {
   const key = getSelectedKey();
   if (!key || key.archived) return;
 
   const actionLabel = reason === "rented" ? getRegistryConfig().archiveActionLabel : "Retiré";
+  let compromiseSignedAt = "";
+  if (reason === "rented" && activeRegistry === "transaction") {
+    compromiseSignedAt = await promptCompromiseDate();
+    if (!compromiseSignedAt) return;
+  }
+
   const confirmed = confirm(`${actionLabel} ${keyLabel(key)} et libérer la case ?`);
   if (!confirmed) return;
   rememberUndoStep();
@@ -1840,6 +1964,7 @@ function archiveSelectedKey(reason) {
       id: `${key.id}-${archivedAt}`,
       reason,
       archivedAt,
+      compromiseSignedAt,
       key: { ...key, archived: false },
     },
     ...archives,
