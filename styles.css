@@ -882,7 +882,7 @@ body.is-moving-key .photo-hover {
 }
 
 #compromisesPanel {
-  width: min(540px, 100vw);
+  width: min(468px, 100vw);
 }
 
 .contact-tabs {
@@ -1285,10 +1285,25 @@ body.is-moving-key .photo-hover {
   border-radius: 999px;
   color: var(--red);
   background: var(--red-soft);
-  font-size: 19px;
-  font-weight: 900;
-  line-height: 1;
   padding: 0;
+}
+
+.photo-viewer-close::before,
+.photo-viewer-close::after {
+  position: absolute;
+  width: 13px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.photo-viewer-close::before {
+  transform: rotate(45deg);
+}
+
+.photo-viewer-close::after {
+  transform: rotate(-45deg);
 }
 
 .date-dialog {

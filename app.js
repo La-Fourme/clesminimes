@@ -1684,7 +1684,7 @@ function compressPhotoFile(file) {
       const image = new Image();
       image.addEventListener("error", () => reject(new Error("Photo illisible.")));
       image.addEventListener("load", () => {
-        const maxSize = 560;
+        const maxSize = 1600;
         const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
         const width = Math.max(1, Math.round(image.width * scale));
         const height = Math.max(1, Math.round(image.height * scale));
@@ -1695,7 +1695,7 @@ function compressPhotoFile(file) {
         context.fillStyle = "#ffffff";
         context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.36));
+        resolve(canvas.toDataURL("image/jpeg", 0.92));
       });
       image.src = reader.result;
     });
@@ -1798,7 +1798,7 @@ function openPhotoViewer(src, label) {
     photoViewer.hidden = true;
     photoViewer.innerHTML = `
       <div class="photo-viewer-content" role="dialog" aria-modal="true">
-        <button class="photo-viewer-close" type="button" aria-label="Fermer la photo">x</button>
+        <button class="photo-viewer-close" type="button" aria-label="Fermer la photo"></button>
         <img alt="" />
       </div>
     `;
