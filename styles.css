@@ -315,6 +315,7 @@ h3 {
 .tab-button,
 .archive-tab-button,
 .filled-export-button,
+.history-data-button,
 .backup-button,
 .import-button,
 .undo-button,
@@ -550,6 +551,13 @@ h3 {
   background: #d8dcd8;
   border: 1px solid var(--line);
   font-size: 12px;
+  cursor: default;
+  opacity: 0.45;
+}
+
+.import-button.is-unlocked {
+  cursor: pointer;
+  opacity: 1;
 }
 
 .import-button span {

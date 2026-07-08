@@ -1226,6 +1226,12 @@ function openGlobalHistoryPanel() {
   renderGlobalHistoryPanel();
 }
 
+function updateImportButtonAvailability(event = {}) {
+  const isUnlocked = Boolean(event.ctrlKey && event.shiftKey);
+  importDataBtn.classList.toggle("is-unlocked", isUnlocked);
+  importDataBtn.setAttribute("aria-disabled", String(!isUnlocked));
+}
+
 function importAllDataBackup(file) {
   const reader = new FileReader();
   reader.addEventListener("load", () => {
@@ -2430,9 +2436,11 @@ closeGlobalHistoryBtn.addEventListener("click", () => {
 });
 exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
 backupDataBtn.addEventListener("click", exportAllDataBackup);
+document.addEventListener("keydown", updateImportButtonAvailability);
+document.addEventListener("keyup", updateImportButtonAvailability);
+window.addEventListener("blur", () => updateImportButtonAvailability());
 importDataBtn.addEventListener("click", (event) => {
   if (!event.ctrlKey || !event.shiftKey) {
-    alert("Maintenez Ctrl + Maj en cliquant pour importer une sauvegarde.");
     return;
   }
 
