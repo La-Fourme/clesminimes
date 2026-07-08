@@ -506,11 +506,12 @@ h3 {
 
 .backup-actions {
   display: grid;
-  grid-template-columns: repeat(3, auto);
+  grid-template-columns: repeat(4, auto);
   gap: 7px;
 }
 
 .filled-export-button,
+.history-data-button,
 .backup-button {
   min-height: 34px;
   padding: 0 10px;
@@ -519,6 +520,22 @@ h3 {
   background: #315d73;
   border: 1px solid #6f8fa0;
   font-size: 12px;
+}
+
+.history-data-button {
+  color: #3f3322;
+  background: #d8c4a0;
+  border-color: #a88755;
+}
+
+.history-button-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
 }
 
 .filled-export-button {
@@ -854,7 +871,8 @@ body.is-moving-key .photo-hover {
 
 .detail-panel,
 .contacts-panel,
-.archives-panel {
+.archives-panel,
+.global-history-panel {
   position: fixed;
   top: 0;
   right: 0;
@@ -874,7 +892,8 @@ body.is-moving-key .photo-hover {
 }
 
 .contacts-panel,
-.archives-panel {
+.archives-panel,
+.global-history-panel {
   z-index: 20;
   display: grid;
   align-content: start;
@@ -999,6 +1018,35 @@ body.is-moving-key .photo-hover {
 .contact-delete {
   color: var(--red);
   background: var(--red-soft);
+}
+
+.global-history-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.global-history-list li {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #d8dcd8;
+}
+
+.global-history-list strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.global-history-list small,
+.global-history-list span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .archive-section h3 {

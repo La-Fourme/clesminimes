@@ -75,6 +75,14 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
             <span class="backup-panel-subtitle">Sauvegarde complète et exports du registre</span>
           </div>
           <div class="backup-actions">
+            <button id="historyDataBtn" class="history-data-button icon-button" type="button">
+              <svg class="history-button-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 7v5h5"></path>
+                <path d="M5.8 16.5A7.5 7.5 0 1 0 5 12"></path>
+                <path d="M12 8v4l3 2"></path>
+              </svg>
+              Historique
+            </button>
             <button id="exportFilledDataBtn" class="filled-export-button icon-button" type="button">
               <span aria-hidden="true">▤</span>
               Exporter données renseignées
@@ -230,6 +238,17 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
         </form>
 
         <ol id="contactsList" class="contacts-list"></ol>
+      </aside>
+
+      <aside id="globalHistoryPanel" class="global-history-panel" aria-label="Historique global" hidden>
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Tableaux location et transaction</p>
+            <h2>Historique</h2>
+          </div>
+          <button id="closeGlobalHistoryBtn" class="close-button" type="button" aria-label="Fermer l'historique">x</button>
+        </div>
+        <ol id="globalHistoryList" class="global-history-list"></ol>
       </aside>
 
       <aside id="compromisesPanel" class="archives-panel" aria-label="Compromis" hidden>

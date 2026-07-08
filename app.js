@@ -95,6 +95,10 @@ const addContactBtn = document.querySelector("#addContactBtn");
 const contactsList = document.querySelector("#contactsList");
 const contactTabs = [...document.querySelectorAll(".contact-tab")];
 const undoBtn = document.querySelector("#undoBtn");
+const historyDataBtn = document.querySelector("#historyDataBtn");
+const globalHistoryPanel = document.querySelector("#globalHistoryPanel");
+const closeGlobalHistoryBtn = document.querySelector("#closeGlobalHistoryBtn");
+const globalHistoryList = document.querySelector("#globalHistoryList");
 const exportFilledDataBtn = document.querySelector("#exportFilledDataBtn");
 const backupDataBtn = document.querySelector("#backupDataBtn");
 const importDataBtn = document.querySelector("#importDataBtn");
@@ -330,6 +334,7 @@ function switchRegistry() {
   contactsPanel.hidden = true;
   compromisesPanel.hidden = true;
   archivesPanel.hidden = true;
+  globalHistoryPanel.hidden = true;
   clearTimeout(detailCloseTimer);
   clearTimeout(contactsCloseTimer);
   clearTimeout(archivesCloseTimer);
@@ -499,6 +504,12 @@ function formatPhoneNumber(value) {
   const digits = String(value || "").replace(/\D/g, "");
   if (!digits) return "";
   return digits.match(/.{1,2}/g).join(" ");
+}
+
+function formatCity(value) {
+  return String(value || "").replace(/(^|[\s-])(\p{L})/gu, (match, separator, letter) => {
+    return `${separator}${letter.toLocaleUpperCase("fr-FR")}`;
+  });
 }
 
 function getContactDisplayName(contact) {
@@ -1104,6 +1115,115 @@ function refreshDataFromStorage({ keepSelection = false } = {}) {
   }
   updateRegistryHeader();
   render();
+}
+
+function parseStoredArray(storageKey, fallback = []) {
+  const saved = localStorage.getItem(storageKey);
+  if (!saved) return fallback;
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function parseHistoryTimestamp(value) {
+  if (!value) return 0;
+  const isoTime = Date.parse(value);
+  if (!Number.isNaN(isoTime)) return isoTime;
+
+  const match = String(value).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (!match) return 0;
+
+  const [, day, month, year, hour = "0", minute = "0"] = match;
+  const fullYear = year.length === 2 ? `20${year}` : year;
+  return new Date(Number(fullYear), Number(month) - 1, Number(day), Number(hour), Number(minute)).getTime();
+}
+
+function getRegistryHistoryEntries(registry) {
+  const config = registryConfig[registry];
+  const registryLabel = registry === "transaction" ? "Transaction" : "Location";
+  const registryKeys = parseStoredArray(config.keysStorageKey, makeInitialKeys()).map(normalizeKey);
+  const registryArchives = parseStoredArray(config.archivesStorageKey, []).map(normalizeArchive);
+  const entries = [];
+
+  registryKeys.forEach((key) => {
+    key.sets.forEach((set) => {
+      set.history.forEach((movement) => {
+        entries.push({
+          timestamp: parseHistoryTimestamp(movement.date),
+          date: movement.date || "Date non renseignée",
+          title: `${registryLabel} - ${keyLabel(key)} - ${set.label}`,
+          action: movement.type === "out" ? "Sortie" : "Entrée",
+          actor: movement.person || "Intervenant non renseigné",
+          details: [key.owner ? `Propriétaire : ${formatOwner(key.owner)}` : "", movement.phone ? `Téléphone : ${movement.phone}` : "", movement.note || ""]
+            .filter(Boolean)
+            .join(" | "),
+        });
+      });
+    });
+  });
+
+  registryArchives.forEach((record) => {
+    const key = record.key;
+    const action =
+      record.reason === "authenticated"
+        ? "Acte authentique"
+        : record.reason === "removed"
+          ? "Retiré"
+          : registry === "transaction"
+            ? "Compromis"
+            : "Loué";
+    entries.push({
+      timestamp: parseHistoryTimestamp(record.archivedAt),
+      date: formatArchiveDate(record.archivedAt),
+      title: `${registryLabel} - ${keyLabel(key)}`,
+      action,
+      actor: key.owner ? formatOwner(key.owner) : "Fiche clé",
+      details: [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
+    });
+  });
+
+  return entries;
+}
+
+function renderGlobalHistoryPanel() {
+  const entries = ["location", "transaction"]
+    .flatMap(getRegistryHistoryEntries)
+    .sort((first, second) => second.timestamp - first.timestamp);
+
+  globalHistoryList.innerHTML = "";
+  if (!entries.length) {
+    const item = document.createElement("li");
+    item.textContent = "Aucun historique enregistré.";
+    globalHistoryList.append(item);
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const item = document.createElement("li");
+    const title = document.createElement("strong");
+    const meta = document.createElement("small");
+    const details = document.createElement("span");
+    title.textContent = `${entry.action} - ${entry.title}`;
+    meta.textContent = `${entry.date} - ${entry.actor}`;
+    details.textContent = entry.details;
+    item.append(title, meta);
+    if (entry.details) item.append(details);
+    globalHistoryList.append(item);
+  });
+}
+
+function openGlobalHistoryPanel() {
+  clearTimeout(contactsCloseTimer);
+  clearTimeout(archivesCloseTimer);
+  contactsPanel.hidden = true;
+  archivesPanel.hidden = true;
+  compromisesPanel.hidden = true;
+  globalHistoryPanel.hidden = false;
+  renderGlobalHistoryPanel();
 }
 
 function importAllDataBackup(file) {
@@ -2022,6 +2142,7 @@ function openContactsPanel() {
   clearTimeout(archivesCloseTimer);
   compromisesPanel.hidden = true;
   archivesPanel.hidden = true;
+  globalHistoryPanel.hidden = true;
   contactsPanel.hidden = false;
   renderContactsPanel();
 }
@@ -2031,6 +2152,7 @@ function openCompromisesPanel() {
   clearTimeout(archivesCloseTimer);
   contactsPanel.hidden = true;
   archivesPanel.hidden = true;
+  globalHistoryPanel.hidden = true;
   compromisesPanel.hidden = false;
   renderCompromisesPanel();
 }
@@ -2040,6 +2162,7 @@ function openArchivesPanel() {
   clearTimeout(archivesCloseTimer);
   contactsPanel.hidden = true;
   compromisesPanel.hidden = true;
+  globalHistoryPanel.hidden = true;
   archivesPanel.hidden = false;
   renderArchivesPanel();
 }
@@ -2120,7 +2243,11 @@ function clearSignature() {
 
 propertyInput.addEventListener("input", debounce(() => updateSelectedKey({ property: propertyInput.value })));
 postalCodeInput.addEventListener("input", debounce(() => updateSelectedKey({ postalCode: postalCodeInput.value })));
-cityInput.addEventListener("input", debounce(() => updateSelectedKey({ city: cityInput.value })));
+cityInput.addEventListener("input", debounce(() => updateSelectedKey({ city: formatCity(cityInput.value) })));
+cityInput.addEventListener("blur", () => {
+  cityInput.value = formatCity(cityInput.value);
+  updateSelectedKey({ city: cityInput.value });
+});
 ownerInput.addEventListener(
   "input",
   debounce(() => updateSelectedKey({ owner: formatOwner(ownerInput.value) })),
@@ -2297,6 +2424,10 @@ signatureCanvas.addEventListener("pointercancel", stopSignature);
 searchInput.addEventListener("input", render);
 statusFilter?.addEventListener("change", render);
 undoBtn.addEventListener("click", undoPreviousStep);
+historyDataBtn.addEventListener("click", openGlobalHistoryPanel);
+closeGlobalHistoryBtn.addEventListener("click", () => {
+  globalHistoryPanel.hidden = true;
+});
 exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
 backupDataBtn.addEventListener("click", exportAllDataBackup);
 importDataBtn.addEventListener("click", () => {
