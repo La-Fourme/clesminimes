@@ -535,6 +535,10 @@ h3 {
   font-size: 12px;
 }
 
+.import-button span {
+  transform: translateY(-2px);
+}
+
 .contacts-filter-button {
   min-width: 170px;
   background: var(--blue);
@@ -878,7 +882,7 @@ body.is-moving-key .photo-hover {
 }
 
 #compromisesPanel {
-  width: min(720px, 100vw);
+  width: min(540px, 100vw);
 }
 
 .contact-tabs {
@@ -1047,24 +1051,25 @@ body.is-moving-key .photo-hover {
 }
 
 .archive-list button {
-  min-height: 34px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 8px;
   color: var(--blue);
   background: var(--blue-soft);
+  font-size: 12px;
 }
 
 .archive-list .authenticated-button {
   grid-column: 1 / -1;
   width: 100%;
-  min-height: 64px;
-  padding: 8px 14px;
+  min-height: 36px;
+  padding: 0 12px;
   border: 2px solid #d8ad28;
   color: #4f3a00;
   background: #ffe58a;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 900;
-  line-height: 1.22;
-  white-space: pre-line;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .export-csv-button,
@@ -1282,8 +1287,8 @@ body.is-moving-key .photo-hover {
   background: var(--red-soft);
   font-size: 19px;
   font-weight: 900;
-  line-height: 30px;
-  padding: 0 0 2px;
+  line-height: 1;
+  padding: 0;
 }
 
 .date-dialog {

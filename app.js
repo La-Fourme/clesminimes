@@ -1343,11 +1343,10 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     const restoreButton = document.createElement("button");
     const archiveCity = [key.postalCode, key.city].filter(Boolean).join(" ");
     const address = [key.property, archiveCity].filter(Boolean).join(" - ");
-    const compromiseAddress = [
-      key.property || "Adresse non renseignée",
+    const compromiseAddress = `${key.property || "Adresse non renseignée"}, ${[
       key.postalCode || "Code postal non renseigné",
       key.city ? key.city.toUpperCase() : "VILLE NON RENSEIGNÉE",
-    ].join(" - ");
+    ].join(" ")}`;
 
     title.textContent = `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`;
     if (options.showCompromiseDetails) {
@@ -1401,7 +1400,7 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
       item.classList.add("has-full-action");
       authenticatedButton.className = "authenticated-button";
       authenticatedButton.type = "button";
-      authenticatedButton.textContent = "R\u00c9IT\u00c9RATION PAR\nACTE AUTHENTIQUE";
+      authenticatedButton.textContent = "R\u00c9IT\u00c9RATION PAR ACTE AUTHENTIQUE";
       authenticatedButton.addEventListener("click", (event) => {
         event.stopPropagation();
         markCompromiseAsAuthenticated(record.id);
@@ -1685,7 +1684,7 @@ function compressPhotoFile(file) {
       const image = new Image();
       image.addEventListener("error", () => reject(new Error("Photo illisible.")));
       image.addEventListener("load", () => {
-        const maxSize = 720;
+        const maxSize = 560;
         const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
         const width = Math.max(1, Math.round(image.width * scale));
         const height = Math.max(1, Math.round(image.height * scale));
@@ -1696,7 +1695,7 @@ function compressPhotoFile(file) {
         context.fillStyle = "#ffffff";
         context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.48));
+        resolve(canvas.toDataURL("image/jpeg", 0.36));
       });
       image.src = reader.result;
     });
@@ -2055,7 +2054,6 @@ function scheduleCloseArchivesPanel() {
   clearTimeout(archivesCloseTimer);
   archivesCloseTimer = setTimeout(() => {
     archivesPanel.hidden = true;
-    compromisesPanel.hidden = true;
   }, 1000);
 }
 
@@ -2233,7 +2231,6 @@ contactsList.addEventListener("pointercancel", (event) => {
 registryToggleBtn.addEventListener("click", switchRegistry);
 compromisesTabBtn.addEventListener("click", openCompromisesPanel);
 compromisesPanel.addEventListener("mouseenter", () => clearTimeout(archivesCloseTimer));
-compromisesPanel.addEventListener("mouseleave", scheduleCloseArchivesPanel);
 closeCompromisesBtn.addEventListener("click", () => {
   compromisesPanel.hidden = true;
 });
