@@ -2310,18 +2310,25 @@ async function reserveSelectedSet() {
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || key.archived) return;
 
-  const defaultPerson = movementPersonInput.value.trim();
-  const person = (defaultPerson || prompt("Par quel intervenant ce jeu est-il r\u00e9serv\u00e9 ?") || "").trim();
-  if (!person) return;
+  const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
+  if (!contact) {
+    alert("S\u00e9lectionne d'abord un intervenant dans la liste.");
+    contactSelect.focus();
+    return;
+  }
 
-  const reservationDate = await promptCompromiseDate(new Date().toISOString().slice(0, 10), "Date de r\u00e9servation");
-  if (!reservationDate) return;
+  const reservationDateTime = await promptReservationDateTime();
+  if (!reservationDateTime) return;
 
-  const formattedDate = new Intl.DateTimeFormat("fr-FR").format(new Date(`${reservationDate}T00:00:00`));
+  const person = getContactDisplayName(contact);
+  const formattedDate = new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(reservationDateTime));
   const entry = {
     type: "reserved",
     person,
-    phone: movementPhoneInput.value.trim(),
+    phone: contact.phone || "",
     note: movementNoteInput.value.trim(),
     signature: "",
     date: formattedDate,
@@ -2339,6 +2346,41 @@ async function reserveSelectedSet() {
   movementNoteInput.value = "";
   contactSelect.value = "";
   clearSignature();
+}
+
+function promptReservationDateTime() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  const defaultValue = now.toISOString().slice(0, 16);
+  const dialog = document.createElement("dialog");
+  dialog.className = "date-dialog";
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h3>Date et heure de r\u00e9servation</h3>
+      <input type="datetime-local" value="${defaultValue}" required />
+      <div>
+        <button value="cancel" type="submit">Annuler</button>
+        <button value="confirm" type="submit">Valider</button>
+      </div>
+    </form>
+  `;
+  document.body.append(dialog);
+
+  const input = dialog.querySelector("input");
+  dialog.showModal();
+  input.focus();
+
+  return new Promise((resolve) => {
+    dialog.addEventListener(
+      "close",
+      () => {
+        const value = dialog.returnValue === "confirm" ? input.value : "";
+        dialog.remove();
+        resolve(value);
+      },
+      { once: true },
+    );
+  });
 }
 
 function promptCompromiseDate(defaultValue = new Date().toISOString().slice(0, 10), title = "Date de signature du compromis") {
