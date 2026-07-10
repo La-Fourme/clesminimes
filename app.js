@@ -2172,7 +2172,7 @@ function renderPanel() {
   form.hidden = false;
   selectedTitle.textContent = keyLabel(key);
   statusPill.textContent = key.sets
-    .map((set) => `${set.label} : ${set.status === "out" ? "indisponible" : set.status === "reserved" ? "r\u00e9serv\u00e9" : "disponible"}`)
+    .map((set, index) => `${index + 1} : ${set.status === "out" ? "indisponible" : set.status === "reserved" ? "r\u00e9serv\u00e9" : "disponible"}`)
     .join(" | ");
   statusPill.className = `status-pill ${key.sets.some((set) => set.status === "out") ? "out" : key.sets.some((set) => set.status === "reserved") ? "reserved" : "available"}`;
   keySetCountSelect.value = String(key.sets.length);

@@ -1065,14 +1065,14 @@ body.is-moving-key .photo-hover {
 
 .global-history-list li[data-history-action="in"],
 .archive-list li[data-history-action="in"] {
-  border-color: #3d8f5e;
-  background: var(--green-soft);
+  border-color: #55aa73;
+  background: #caebd5;
 }
 
 .global-history-list li[data-history-action="out"],
 .archive-list li[data-history-action="out"] {
-  border-color: #b94c43;
-  background: var(--red-soft);
+  border-color: #ce6a60;
+  background: #f2cec8;
 }
 
 .global-history-list li[data-history-action="signed"] {
@@ -1082,14 +1082,14 @@ body.is-moving-key .photo-hover {
 
 .global-history-list li[data-history-action="reserved"],
 .archive-list li[data-history-action="reserved"] {
-  border-color: #e7a54a;
-  background: #fff0d7;
+  border-color: #d98121;
+  background: #ffe1b8;
 }
 
 .global-history-list li[data-history-action="removed"],
 .archive-list li[data-history-action="removed"] {
-  border-color: #8f9792;
-  background: #c5cbc7;
+  border-color: #6b7275;
+  background: #e5e7e6;
 }
 
 .global-history-list strong {
