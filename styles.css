@@ -785,9 +785,11 @@ body.is-moving-key .photo-hover {
 
 .has-details .key-number {
   color: var(--ink);
-  font-size: 12px;
+  display: inline;
+  flex: 0 0 auto;
+  font-size: 13px;
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.05;
   white-space: nowrap;
 }
 
@@ -801,7 +803,7 @@ body.is-moving-key .photo-hover {
 
 .key-heading {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 4px;
   min-width: 0;
   white-space: nowrap;
@@ -817,7 +819,7 @@ body.is-moving-key .photo-hover {
 .key-owner {
   font-size: 12px;
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.05;
 }
 
 .key-address,
@@ -873,7 +875,7 @@ body.is-moving-key .photo-hover {
 }
 
 .key-tile.empty .key-number {
-  font-size: 12px;
+  font-size: 24px;
 }
 
 .key-tile.archived {
@@ -1174,15 +1176,15 @@ body.is-moving-key .photo-hover {
 .archive-list .authenticated-button {
   grid-column: 1 / -1;
   width: 100%;
-  min-height: 64px;
-  padding: 8px 14px;
+  min-height: 42px;
+  padding: 0 14px;
   border: 2px solid #d8ad28;
   color: #4f3a00;
   background: #ffe58a;
   font-size: 15px;
   font-weight: 900;
-  line-height: 1.22;
-  white-space: pre-line;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .export-csv-button,
@@ -1718,9 +1720,16 @@ body.is-moving-key .photo-hover {
 
   .key-number,
   .has-details .key-number,
-  .key-tile.empty .key-number,
   .key-owner {
     font-size: 14px;
+  }
+
+  .has-details .key-number {
+    font-size: 15px;
+  }
+
+  .key-tile.empty .key-number {
+    font-size: 28px;
   }
 
   .key-address,
@@ -1836,6 +1845,7 @@ body.is-moving-key .photo-hover {
   }
 
   .key-set-photo-card {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(104px, 0.55fr);
+    gap: 8px;
   }
 }

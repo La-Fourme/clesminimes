@@ -1628,7 +1628,7 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
       item.classList.add("has-full-action");
       authenticatedButton.className = "authenticated-button";
       authenticatedButton.type = "button";
-      authenticatedButton.textContent = "R\u00c9IT\u00c9RATION PAR\nACTE AUTHENTIQUE";
+      authenticatedButton.textContent = "R\u00c9IT\u00c9RATION PAR ACTE AUTHENTIQUE";
       authenticatedButton.addEventListener("click", (event) => {
         event.stopPropagation();
         markCompromiseAsAuthenticated(record.id);
