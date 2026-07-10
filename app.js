@@ -1628,7 +1628,7 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
       item.classList.add("has-full-action");
       authenticatedButton.className = "authenticated-button";
       authenticatedButton.type = "button";
-      authenticatedButton.textContent = "R\u00c9IT\u00c9RATION PAR\nACTE AUTHENTIQUE";
+      authenticatedButton.textContent = "R\u00c9IT\u00c9RATION PAR ACTE AUTHENTIQUE";
       authenticatedButton.addEventListener("click", (event) => {
         event.stopPropagation();
         markCompromiseAsAuthenticated(record.id);
@@ -2254,7 +2254,7 @@ function setKeySetCount(count) {
   if (nextCount > previousCount) {
     logActivity("Création jeu", keyLabel(key), `${nextCount} jeux au total`);
   } else if (nextCount < previousCount) {
-    logActivity("Suppression jeu", keyLabel(key), `${nextCount} jeux restants`);
+    logActivity("Suppression jeu", keyLabel(key), `${removedSets.map((set) => set.label).join(", ")} supprimé(s)`);
   }
   updateSelectedKey({ sets: nextSets });
 }
