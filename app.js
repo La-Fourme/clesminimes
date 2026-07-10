@@ -899,21 +899,36 @@ function renderContactsPanel() {
     });
 }
 
-function updateContactFormMode() {
+function updateLegacyContactFormMode() {
   const isExternal = activeContactType === "external";
   contactFirstNameLabel.hidden = !isExternal;
   contactNameLabel.firstChild.textContent = isExternal ? "Nom de la société\n            " : "Nom\n            ";
   contactNameInput.placeholder = isExternal ? "Nom de la société" : "Nom de l'intervenant";
+  contactFirstNameLabel.hidden = false;
+  contactFirstNameLabel.firstChild.textContent = "Pr\u00e9nom de l'intervenant\n            ";
+  contactNameLabel.firstChild.textContent = isExternal ? "Nom de famille / Nom de la soci\u00e9t\u00e9\n            " : "Nom de l'intervenant\n            ";
+  contactFirstNameInput.placeholder = "Pr\u00e9nom de l'intervenant";
+  contactNameInput.placeholder = isExternal ? "Nom de famille / Nom de la soci\u00e9t\u00e9" : "Nom de l'intervenant";
   addContactBtn.textContent = editingContactId ? "Enregistrer" : "Ajouter";
 }
 
-function updateContactFormMode() {
+function updatePreviousContactFormMode() {
   const isExternal = activeContactType === "external";
   contactFirstNameLabel.hidden = false;
   contactFirstNameLabel.firstChild.textContent = "Prénom de l'intervenant\n            ";
   contactNameLabel.firstChild.textContent = isExternal ? "Nom de la société\n            " : "NOM de l'intervenant\n            ";
   contactFirstNameInput.placeholder = "Prénom de l'intervenant";
   contactNameInput.placeholder = isExternal ? "Nom de la société" : "NOM de l'intervenant";
+  addContactBtn.textContent = editingContactId ? "Enregistrer" : "Ajouter";
+}
+
+function updateContactFormMode() {
+  const isExternal = activeContactType === "external";
+  contactFirstNameLabel.hidden = false;
+  contactFirstNameLabel.firstChild.textContent = "Pr\u00e9nom de l'intervenant\n            ";
+  contactNameLabel.firstChild.textContent = isExternal ? "Nom de famille / Nom de la soci\u00e9t\u00e9\n            " : "Nom de l'intervenant\n            ";
+  contactFirstNameInput.placeholder = "Pr\u00e9nom de l'intervenant";
+  contactNameInput.placeholder = isExternal ? "Nom de famille / Nom de la soci\u00e9t\u00e9" : "Nom de l'intervenant";
   addContactBtn.textContent = editingContactId ? "Enregistrer" : "Ajouter";
 }
 
