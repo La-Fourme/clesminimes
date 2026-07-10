@@ -775,8 +775,8 @@ body.is-moving-key .photo-hover {
 }
 
 .key-set-segment.reserved {
-  border-color: #bf6f13;
-  background: #df861f;
+  border-color: #d18427;
+  background: #eda447;
 }
 
 .key-number {
@@ -793,7 +793,7 @@ body.is-moving-key .photo-hover {
   color: var(--ink);
   display: inline;
   flex: 0 0 auto;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.05;
   white-space: nowrap;
@@ -876,8 +876,8 @@ body.is-moving-key .photo-hover {
 }
 
 .key-tile.reserved {
-  border-color: #bf6f13;
-  background: #f7c179;
+  border-color: #d18427;
+  background: #f8d19a;
 }
 
 .key-tile.empty {
@@ -886,7 +886,7 @@ body.is-moving-key .photo-hover {
 }
 
 .key-tile.empty .key-number {
-  font-size: 14.4px;
+  font-size: 12px;
 }
 
 .key-tile.archived {
@@ -1082,8 +1082,8 @@ body.is-moving-key .photo-hover {
 
 .global-history-list li[data-history-action="reserved"],
 .archive-list li[data-history-action="reserved"] {
-  border-color: #bf6f13;
-  background: #f7c179;
+  border-color: #d18427;
+  background: #f8d19a;
 }
 
 .global-history-list li[data-history-action="removed"],
@@ -1285,7 +1285,7 @@ body.is-moving-key .photo-hover {
 
 .set-status.reserved {
   color: #8a4f00;
-  background: #f7c179;
+  background: #f8d19a;
 }
 
 .set-status.archived {
@@ -1586,9 +1586,9 @@ body.is-moving-key .photo-hover {
 }
 
 .reserved-button {
-  border: 2px solid #bf6f13;
+  border: 2px solid #d18427;
   color: #744100;
-  background: #df861f;
+  background: #eda447;
 }
 
 .removed-button {
@@ -1762,12 +1762,8 @@ body.is-moving-key .photo-hover {
     font-size: 14px;
   }
 
-  .has-details .key-number {
-    font-size: 15px;
-  }
-
   .key-tile.empty .key-number {
-    font-size: 16.8px;
+    font-size: 14px;
   }
 
   .key-address,
