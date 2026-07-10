@@ -775,8 +775,8 @@ body.is-moving-key .photo-hover {
 }
 
 .key-set-segment.reserved {
-  border-color: #e7a54a;
-  background: #ffd894;
+  border-color: #d98121;
+  background: #f0a13a;
 }
 
 .key-number {
@@ -876,8 +876,8 @@ body.is-moving-key .photo-hover {
 }
 
 .key-tile.reserved {
-  border-color: #e7a54a;
-  background: #fff0d7;
+  border-color: #d98121;
+  background: #ffe1b8;
 }
 
 .key-tile.empty {
