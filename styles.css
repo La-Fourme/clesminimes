@@ -775,8 +775,8 @@ body.is-moving-key .photo-hover {
 }
 
 .key-set-segment.reserved {
-  border-color: #d98121;
-  background: #f0a13a;
+  border-color: #bf6f13;
+  background: #df861f;
 }
 
 .key-number {
@@ -876,8 +876,8 @@ body.is-moving-key .photo-hover {
 }
 
 .key-tile.reserved {
-  border-color: #d98121;
-  background: #ffe1b8;
+  border-color: #bf6f13;
+  background: #f7c179;
 }
 
 .key-tile.empty {
@@ -1082,8 +1082,8 @@ body.is-moving-key .photo-hover {
 
 .global-history-list li[data-history-action="reserved"],
 .archive-list li[data-history-action="reserved"] {
-  border-color: #d98121;
-  background: #ffe1b8;
+  border-color: #bf6f13;
+  background: #f7c179;
 }
 
 .global-history-list li[data-history-action="removed"],
@@ -1285,7 +1285,7 @@ body.is-moving-key .photo-hover {
 
 .set-status.reserved {
   color: #8a4f00;
-  background: #ffe1b8;
+  background: #f7c179;
 }
 
 .set-status.archived {
@@ -1586,9 +1586,9 @@ body.is-moving-key .photo-hover {
 }
 
 .reserved-button {
-  border: 2px solid #e7a54a;
+  border: 2px solid #bf6f13;
   color: #744100;
-  background: #ffd894;
+  background: #df861f;
 }
 
 .removed-button {

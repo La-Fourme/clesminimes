@@ -576,6 +576,10 @@ function getContactDisplayName(contact) {
   return [contact.firstName, contact.name].filter(Boolean).join(" - ");
 }
 
+function contactTypeText(type) {
+  return type === "external" ? "Intervenant externe" : "Intervenant interne";
+}
+
 function getContactSelectName(contact) {
   return contact.type === "external" ? contact.name : getContactDisplayName(contact);
 }
@@ -881,6 +885,11 @@ function renderContactsPanel() {
         rememberUndoStep();
         contacts = contacts.filter((savedContact) => savedContact.id !== contact.id);
         saveContacts();
+        logActivity(
+          "Suppression intervenant",
+          getContactDisplayName(contact),
+          [contactTypeText(contact.type), contact.phone].filter(Boolean).join(" | "),
+        );
         renderContactSelect();
         renderContactsPanel();
       });
@@ -2707,28 +2716,41 @@ contactForm.addEventListener("submit", (event) => {
 
   rememberUndoStep();
   if (editingContactId) {
+    const previousContact = contacts.find((contact) => contact.id === editingContactId);
+    const nextContact = {
+      ...(previousContact || {}),
+      firstName,
+      name,
+      phone,
+      type: activeContactType,
+    };
     contacts = contacts.map((contact) =>
       contact.id === editingContactId
-        ? {
-            ...contact,
-            firstName,
-            name,
-            phone,
-            type: activeContactType,
-          }
+        ? nextContact
         : contact,
     );
+    logActivity(
+      "Modification intervenant",
+      getContactDisplayName(nextContact),
+      [contactTypeText(nextContact.type), phone].filter(Boolean).join(" | "),
+    );
   } else {
+    const newContact = {
+      id: createContactId(),
+      firstName,
+      name,
+      phone,
+      type: activeContactType,
+    };
     contacts = [
       ...contacts,
-      {
-        id: createContactId(),
-        firstName,
-        name,
-        phone,
-        type: activeContactType,
-      },
+      newContact,
     ];
+    logActivity(
+      "Ajout intervenant",
+      getContactDisplayName(newContact),
+      [contactTypeText(newContact.type), phone].filter(Boolean).join(" | "),
+    );
   }
   editingContactId = null;
   saveContacts();
