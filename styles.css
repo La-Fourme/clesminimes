@@ -886,7 +886,7 @@ body.is-moving-key .photo-hover {
 }
 
 .key-tile.empty .key-number {
-  font-size: 12px;
+  font-size: 13.2px;
 }
 
 .key-tile.archived {
@@ -1559,7 +1559,7 @@ body.is-moving-key .photo-hover {
 
 #signatureCanvas {
   width: 100%;
-  height: 230px;
+  height: 184px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #daddda;
@@ -1778,7 +1778,11 @@ body.is-moving-key .photo-hover {
   }
 
   .key-tile.empty .key-number {
-    font-size: 14px;
+    font-size: 15.4px;
+  }
+
+  #signatureCanvas {
+    height: 230px;
   }
 
   .key-address,
