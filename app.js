@@ -62,6 +62,7 @@ const checkoutBtn = document.querySelector("#checkoutBtn");
 const checkinBtn = document.querySelector("#checkinBtn");
 const rentedBtn = document.querySelector("#rentedBtn");
 const removedBtn = document.querySelector("#removedBtn");
+const reservedBtn = document.querySelector("#reservedBtn");
 const exportKeyCsvBtn = document.querySelector("#exportKeyCsvBtn");
 const deleteSelectedKeyBtn = document.querySelector("#deleteSelectedKeyBtn");
 const signatureCanvas = document.querySelector("#signatureCanvas");
@@ -436,13 +437,14 @@ function normalizeSet(set, index = 0) {
   const fallback = keySetOptions[index] || keySetOptions[0];
   const id = keySetOptions.some((option) => option.id === set.id) ? set.id : fallback.id;
   const option = keySetOptions.find((savedOption) => savedOption.id === id) || fallback;
+  const status = ["available", "out", "reserved"].includes(set.status) ? set.status : "available";
 
   return {
     id: option.id,
     label: option.label,
     photo: set.photo || "",
     holder: set.holder || "",
-    status: set.status === "out" ? "out" : "available",
+    status,
     history: Array.isArray(set.history) ? set.history : [],
   };
 }
@@ -450,13 +452,13 @@ function normalizeSet(set, index = 0) {
 function normalizeKey(key) {
   let sets =
     Array.isArray(key.sets) && key.sets.length
-      ? key.sets.slice(0, 3).map(normalizeSet)
+      ? key.sets.slice(0, 4).map(normalizeSet)
       : [
           {
             ...makeKeySet("main"),
             photo: key.photo || "",
             holder: key.holder || "",
-            status: key.status === "out" ? "out" : "available",
+            status: ["available", "out", "reserved"].includes(key.status) ? key.status : "available",
             history: Array.isArray(key.history) ? key.history : [],
           },
         ];
@@ -637,7 +639,8 @@ function formatOwner(owner) {
 
 function getStatus(key) {
   if (key.archived) return "archived";
-  return key.sets.some((set) => set.status === "out") ? "out" : "available";
+  if (key.sets.some((set) => set.status === "out")) return "out";
+  return key.sets.some((set) => set.status === "reserved") ? "reserved" : "available";
 }
 
 function isKeyFilled(key) {
@@ -654,14 +657,17 @@ function isKeyFilled(key) {
 function getTileStatus(key) {
   if (key.archived) return "archived";
   if (key.sets.some((set) => set.status === "out")) return "out";
+  if (key.sets.some((set) => set.status === "reserved")) return "reserved";
   return isKeyFilled(key) ? "available" : "empty";
 }
 
 function statusText(key) {
   if (key.archived) return "Archivée";
   const outCount = key.sets.filter((set) => set.status === "out").length;
-  if (!outCount) return "Disponible";
-  return key.sets.length === 1 ? "Sortie" : `${outCount} jeu${outCount > 1 ? "x" : ""} sorti${outCount > 1 ? "s" : ""}`;
+  const reservedCount = key.sets.filter((set) => set.status === "reserved").length;
+  if (outCount) return key.sets.length === 1 ? "Sortie" : `${outCount} jeu${outCount > 1 ? "x" : ""} sorti${outCount > 1 ? "s" : ""}`;
+  if (reservedCount) return key.sets.length === 1 ? "Réservé" : `${reservedCount} jeu${reservedCount > 1 ? "x" : ""} réservé${reservedCount > 1 ? "s" : ""}`;
+  return "Disponible";
 }
 
 function cloneKeyContent(key) {
@@ -994,7 +1000,7 @@ function keyToCsvRows(key, archive = null) {
       rows.push({
         ...base,
         jeu: set.label,
-        statutJeu: set.status === "out" ? "Sortie" : "Disponible",
+        statutJeu: set.status === "out" ? "Sortie" : set.status === "reserved" ? "Réservé" : "Disponible",
         mouvement: "",
         intervenant: set.holder || "",
         telephone: "",
@@ -1009,8 +1015,8 @@ function keyToCsvRows(key, archive = null) {
       rows.push({
         ...base,
         jeu: set.label,
-        statutJeu: set.status === "out" ? "Sortie" : "Disponible",
-        mouvement: entry.type === "out" ? "Sortie" : "Entrée",
+        statutJeu: set.status === "out" ? "Sortie" : set.status === "reserved" ? "Réservé" : "Disponible",
+        mouvement: entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "Réservé" : "Entrée",
         intervenant: entry.person || "",
         telephone: entry.phone || "",
         commentaire: entry.note || "",
@@ -1214,7 +1220,7 @@ function getRegistryHistoryEntries(registry) {
           timestamp: parseHistoryTimestamp(movement.date),
           date: movement.date || "Date non renseignée",
           title: `${registryLabel} - ${keyLabel(key)} - ${set.label}`,
-          action: movement.type === "out" ? "Sortie" : "Entrée",
+          action: movement.type === "out" ? "Sortie" : movement.type === "reserved" ? "Réservé" : "Entrée",
           actor: movement.person || "Intervenant non renseigné",
           details: [key.owner ? `Propriétaire : ${formatOwner(key.owner)}` : "", movement.phone ? `Téléphone : ${movement.phone}` : "", movement.note || ""]
             .filter(Boolean)
@@ -1253,6 +1259,7 @@ function getActionClass(action) {
   const normalized = String(action || "").toLowerCase();
   if (normalized.includes("entrée") || normalized.includes("création") || normalized.includes("restauration")) return "in";
   if (normalized.includes("sortie")) return "out";
+  if (normalized.includes("rÃ©serv") || normalized.includes("réserv")) return "reserved";
   if (normalized.includes("compromis") || normalized.includes("loué") || normalized.includes("acte authentique")) return "signed";
   if (normalized.includes("retiré") || normalized.includes("suppression")) return "removed";
   return "neutral";
@@ -1800,7 +1807,7 @@ function renderGrid() {
           key.sets.forEach((set) => {
             const segment = document.createElement("span");
             segment.className = `key-set-segment ${set.status}`;
-            segment.title = `${set.label} - ${set.status === "out" ? "Sortie" : "Disponible"}`;
+            segment.title = `${set.label} - ${set.status === "out" ? "Sortie" : set.status === "reserved" ? "R\u00e9serv\u00e9" : "Disponible"}`;
             strip.append(segment);
           });
           button.append(strip);
@@ -2165,9 +2172,9 @@ function renderPanel() {
   form.hidden = false;
   selectedTitle.textContent = keyLabel(key);
   statusPill.textContent = key.sets
-    .map((set) => `${set.label} : ${set.status === "out" ? "indisponible" : "disponible"}`)
+    .map((set) => `${set.label} : ${set.status === "out" ? "indisponible" : set.status === "reserved" ? "r\u00e9serv\u00e9" : "disponible"}`)
     .join(" | ");
-  statusPill.className = `status-pill ${key.sets.some((set) => set.status === "out") ? "out" : "available"}`;
+  statusPill.className = `status-pill ${key.sets.some((set) => set.status === "out") ? "out" : key.sets.some((set) => set.status === "reserved") ? "reserved" : "available"}`;
   keySetCountSelect.value = String(key.sets.length);
   renderKeySetSelect(key);
   renderKeySetPhotos(key);
@@ -2178,6 +2185,7 @@ function renderPanel() {
   notesInput.value = key.notes;
   checkoutBtn.disabled = key.archived;
   checkinBtn.disabled = key.archived;
+  reservedBtn.disabled = key.archived;
   rentedBtn.disabled = key.archived;
   removedBtn.disabled = key.archived;
 
@@ -2189,11 +2197,13 @@ function renderPanel() {
     return;
   }
 
-  selectedSet.history.forEach((entry) => {
+  [...selectedSet.history]
+    .sort((first, second) => parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date))
+    .forEach((entry) => {
     const item = document.createElement("li");
     const title = document.createElement("strong");
     const date = document.createElement("small");
-    title.textContent = `${entry.type === "out" ? "Sortie" : "Entrée"} - ${entry.person || "Intervenant non précisé"}`;
+    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : "Entr\u00e9e"} - ${entry.person || "Intervenant non pr\u00e9cis\u00e9"}`;
     date.textContent = entry.date;
     item.append(title, date);
     if (entry.note) {
@@ -2295,12 +2305,48 @@ function addMovement(type) {
   render();
 }
 
-function promptCompromiseDate(defaultValue = new Date().toISOString().slice(0, 10)) {
+async function reserveSelectedSet() {
+  const key = getSelectedKey();
+  const selectedSet = getSelectedSet(key);
+  if (!key || !selectedSet || key.archived) return;
+
+  const defaultPerson = movementPersonInput.value.trim();
+  const person = (defaultPerson || prompt("Par quel intervenant ce jeu est-il r\u00e9serv\u00e9 ?") || "").trim();
+  if (!person) return;
+
+  const reservationDate = await promptCompromiseDate(new Date().toISOString().slice(0, 10), "Date de r\u00e9servation");
+  if (!reservationDate) return;
+
+  const formattedDate = new Intl.DateTimeFormat("fr-FR").format(new Date(`${reservationDate}T00:00:00`));
+  const entry = {
+    type: "reserved",
+    person,
+    phone: movementPhoneInput.value.trim(),
+    note: movementNoteInput.value.trim(),
+    signature: "",
+    date: formattedDate,
+  };
+
+  updateSelectedSet({
+    status: "reserved",
+    holder: person,
+    history: [entry, ...selectedSet.history],
+  });
+  logActivity("R\u00e9serv\u00e9", `${keyLabel(key)} - ${selectedSet.label}`, [person, formattedDate, entry.note].filter(Boolean).join(" | "));
+
+  movementPersonInput.value = "";
+  movementPhoneInput.value = "";
+  movementNoteInput.value = "";
+  contactSelect.value = "";
+  clearSignature();
+}
+
+function promptCompromiseDate(defaultValue = new Date().toISOString().slice(0, 10), title = "Date de signature du compromis") {
   const dialog = document.createElement("dialog");
   dialog.className = "date-dialog";
   dialog.innerHTML = `
     <form method="dialog">
-      <h3>Date de signature du compromis</h3>
+      <h3>${title}</h3>
       <input type="date" value="${defaultValue}" required />
       <div>
         <button value="cancel" type="submit">Annuler</button>
@@ -2486,6 +2532,7 @@ keySetSelect.addEventListener("change", () => {
 });
 checkoutBtn.addEventListener("click", () => addMovement("out"));
 checkinBtn.addEventListener("click", () => addMovement("in"));
+reservedBtn.addEventListener("click", reserveSelectedSet);
 rentedBtn.addEventListener("click", () => archiveSelectedKey("rented"));
 removedBtn.addEventListener("click", () => archiveSelectedKey("removed"));
 clearSignatureBtn.addEventListener("click", clearSignature);
