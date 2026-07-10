@@ -875,7 +875,7 @@ body.is-moving-key .photo-hover {
 }
 
 .key-tile.empty .key-number {
-  font-size: 24px;
+  font-size: 18px;
 }
 
 .key-tile.archived {
@@ -1180,7 +1180,8 @@ body.is-moving-key .photo-hover {
   padding: 0 14px;
   border: 2px solid #d8ad28;
   color: #4f3a00;
-  background: #ffe58a;
+  background: #ffe58a !important;
+  background-color: #ffe58a !important;
   font-size: 15px;
   font-weight: 900;
   line-height: 1;
@@ -1247,8 +1248,9 @@ body.is-moving-key .photo-hover {
   border-radius: 999px;
   color: var(--green);
   background: var(--green-soft);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .status-pill.out {
@@ -1277,9 +1279,9 @@ body.is-moving-key .photo-hover {
 
 .key-set-photo-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(132px, 0.62fr);
-  gap: 8px;
-  padding: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.72fr);
+  gap: 6px;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #d8dcd8;
@@ -1307,7 +1309,7 @@ body.is-moving-key .photo-hover {
 .photo-preview {
   display: grid;
   place-items: center;
-  min-height: 104px;
+  min-height: 94px;
   overflow: hidden;
   border: 1px dashed #b8c1bd;
   border-radius: 8px;
@@ -1729,7 +1731,7 @@ body.is-moving-key .photo-hover {
   }
 
   .key-tile.empty .key-number {
-    font-size: 28px;
+    font-size: 21px;
   }
 
   .key-address,
@@ -1845,7 +1847,12 @@ body.is-moving-key .photo-hover {
   }
 
   .key-set-photo-card {
-    grid-template-columns: minmax(0, 1fr) minmax(104px, 0.55fr);
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) minmax(128px, 0.78fr);
+    gap: 6px;
+    padding: 7px;
+  }
+
+  .photo-preview {
+    min-height: 86px;
   }
 }

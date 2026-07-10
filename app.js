@@ -2164,8 +2164,10 @@ function renderPanel() {
   detailPanel.hidden = false;
   form.hidden = false;
   selectedTitle.textContent = keyLabel(key);
-  statusPill.textContent = `${selectedSet.label} : ${selectedSet.status === "out" ? "Sortie" : "Disponible"}`;
-  statusPill.className = `status-pill ${selectedSet.status}`;
+  statusPill.textContent = key.sets
+    .map((set) => `${set.label} : ${set.status === "out" ? "indisponible" : "disponible"}`)
+    .join(" | ");
+  statusPill.className = `status-pill ${key.sets.some((set) => set.status === "out") ? "out" : "available"}`;
   keySetCountSelect.value = String(key.sets.length);
   renderKeySetSelect(key);
   renderKeySetPhotos(key);
