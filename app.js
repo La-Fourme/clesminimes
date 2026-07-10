@@ -2216,8 +2216,12 @@ function renderPanel() {
     const item = document.createElement("li");
     const title = document.createElement("strong");
     const date = document.createElement("small");
+    item.dataset.historyAction = entry.type === "out" ? "out" : entry.type === "reserved" ? "reserved" : "in";
     title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : "Entr\u00e9e"} - ${entry.person || "Intervenant non pr\u00e9cis\u00e9"}`;
-    date.textContent = entry.date;
+    date.textContent =
+      entry.type === "reserved"
+        ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date} pour le ${entry.reservationDate || entry.date}`
+        : entry.date;
     item.append(title, date);
     if (entry.note) {
       const note = document.createElement("p");
@@ -2336,17 +2340,21 @@ async function reserveSelectedSet() {
   clearTimeout(detailCloseTimer);
 
   const person = getContactDisplayName(contact);
-  const formattedDate = new Intl.DateTimeFormat("fr-FR", {
+  const dateTimeFormatter = new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "short",
     timeStyle: "short",
-  }).format(new Date(reservationDateTime));
+  });
+  const createdAt = dateTimeFormatter.format(new Date());
+  const formattedDate = dateTimeFormatter.format(new Date(reservationDateTime));
   const entry = {
     type: "reserved",
     person,
     phone: contact.phone || "",
     note: movementNoteInput.value.trim(),
     signature: "",
-    date: formattedDate,
+    date: createdAt,
+    createdAt,
+    reservationDate: formattedDate,
   };
 
   updateSelectedSet({
@@ -2354,7 +2362,7 @@ async function reserveSelectedSet() {
     holder: person,
     history: [entry, ...selectedSet.history],
   });
-  logActivity("R\u00e9serv\u00e9", `${keyLabel(key)} - ${selectedSet.label}`, [person, formattedDate, entry.note].filter(Boolean).join(" | "));
+  logActivity("R\u00e9serv\u00e9", `${keyLabel(key)} - ${selectedSet.label}`, [person, `Pour le ${formattedDate}`, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
   movementPhoneInput.value = "";

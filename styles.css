@@ -1285,7 +1285,7 @@ body.is-moving-key .photo-hover {
 
 .set-status.reserved {
   color: #8a4f00;
-  background: #f8d19a;
+  background: #fbd9a8;
 }
 
 .set-status.archived {
@@ -1559,7 +1559,7 @@ body.is-moving-key .photo-hover {
 
 #signatureCanvas {
   width: 100%;
-  height: 92px;
+  height: 230px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #daddda;
@@ -1586,9 +1586,9 @@ body.is-moving-key .photo-hover {
 }
 
 .reserved-button {
-  border: 2px solid #d18427;
+  border: 2px solid #df9a3c;
   color: #744100;
-  background: #eda447;
+  background: #f4be70;
 }
 
 .removed-button {
@@ -1627,6 +1627,21 @@ body.is-moving-key .photo-hover {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #d8dcd8;
+}
+
+.history-list li[data-history-action="in"] {
+  border-color: #55aa73;
+  background: #caebd5;
+}
+
+.history-list li[data-history-action="out"] {
+  border-color: #ce6a60;
+  background: #f2cec8;
+}
+
+.history-list li[data-history-action="reserved"] {
+  border-color: #d18427;
+  background: #f8d19a;
 }
 
 .history-list strong {
