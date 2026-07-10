@@ -1058,8 +1058,7 @@ body.is-moving-key .photo-hover {
   background: var(--red-soft);
 }
 
-.global-history-list li[data-history-action="signed"],
-.archive-list li[data-history-action="signed"] {
+.global-history-list li[data-history-action="signed"] {
   border-color: #d8ad28;
   background: #ffe58a;
 }
@@ -1288,7 +1287,7 @@ body.is-moving-key .photo-hover {
 
 .photo-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
@@ -1707,6 +1706,15 @@ body.is-moving-key .photo-hover {
   input,
   select,
   textarea {
+    font-size: 18px;
+  }
+
+  .key-number {
+    font-size: 20px;
+  }
+
+  .has-details .key-number,
+  .key-tile.empty .key-number {
     font-size: 18px;
   }
 

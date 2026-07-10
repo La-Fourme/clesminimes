@@ -7,7 +7,7 @@ const supabaseClient = globalThis.supabase?.createClient(supabaseUrl, supabaseAn
 const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const appActivityLogStorageKey = "cles-global-activity-v1";
-const photoOptimizationStorageKey = "cles-photo-optimization-560-v1";
+const photoOptimizationStorageKey = "cles-photo-optimization-750-v1";
 const registryConfig = {
   location: {
     title: "CENTURY 21 LES MINIMES\nCL\u00c9S LOCATION",
@@ -1913,7 +1913,7 @@ function compressPhotoFile(file) {
       const image = new Image();
       image.addEventListener("error", () => reject(new Error("Photo illisible.")));
       image.addEventListener("load", () => {
-        const maxSize = 560;
+        const maxSize = 750;
         const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
         const width = Math.max(1, Math.round(image.width * scale));
         const height = Math.max(1, Math.round(image.height * scale));
@@ -1924,7 +1924,7 @@ function compressPhotoFile(file) {
         context.fillStyle = "#ffffff";
         context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.36));
+        resolve(canvas.toDataURL("image/jpeg", 0.5));
       });
       image.src = reader.result;
     });
@@ -1942,7 +1942,7 @@ function compressPhotoDataUrl(photo) {
     const image = new Image();
     image.addEventListener("error", () => resolve(photo));
     image.addEventListener("load", () => {
-      const maxSize = 560;
+      const maxSize = 750;
       const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
       const width = Math.max(1, Math.round(image.width * scale));
       const height = Math.max(1, Math.round(image.height * scale));
@@ -1953,7 +1953,7 @@ function compressPhotoDataUrl(photo) {
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, width, height);
       context.drawImage(image, 0, 0, width, height);
-      resolve(canvas.toDataURL("image/jpeg", 0.36));
+      resolve(canvas.toDataURL("image/jpeg", 0.5));
     });
     image.src = photo;
   });
@@ -2194,12 +2194,6 @@ function renderPanel() {
     title.textContent = `${entry.type === "out" ? "Sortie" : "Entrée"} - ${entry.person || "Intervenant non précisé"}`;
     date.textContent = entry.date;
     item.append(title, date);
-    if (entry.phone) {
-      const phone = document.createElement("p");
-      phone.className = "history-phone";
-      phone.textContent = `Téléphone : ${entry.phone}`;
-      item.append(phone);
-    }
     if (entry.note) {
       const note = document.createElement("p");
       note.textContent = entry.note;
