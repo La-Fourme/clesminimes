@@ -6,6 +6,8 @@ const supabaseAnonKey =
 const supabaseClient = globalThis.supabase?.createClient(supabaseUrl, supabaseAnonKey);
 const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
+const appActivityLogStorageKey = "cles-global-activity-v1";
+const photoOptimizationStorageKey = "cles-photo-optimization-560-v1";
 const registryConfig = {
   location: {
     title: "CENTURY 21 LES MINIMES\nCL\u00c9S LOCATION",
@@ -33,6 +35,7 @@ const keySetOptions = [
   { id: "main", label: "Jeu 1" },
   { id: "double", label: "Jeu 2" },
   { id: "triple", label: "Jeu 3" },
+  { id: "quad", label: "Jeu 4" },
 ];
 
 const appTitle = document.querySelector("#appTitle");
@@ -129,6 +132,52 @@ const celebrationAudioFiles = ["Ados.mp3", "Adultes.mp3", "Langue.mp3"];
 let celebrationAudioPlayers = [];
 let lastCloudSnapshot = "";
 let photoViewer = null;
+let lastLocalEditAt = 0;
+let isApplyingCloudState = false;
+
+function markLocalEdit() {
+  if (!isApplyingCloudState) lastLocalEditAt = Date.now();
+}
+
+function getDeviceName() {
+  const userAgent = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+  const deviceType = /Mobi|Android|iPhone/i.test(userAgent) ? "Téléphone" : /iPad|Tablet/i.test(userAgent) ? "Tablette" : "PC";
+  const browser = userAgent.includes("Firefox")
+    ? "Firefox"
+    : userAgent.includes("Edg")
+      ? "Edge"
+      : userAgent.includes("Chrome")
+        ? "Chrome"
+        : userAgent.includes("Safari")
+          ? "Safari"
+          : "Navigateur";
+  return [deviceType, platform, browser].filter(Boolean).join(" - ");
+}
+
+function loadActivityLog() {
+  return parseStoredArray(appActivityLogStorageKey, []);
+}
+
+function saveActivityLog(entries) {
+  markLocalEdit();
+  localStorage.setItem(appActivityLogStorageKey, JSON.stringify(entries.slice(0, 600)));
+  syncStorageKeyToCloud(appActivityLogStorageKey);
+}
+
+function logActivity(action, title, details = "") {
+  const entries = loadActivityLog();
+  entries.unshift({
+    id: `activity-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    date: new Date().toISOString(),
+    action,
+    title,
+    details,
+    device: getDeviceName(),
+    registry: activeRegistry,
+  });
+  saveActivityLog(entries);
+}
 
 function makeKeySet(id) {
   const option = keySetOptions.find((set) => set.id === id) || keySetOptions[0];
@@ -148,6 +197,7 @@ function loadActiveRegistry() {
 }
 
 function saveActiveRegistry() {
+  markLocalEdit();
   localStorage.setItem(registryStorageKey, activeRegistry);
   syncStorageKeyToCloud(registryStorageKey);
 }
@@ -156,6 +206,7 @@ function getBackupStorageKeys() {
   return [
     registryStorageKey,
     sharedContactsStorageKey,
+    appActivityLogStorageKey,
     registryConfig.location.keysStorageKey,
     registryConfig.location.archivesStorageKey,
     registryConfig.transaction.keysStorageKey,
@@ -236,9 +287,11 @@ async function loadStorageFromCloud() {
   const cloudSnapshot = getCloudSnapshot(data);
   if (cloudSnapshot === lastCloudSnapshot) return;
   if (isKeyFormBeingEdited()) return;
+  if (Date.now() - lastLocalEditAt < 5000) return;
   lastCloudSnapshot = cloudSnapshot;
 
   const cloudRows = new Map(data.map((row) => [row.key, row.value]));
+  isApplyingCloudState = true;
   getBackupStorageKeys().forEach((storageKey) => {
     if (cloudRows.has(storageKey)) {
       saveStorageValue(storageKey, stringifyCloudValue(cloudRows.get(storageKey)));
@@ -246,6 +299,7 @@ async function loadStorageFromCloud() {
       localStorage.removeItem(storageKey);
     }
   });
+  isApplyingCloudState = false;
 
   refreshDataFromStorage({ keepSelection: true });
 }
@@ -440,6 +494,7 @@ function loadKeys() {
 
 function saveKeys() {
   try {
+    markLocalEdit();
     localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
     syncStorageKeyToCloud(getRegistryConfig().keysStorageKey);
   } catch (error) {
@@ -471,6 +526,7 @@ function loadArchives() {
 }
 
 function saveArchives() {
+  markLocalEdit();
   localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
   syncStorageKeyToCloud(getRegistryConfig().archivesStorageKey);
 }
@@ -547,6 +603,7 @@ function loadContacts() {
 }
 
 function saveContacts() {
+  markLocalEdit();
   localStorage.setItem(sharedContactsStorageKey, JSON.stringify(contacts));
   syncStorageKeyToCloud(sharedContactsStorageKey);
 }
@@ -683,6 +740,7 @@ function deleteKeyWithoutArchive(keyId) {
     selectedSetId = "main";
     clearSignature();
   }
+  logActivity("Suppression", keyLabel(key), [key.owner, key.property].filter(Boolean).join(" - "));
   saveKeys();
   render();
 }
@@ -1161,6 +1219,7 @@ function getRegistryHistoryEntries(registry) {
           details: [key.owner ? `Propriétaire : ${formatOwner(key.owner)}` : "", movement.phone ? `Téléphone : ${movement.phone}` : "", movement.note || ""]
             .filter(Boolean)
             .join(" | "),
+          device: "",
         });
       });
     });
@@ -1183,16 +1242,35 @@ function getRegistryHistoryEntries(registry) {
       action,
       actor: key.owner ? formatOwner(key.owner) : "Fiche clé",
       details: [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
+      device: "",
     });
   });
 
   return entries;
 }
 
+function getActionClass(action) {
+  const normalized = String(action || "").toLowerCase();
+  if (normalized.includes("entrée") || normalized.includes("création") || normalized.includes("restauration")) return "in";
+  if (normalized.includes("sortie")) return "out";
+  if (normalized.includes("compromis") || normalized.includes("loué") || normalized.includes("acte authentique")) return "signed";
+  if (normalized.includes("retiré") || normalized.includes("suppression")) return "removed";
+  return "neutral";
+}
+
 function renderGlobalHistoryPanel() {
-  const entries = ["location", "transaction"]
-    .flatMap(getRegistryHistoryEntries)
-    .sort((first, second) => second.timestamp - first.timestamp);
+  const activityEntries = loadActivityLog().map((entry) => ({
+    timestamp: parseHistoryTimestamp(entry.date),
+    date: formatArchiveDate(entry.date),
+    title: `${entry.registry === "transaction" ? "Transaction" : "Location"} - ${entry.title}`,
+    action: entry.action,
+    actor: "Action enregistrée",
+    details: entry.details || "",
+    device: entry.device || "Appareil non renseigné",
+  }));
+  const entries = [...activityEntries, ...["location", "transaction"].flatMap(getRegistryHistoryEntries)].sort(
+    (first, second) => second.timestamp - first.timestamp,
+  );
 
   globalHistoryList.innerHTML = "";
   if (!entries.length) {
@@ -1207,11 +1285,23 @@ function renderGlobalHistoryPanel() {
     const title = document.createElement("strong");
     const meta = document.createElement("small");
     const details = document.createElement("span");
+    const deviceButton = document.createElement("button");
+    const device = document.createElement("em");
+    item.dataset.historyAction = getActionClass(entry.action);
     title.textContent = `${entry.action} - ${entry.title}`;
     meta.textContent = `${entry.date} - ${entry.actor}`;
     details.textContent = entry.details;
-    item.append(title, meta);
+    deviceButton.className = "history-device-button";
+    deviceButton.type = "button";
+    deviceButton.textContent = "...";
+    device.hidden = true;
+    device.textContent = entry.device || "Ancienne action sans appareil enregistré";
+    deviceButton.addEventListener("click", () => {
+      device.hidden = !device.hidden;
+    });
+    item.append(title, meta, deviceButton);
     if (entry.details) item.append(details);
+    item.append(device);
     globalHistoryList.append(item);
   });
 }
@@ -1257,6 +1347,7 @@ function importAllDataBackup(file) {
       saveStorageValue(key, value);
     });
     syncAllStorageToCloud();
+    logActivity("Import sauvegarde", "Données globales", file.name || "Fichier JSON");
 
     refreshDataFromStorage();
     alert("Sauvegarde importée.");
@@ -1396,7 +1487,7 @@ function showSaleCelebration() {
       player.pause();
       player.currentTime = 0;
     });
-  }, 11200);
+  }, 9200);
 }
 
 function markCompromiseAsAuthenticated(recordId) {
@@ -1416,6 +1507,7 @@ function markCompromiseAsAuthenticated(recordId) {
         }
       : archive,
   );
+  logActivity("Acte authentique", keyLabel(record.key), [record.key.owner, record.key.property].filter(Boolean).join(" - "));
   saveArchives();
   render();
   showSaleCelebration();
@@ -1437,6 +1529,7 @@ async function editCompromiseDate(recordId) {
         }
       : archive,
   );
+  logActivity("Modification compromis", keyLabel(record.key), `Date : ${formatDateOnly(nextDate)}`);
   saveArchives();
   renderCompromisesPanel();
 }
@@ -1474,6 +1567,14 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
       key.postalCode || "Code postal non renseigné",
       key.city ? key.city.toUpperCase() : "VILLE NON RENSEIGNÉE",
     ].join(" ")}`;
+    const archiveAction = options.showCompromiseDetails
+      ? "Compromis"
+      : record.reason === "removed"
+        ? "Retiré"
+        : record.reason === "authenticated"
+          ? "Acte authentique"
+          : getRegistryConfig().rentedArchiveText;
+    item.dataset.historyAction = getActionClass(archiveAction);
 
     title.textContent = `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`;
     if (options.showCompromiseDetails) {
@@ -1586,6 +1687,7 @@ function restoreArchive(recordId) {
   archives = archives.filter((archive) => archive.id !== recordId);
   selectedId = targetKey.id;
   selectedSetId = record.key.sets?.[0]?.id || "main";
+  logActivity("Restauration", keyLabel(restoredKey), [restoredKey.owner, restoredKey.property].filter(Boolean).join(" - "));
   saveKeys();
   saveArchives();
   render();
@@ -1811,7 +1913,7 @@ function compressPhotoFile(file) {
       const image = new Image();
       image.addEventListener("error", () => reject(new Error("Photo illisible.")));
       image.addEventListener("load", () => {
-        const maxSize = 1600;
+        const maxSize = 560;
         const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
         const width = Math.max(1, Math.round(image.width * scale));
         const height = Math.max(1, Math.round(image.height * scale));
@@ -1822,12 +1924,91 @@ function compressPhotoFile(file) {
         context.fillStyle = "#ffffff";
         context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.92));
+        resolve(canvas.toDataURL("image/jpeg", 0.36));
       });
       image.src = reader.result;
     });
     reader.readAsDataURL(file);
   });
+}
+
+function compressPhotoDataUrl(photo) {
+  return new Promise((resolve) => {
+    if (!photo || !photo.startsWith("data:image/")) {
+      resolve(photo || "");
+      return;
+    }
+
+    const image = new Image();
+    image.addEventListener("error", () => resolve(photo));
+    image.addEventListener("load", () => {
+      const maxSize = 560;
+      const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+      const width = Math.max(1, Math.round(image.width * scale));
+      const height = Math.max(1, Math.round(image.height * scale));
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      canvas.width = width;
+      canvas.height = height;
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.36));
+    });
+    image.src = photo;
+  });
+}
+
+async function compressKeyPhotos(key) {
+  let changed = false;
+  const sets = [];
+
+  for (const set of key.sets || []) {
+    const nextPhoto = await compressPhotoDataUrl(set.photo);
+    changed = changed || nextPhoto !== set.photo;
+    sets.push({ ...set, photo: nextPhoto });
+  }
+
+  return [{ ...key, sets }, changed];
+}
+
+async function optimizeStoredPhotos() {
+  if (localStorage.getItem(photoOptimizationStorageKey) === "done") return;
+
+  markLocalEdit();
+  const registries = ["location", "transaction"];
+  for (const registry of registries) {
+    const config = registryConfig[registry];
+    const storedKeys = parseStoredArray(config.keysStorageKey, makeInitialKeys()).map(normalizeKey);
+    const storedArchives = parseStoredArray(config.archivesStorageKey, []).map(normalizeArchive);
+    let changed = false;
+    const nextKeys = [];
+    const nextArchives = [];
+
+    for (const key of storedKeys) {
+      const [nextKey, keyChanged] = await compressKeyPhotos(key);
+      changed = changed || keyChanged;
+      nextKeys.push(nextKey);
+    }
+
+    for (const record of storedArchives) {
+      const [nextKey, keyChanged] = await compressKeyPhotos(record.key);
+      changed = changed || keyChanged;
+      nextArchives.push({ ...record, key: nextKey });
+    }
+
+    if (changed) {
+      localStorage.setItem(config.keysStorageKey, JSON.stringify(nextKeys));
+      localStorage.setItem(config.archivesStorageKey, JSON.stringify(nextArchives));
+      syncStorageKeyToCloud(config.keysStorageKey);
+      syncStorageKeyToCloud(config.archivesStorageKey);
+    }
+  }
+
+  localStorage.setItem(photoOptimizationStorageKey, "done");
+  keys = loadKeys();
+  archives = loadArchives();
+  render();
 }
 
 function renderKeySetPhotos(key) {
@@ -1838,9 +2019,12 @@ function renderKeySetPhotos(key) {
     const title = document.createElement("strong");
     const preview = document.createElement("div");
     const actions = document.createElement("div");
-    const button = document.createElement("label");
-    const buttonText = document.createElement("span");
-    const input = document.createElement("input");
+    const cameraButton = document.createElement("label");
+    const cameraButtonText = document.createElement("span");
+    const cameraInput = document.createElement("input");
+    const importButton = document.createElement("label");
+    const importButtonText = document.createElement("span");
+    const importInput = document.createElement("input");
 
     item.className = `key-set-photo-card${set.id === selectedSetId ? " is-selected" : ""}`;
     title.textContent = set.label;
@@ -1859,14 +2043,14 @@ function renderKeySetPhotos(key) {
         openPhotoViewer(set.photo, `${set.label} - ${keyLabel(key)}`);
       });
     }
-    actions.className = `photo-actions${set.photo ? "" : " single-action"}`;
-    button.className = "photo-button";
-    buttonText.textContent = set.photo ? "Changer la photo" : "Ajouter une photo";
-    input.type = "file";
-    input.accept = "image/*";
-    input.setAttribute("capture", "environment");
-    input.dataset.setId = set.id;
-    input.addEventListener("click", () => {
+    actions.className = "photo-actions";
+    cameraButton.className = "photo-button";
+    cameraButtonText.textContent = set.photo ? "Reprendre une photo" : "Prendre une photo";
+    cameraInput.type = "file";
+    cameraInput.accept = "image/*";
+    cameraInput.setAttribute("capture", "environment");
+    cameraInput.dataset.setId = set.id;
+    cameraInput.addEventListener("click", () => {
       isPhotoImporting = true;
       clearTimeout(detailCloseTimer);
       setTimeout(() => {
@@ -1874,7 +2058,7 @@ function renderKeySetPhotos(key) {
           "focus",
           () => {
             setTimeout(() => {
-              if (!input.files?.length) {
+              if (!cameraInput.files?.length) {
                 isPhotoImporting = false;
                 scheduleDetailPanelClose();
               }
@@ -1885,8 +2069,33 @@ function renderKeySetPhotos(key) {
       }, 0);
     });
 
-    button.append(buttonText, input);
-    actions.append(button);
+    importButton.className = "photo-button photo-import-button";
+    importButtonText.textContent = "Importer une photo";
+    importInput.type = "file";
+    importInput.accept = "image/*";
+    importInput.dataset.setId = set.id;
+    importInput.addEventListener("click", () => {
+      isPhotoImporting = true;
+      clearTimeout(detailCloseTimer);
+      setTimeout(() => {
+        window.addEventListener(
+          "focus",
+          () => {
+            setTimeout(() => {
+              if (!importInput.files?.length) {
+                isPhotoImporting = false;
+                scheduleDetailPanelClose();
+              }
+            }, 300);
+          },
+          { once: true },
+        );
+      }, 0);
+    });
+    importButton.append(importButtonText, importInput);
+
+    cameraButton.append(cameraButtonText, cameraInput);
+    actions.append(cameraButton, importButton);
 
     if (set.photo) {
       const deleteButton = document.createElement("button");
@@ -2008,8 +2217,14 @@ function renderPanel() {
 }
 
 function updateSelectedKey(changes) {
+  const previousKey = getSelectedKey();
+  const wasFilled = previousKey ? isKeyFilled(previousKey) : false;
   rememberUndoStep();
   keys = keys.map((key) => (key.id === selectedId ? { ...key, ...changes } : key));
+  const nextKey = getSelectedKey();
+  if (nextKey && !wasFilled && isKeyFilled(nextKey)) {
+    logActivity("Création fiche", keyLabel(nextKey), [nextKey.owner, nextKey.property].filter(Boolean).join(" - "));
+  }
   saveKeys();
   render();
 }
@@ -2026,7 +2241,8 @@ function setKeySetCount(count) {
   const key = getSelectedKey();
   if (!key) return;
 
-  const nextCount = Math.max(1, Math.min(3, count));
+  const nextCount = Math.max(1, Math.min(4, count));
+  const previousCount = key.sets.length;
   const nextIds = keySetOptions.slice(0, nextCount).map((option) => option.id);
   const removedSets = key.sets.filter((set) => !nextIds.includes(set.id));
   const removedHasData = removedSets.some((set) => set.status === "out" || set.holder || set.history.length);
@@ -2041,6 +2257,11 @@ function setKeySetCount(count) {
 
   const nextSets = nextIds.map((id) => key.sets.find((set) => set.id === id) || makeKeySet(id));
   selectedSetId = nextSets.some((set) => set.id === selectedSetId) ? selectedSetId : nextSets[0].id;
+  if (nextCount > previousCount) {
+    logActivity("Création jeu", keyLabel(key), `${nextCount} jeux au total`);
+  } else if (nextCount < previousCount) {
+    logActivity("Suppression jeu", keyLabel(key), `${nextCount} jeux restants`);
+  }
   updateSelectedKey({ sets: nextSets });
 }
 
@@ -2066,6 +2287,7 @@ function addMovement(type) {
     holder: entry.person || selectedSet.holder,
     history: [entry, ...selectedSet.history],
   });
+  logActivity(type === "out" ? "Sortie" : "Entrée", `${keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
   movementPhoneInput.value = "";
@@ -2138,6 +2360,7 @@ async function archiveSelectedKey(reason) {
   keys = keys.map((savedKey) => (savedKey.id === key.id ? makeEmptyKey(savedKey) : savedKey));
   selectedId = null;
   selectedSetId = "main";
+  logActivity(actionLabel, keyLabel(key), [key.owner, key.property, compromiseSignedAt ? `Signature : ${formatDateOnly(compromiseSignedAt)}` : ""].filter(Boolean).join(" - "));
   saveArchives();
   saveKeys();
   render();
@@ -2525,5 +2748,6 @@ migrateArchivedSlots();
 updateRegistryHeader();
 updateUndoButton();
 render();
+optimizeStoredPhotos();
 loadStorageFromCloud();
 setInterval(loadStorageFromCloud, 7000);
