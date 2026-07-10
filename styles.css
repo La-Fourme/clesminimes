@@ -1261,26 +1261,34 @@ body.is-moving-key .photo-hover {
 }
 
 .status-pill {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 800;
+  background: transparent;
+}
+
+.set-status {
   padding: 7px 10px;
   border-radius: 999px;
   color: var(--green);
-  background: var(--green-soft);
-  font-size: 11px;
-  font-weight: 800;
+  background: #caebd5;
   white-space: nowrap;
 }
 
-.status-pill.out {
+.set-status.out {
   color: var(--red);
-  background: var(--red-soft);
+  background: #f2cec8;
 }
 
-.status-pill.reserved {
+.set-status.reserved {
   color: #8a4f00;
-  background: #fff0d7;
+  background: #ffe1b8;
 }
 
-.status-pill.archived {
+.set-status.archived {
   color: #596064;
   background: #e5e7e6;
 }
@@ -1506,7 +1514,7 @@ body.is-moving-key .photo-hover {
 .movement-actions,
 .archive-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
