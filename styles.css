@@ -775,8 +775,8 @@ body.is-moving-key .photo-hover {
 }
 
 .key-set-segment.reserved {
-  border-color: #d98121;
-  background: #ffc46f;
+  border-color: #e7a54a;
+  background: #ffd894;
 }
 
 .key-number {
@@ -876,8 +876,8 @@ body.is-moving-key .photo-hover {
 }
 
 .key-tile.reserved {
-  border-color: #d98121;
-  background: #ffe1b8;
+  border-color: #e7a54a;
+  background: #fff0d7;
 }
 
 .key-tile.empty {
@@ -1082,8 +1082,8 @@ body.is-moving-key .photo-hover {
 
 .global-history-list li[data-history-action="reserved"],
 .archive-list li[data-history-action="reserved"] {
-  border-color: #d98121;
-  background: #ffe1b8;
+  border-color: #e7a54a;
+  background: #fff0d7;
 }
 
 .global-history-list li[data-history-action="removed"],
@@ -1277,7 +1277,7 @@ body.is-moving-key .photo-hover {
 
 .status-pill.reserved {
   color: #8a4f00;
-  background: #ffe1b8;
+  background: #fff0d7;
 }
 
 .status-pill.archived {
@@ -1578,9 +1578,9 @@ body.is-moving-key .photo-hover {
 }
 
 .reserved-button {
-  border: 2px solid #d98121;
+  border: 2px solid #e7a54a;
   color: #744100;
-  background: #ffc46f;
+  background: #ffd894;
 }
 
 .removed-button {

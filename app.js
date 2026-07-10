@@ -760,7 +760,7 @@ function render() {
 }
 
 function isDetailPanelBusy() {
-  return isPhotoImporting || form.contains(document.activeElement);
+  return isPhotoImporting || Boolean(document.querySelector(".date-dialog[open]")) || form.contains(document.activeElement);
 }
 
 function isKeyFormBeingEdited() {
@@ -2309,6 +2309,7 @@ async function reserveSelectedSet() {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || key.archived) return;
+  clearTimeout(detailCloseTimer);
 
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
   if (!contact) {
@@ -2319,6 +2320,7 @@ async function reserveSelectedSet() {
 
   const reservationDateTime = await promptReservationDateTime();
   if (!reservationDateTime) return;
+  clearTimeout(detailCloseTimer);
 
   const person = getContactDisplayName(contact);
   const formattedDate = new Intl.DateTimeFormat("fr-FR", {
