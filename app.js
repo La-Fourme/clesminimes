@@ -2318,9 +2318,13 @@ function renderPanel() {
   }
 
   const selectedSet = getSelectedSet(key);
+  const isArchiveView = Boolean(selectedArchiveRecord);
+  const isCompromiseView = selectedArchiveRecord?.reason === "rented";
   selectedSetId = selectedSet.id;
   detailPanel.hidden = false;
   form.hidden = false;
+  form.classList.toggle("is-archive-view", isArchiveView);
+  form.classList.toggle("is-compromise-view", isCompromiseView);
   selectedTitle.textContent = keyLabel(key);
   statusPill.className = "status-pill status-summary";
   statusPill.innerHTML = "";
@@ -2339,13 +2343,12 @@ function renderPanel() {
   ownerInput.value = formatOwner(key.owner);
   notesInput.value = key.notes;
   const canMoveSelectedKey = !key.archived || Boolean(selectedArchiveRecord);
-  const isArchiveView = Boolean(selectedArchiveRecord);
   const isSelectedSetReserved = selectedSet.status === "reserved";
   const isSelectedSetOut = selectedSet.status === "out";
   checkinBtn.textContent = selectedSet.status === "out" || selectedSet.status === "reserved" ? "Rentr\u00e9e" : "Entr\u00e9e";
   reservedBtn.textContent = selectedSet.status === "reserved" ? "Annulation" : "R\u00e9serv\u00e9";
   checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
-  checkinBtn.disabled = !canMoveSelectedKey || isSelectedSetReserved;
+  checkinBtn.disabled = !canMoveSelectedKey || isSelectedSetReserved || (isCompromiseView && !isSelectedSetOut);
   reservedBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
   rentedBtn.disabled = key.archived || isSelectedSetReserved || isSelectedSetOut;
   removedBtn.disabled = key.archived || isSelectedSetReserved || isSelectedSetOut;
