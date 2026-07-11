@@ -1931,7 +1931,7 @@ function renderGrid() {
       .filter((key) => key.category === category)
       .filter(matchesFilter);
 
-    const touchColumnCount = window.matchMedia("(max-width: 720px)").matches ? 2 : 10;
+    const touchColumnCount = window.matchMedia("(orientation: landscape)").matches ? 10 : 2;
 
     visibleKeys.forEach((key, index) => {
       const rowStartIndex = Math.floor(index / touchColumnCount) * touchColumnCount;
