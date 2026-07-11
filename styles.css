@@ -2188,4 +2188,8 @@ body.is-moving-key .photo-hover {
     border-radius: 0;
     background: transparent;
   }
+
+  .key-grid[data-view-mode="photo"] .key-photo-content img {
+    object-fit: cover;
+  }
 }
