@@ -2330,6 +2330,7 @@ function renderPanel() {
   notesInput.value = key.notes;
   const canMoveSelectedKey = !key.archived || Boolean(selectedArchiveRecord);
   checkinBtn.textContent = selectedSet.status === "out" || selectedSet.status === "reserved" ? "Rentr\u00e9e" : "Entr\u00e9e";
+  reservedBtn.textContent = selectedSet.status === "reserved" ? "Annulation r\u00e9servation" : "R\u00e9serv\u00e9";
   checkoutBtn.disabled = !canMoveSelectedKey;
   checkinBtn.disabled = !canMoveSelectedKey;
   reservedBtn.disabled = !canMoveSelectedKey;
@@ -2482,6 +2483,29 @@ async function reserveSelectedSet() {
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
   clearTimeout(detailCloseTimer);
+
+  if (selectedSet.status === "reserved") {
+    const entry = {
+      type: "in",
+      person: selectedSet.holder || "R\u00e9servation annul\u00e9e",
+      phone: "",
+      note: "Annulation r\u00e9servation",
+      signature: "",
+      date: new Intl.DateTimeFormat("fr-FR", {
+        dateStyle: "short",
+        timeStyle: "short",
+      }).format(new Date()),
+    };
+
+    updateSelectedSet({
+      status: "available",
+      holder: "",
+      history: [entry, ...selectedSet.history],
+    });
+    logActivity("Annulation r\u00e9servation", `${keyLabel(key)} - ${selectedSet.label}`, entry.person);
+    if (selectedArchiveRecord) renderCompromisesPanel();
+    return;
+  }
 
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
   if (!contact) {
