@@ -2090,8 +2090,8 @@ body.is-moving-key .photo-hover {
   }
 
   .key-grid[data-view-mode="photo"] .key-tile {
-    height: 170px;
-    min-height: 170px;
+    height: 300px;
+    min-height: 300px;
   }
 
   .key-grid[data-view-mode="photo"] .category-title {
@@ -2106,12 +2106,5 @@ body.is-moving-key .photo-hover {
 
   .photo-preview {
     min-height: 86px;
-  }
-}
-
-@media (max-width: 520px) {
-  .key-grid[data-view-mode="photo"] .key-tile {
-    height: 260px;
-    min-height: 260px;
   }
 }
