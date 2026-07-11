@@ -8,9 +8,9 @@ const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const appActivityLogStorageKey = "cles-global-activity-v1";
 const deviceNameStorageKey = "cles-device-name-v1";
-const photoMaxSize = 750;
-const photoJpegQuality = 0.5;
-const photoOptimizationStorageKey = "cles-photo-optimization-750-v1";
+const photoMaxSize = 560;
+const photoJpegQuality = 0.36;
+const photoOptimizationStorageKey = "cles-photo-optimization-560-v1";
 const registryConfig = {
   location: {
     title: "CENTURY 21 LES MINIMES\nCL\u00c9S LOCATION",
@@ -335,6 +335,7 @@ async function loadStorageFromCloud() {
       localStorage.removeItem(storageKey);
     }
   });
+  localStorage.removeItem(photoOptimizationStorageKey);
   isApplyingCloudState = false;
 
   refreshDataFromStorage({ keepSelection: true });
@@ -3094,10 +3095,17 @@ keySetPhotoList.addEventListener("change", (event) => {
   input.value = "";
 });
 
-migrateArchivedSlots();
-updateRegistryHeader();
-updateUndoButton();
-render();
-optimizeStoredPhotos();
-loadStorageFromCloud();
-setInterval(loadStorageFromCloud, 7000);
+async function initializeApp() {
+  migrateArchivedSlots();
+  await loadStorageFromCloud();
+  await optimizeStoredPhotos();
+  updateRegistryHeader();
+  updateUndoButton();
+  render();
+  setInterval(async () => {
+    await loadStorageFromCloud();
+    await optimizeStoredPhotos();
+  }, 7000);
+}
+
+initializeApp();
