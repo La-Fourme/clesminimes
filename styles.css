@@ -449,7 +449,7 @@ h3 {
 .view-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  min-width: 317px;
+  min-width: 285px;
   min-height: 42px;
   padding: 3px;
   border: 2px solid var(--line);
