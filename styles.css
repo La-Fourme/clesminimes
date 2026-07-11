@@ -2181,11 +2181,11 @@ body.is-moving-key .photo-hover {
   }
 
   .key-grid[data-view-mode="photo"] .key-tile.photo-view {
-    padding: 4px 5px 12px;
+    padding: 2px 2px 9px;
   }
 
   .key-grid[data-view-mode="photo"] .key-photo-content {
-    border-radius: 5px;
+    border-radius: 4px;
     background: rgba(255, 255, 255, 0.36);
   }
 }
