@@ -1046,6 +1046,7 @@ body.is-moving-key .photo-hover {
   margin-top: 2px;
   color: rgba(30, 37, 40, 0.72);
   font-size: 12px;
+  font-style: italic;
   font-weight: 600;
 }
 
@@ -1818,6 +1819,12 @@ body.is-moving-key .photo-hover {
 
   #signatureCanvas {
     height: 230px;
+  }
+
+  #contactSelect {
+    width: 100%;
+    min-width: 100%;
+    max-width: none;
   }
 
   .key-address,

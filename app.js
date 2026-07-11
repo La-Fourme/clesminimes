@@ -589,7 +589,11 @@ function contactTypeText(type) {
 }
 
 function getContactSelectName(contact) {
-  return contact.type === "external" ? contact.companyName || contact.name : getContactDisplayName(contact);
+  if (contact.type === "external") {
+    return [contact.companyName || contact.name, contact.firstName].filter(Boolean).join(" ");
+  }
+
+  return contact.firstName || contact.name;
 }
 
 function normalizeContact(contact) {
@@ -826,7 +830,7 @@ function renderContactSelect() {
     groupedContacts.forEach((contact) => {
       const option = document.createElement("option");
       option.value = contact.id;
-      option.textContent = contact.phone ? `${getContactSelectName(contact)} - ${contact.phone}` : getContactSelectName(contact);
+      option.textContent = getContactSelectName(contact);
       group.append(option);
     });
     contactSelect.append(group);
