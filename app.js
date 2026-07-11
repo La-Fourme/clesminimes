@@ -2381,9 +2381,11 @@ function renderPanel() {
     date.textContent =
       entry.type === "reserved"
         ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date} pour le ${entry.reservationDate || entry.date}`
+        : entry.type === "cancel-reservation" && entry.note
+          ? `${entry.date} - ${entry.note}`
         : entry.date;
     item.append(title, date);
-    if (entry.note) {
+    if (entry.note && entry.type !== "cancel-reservation") {
       const note = document.createElement("p");
       note.textContent = entry.note;
       item.append(note);

@@ -1722,6 +1722,13 @@ body.is-moving-key .photo-hover {
   color: var(--muted);
 }
 
+.history-list li[data-history-action="reserved"] p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .history-phone {
   margin: 6px 0 0;
   color: var(--muted);
