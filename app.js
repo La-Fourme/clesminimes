@@ -202,8 +202,19 @@ function getDetectedDeviceName() {
   return "Appareil";
 }
 
+function ensureDeviceName() {
+  const savedName = localStorage.getItem(deviceNameStorageKey)?.trim();
+  if (savedName) return savedName;
+
+  const detectedName = getDetectedDeviceName();
+  const customName = prompt("Nom de cet appareil pour l'historique :", detectedName);
+  const deviceName = customName?.trim() || detectedName;
+  localStorage.setItem(deviceNameStorageKey, deviceName);
+  return deviceName;
+}
+
 function getDeviceName() {
-  return getDetectedDeviceName();
+  return localStorage.getItem(deviceNameStorageKey)?.trim() || ensureDeviceName();
 }
 
 function loadActivityLog() {
@@ -3136,6 +3147,7 @@ keySetPhotoList.addEventListener("change", (event) => {
 
 async function initializeApp() {
   migrateArchivedSlots();
+  ensureDeviceName();
   await loadStorageFromCloud();
   await optimizeStoredPhotos();
   updateRegistryHeader();

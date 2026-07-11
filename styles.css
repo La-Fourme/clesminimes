@@ -458,6 +458,10 @@ h3 {
 }
 
 .view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 32px;
   padding: 0 12px;
   border: 0;
@@ -466,6 +470,22 @@ h3 {
   background: transparent;
   font-size: 12px;
   font-weight: 800;
+}
+
+.view-text-icon {
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.view-photo-icon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 .view-toggle button.is-active {
