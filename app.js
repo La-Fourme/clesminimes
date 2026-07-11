@@ -1939,7 +1939,7 @@ function renderGrid() {
         const shouldShowSetStrip = isKeyFilled(key);
         const mainPhoto = key.sets[0]?.photo || "";
         const shouldShowPhotoTile = tileViewMode === "photo" && shouldShowSetStrip;
-        tileShell.className = "key-tile-shell";
+        tileShell.className = `key-tile-shell${shouldShowPhotoTile ? " photo-view-shell" : ""}`;
         button.type = "button";
         button.draggable = shouldShowSetStrip;
         button.className = `key-tile ${getTileStatus(key)}${hasTileDetails ? " has-details" : ""}${
