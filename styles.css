@@ -2125,6 +2125,10 @@ body.is-moving-key .photo-hover {
 }
 
 @media (orientation: landscape) and (pointer: coarse) {
+  .workspace {
+    padding: 8px 6px;
+  }
+
   .filters {
     display: grid;
     grid-template-columns: minmax(220px, 0.85fr) minmax(128px, auto) minmax(240px, 1fr) minmax(150px, auto);
@@ -2159,10 +2163,19 @@ body.is-moving-key .photo-hover {
   }
 
   .key-row {
-    grid-template-columns: repeat(10, minmax(58px, 1fr));
+    gap: 6px;
+    grid-template-columns: repeat(10, minmax(62px, 1fr));
   }
 
   .key-grid[data-view-mode="photo"] .key-row {
-    grid-auto-rows: 170px;
+    grid-auto-rows: 150px;
+  }
+
+  .key-grid[data-view-mode="photo"] .key-tile.photo-view {
+    padding: 2px 4px 14px;
+  }
+
+  .key-grid[data-view-mode="photo"] .key-photo-content {
+    border-radius: 5px;
   }
 }
