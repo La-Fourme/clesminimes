@@ -1302,15 +1302,18 @@ body.is-moving-key .photo-hover {
 }
 
 .close-button {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 32px;
   height: 32px;
+  padding: 0;
   border-radius: 8px;
   color: var(--ink);
   background: #eef1ef;
   font-size: 24px;
-  line-height: 1;
+  line-height: 0;
+  text-align: center;
 }
 
 .key-form label {

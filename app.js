@@ -284,6 +284,14 @@ function syncAllStorageToCloud() {
   return Promise.all(getBackupStorageKeys().map(syncStorageKeyToCloud));
 }
 
+function syncCurrentRegistryToCloud() {
+  return Promise.all([
+    syncStorageKeyToCloud(getRegistryConfig().keysStorageKey),
+    syncStorageKeyToCloud(getRegistryConfig().archivesStorageKey),
+    syncStorageKeyToCloud(appActivityLogStorageKey),
+  ]);
+}
+
 function getCloudSnapshot(rows) {
   return JSON.stringify(
     [...rows]
@@ -2363,7 +2371,12 @@ function renderPanel() {
     const item = document.createElement("li");
     const title = document.createElement("strong");
     const date = document.createElement("small");
-    item.dataset.historyAction = entry.type === "out" ? "out" : entry.type === "reserved" ? "reserved" : "in";
+    item.dataset.historyAction =
+      entry.type === "out"
+        ? "out"
+        : entry.type === "reserved" || entry.type === "cancel-reservation"
+          ? "reserved"
+          : "in";
     title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${entry.person || "Intervenant non pr\u00e9cis\u00e9"}`;
     date.textContent =
       entry.type === "reserved"
@@ -3008,6 +3021,7 @@ backupFileInput.addEventListener("change", () => {
 });
 closePanelBtn.addEventListener("click", () => {
   clearTimeout(detailCloseTimer);
+  syncCurrentRegistryToCloud();
   selectedId = null;
   selectedArchiveRecord = null;
   render();
