@@ -178,17 +178,7 @@ function getDetectedDeviceName() {
 }
 
 function getDeviceName() {
-  const savedName = localStorage.getItem(deviceNameStorageKey);
-  if (savedName?.trim()) return savedName.trim();
-
-  const detectedName = getDetectedDeviceName();
-  const customName = prompt(
-    "Nom de cet appareil pour l'historique ?\nExemple : iPhone de Julien, PC accueil, iPad agence.",
-    detectedName,
-  );
-  const deviceName = (customName || detectedName).trim();
-  localStorage.setItem(deviceNameStorageKey, deviceName);
-  return deviceName;
+  return getDetectedDeviceName();
 }
 
 function loadActivityLog() {
@@ -480,6 +470,7 @@ function normalizeSet(set, index = 0) {
     label: option.label,
     photo: set.photo || "",
     holder: set.holder || "",
+    holderPhone: set.holderPhone || "",
     status,
     history: Array.isArray(set.history) ? set.history : [],
   };
@@ -2169,6 +2160,7 @@ async function optimizeStoredPhotos() {
 
 function renderKeySetPhotos(key) {
   keySetPhotoList.innerHTML = "";
+  const isArchiveView = Boolean(selectedArchiveRecord);
 
   key.sets.forEach((set) => {
     const item = document.createElement("article");
@@ -2188,7 +2180,7 @@ function renderKeySetPhotos(key) {
     preview.innerHTML = set.photo
       ? `<img src="${set.photo}" alt="Photo du jeu ${set.label} de ${keyLabel(key)}" />`
       : `<span>Aucune photo</span>`;
-    if (set.photo) {
+    if (set.photo && !isArchiveView) {
       preview.tabIndex = 0;
       preview.setAttribute("role", "button");
       preview.setAttribute("aria-label", `Afficher la photo du ${set.label}`);
@@ -2206,6 +2198,7 @@ function renderKeySetPhotos(key) {
     cameraInput.accept = "image/*";
     cameraInput.setAttribute("capture", "environment");
     cameraInput.dataset.setId = set.id;
+    cameraButton.style.display = isArchiveView ? "none" : "";
     cameraInput.addEventListener("click", () => {
       isPhotoImporting = true;
       clearTimeout(detailCloseTimer);
@@ -2230,6 +2223,7 @@ function renderKeySetPhotos(key) {
     importInput.type = "file";
     importInput.accept = "image/*";
     importInput.dataset.setId = set.id;
+    importButton.style.display = isArchiveView ? "none" : "";
     importInput.addEventListener("click", () => {
       isPhotoImporting = true;
       clearTimeout(detailCloseTimer);
@@ -2253,7 +2247,7 @@ function renderKeySetPhotos(key) {
     cameraButton.append(cameraButtonText, cameraInput);
     actions.append(cameraButton, importButton);
 
-    if (set.photo) {
+    if (set.photo && !isArchiveView) {
       const deleteButton = document.createElement("button");
       deleteButton.className = "photo-delete-button";
       deleteButton.type = "button";
@@ -2337,14 +2331,23 @@ function renderPanel() {
   ownerInput.value = formatOwner(key.owner);
   notesInput.value = key.notes;
   const canMoveSelectedKey = !key.archived || Boolean(selectedArchiveRecord);
+  const isArchiveView = Boolean(selectedArchiveRecord);
+  const isSelectedSetReserved = selectedSet.status === "reserved";
+  const isSelectedSetOut = selectedSet.status === "out";
   checkinBtn.textContent = selectedSet.status === "out" || selectedSet.status === "reserved" ? "Rentr\u00e9e" : "Entr\u00e9e";
   reservedBtn.textContent = selectedSet.status === "reserved" ? "Annulation" : "R\u00e9serv\u00e9";
-  checkoutBtn.disabled = !canMoveSelectedKey;
-  checkinBtn.disabled = !canMoveSelectedKey;
-  reservedBtn.disabled = !canMoveSelectedKey;
-  rentedBtn.disabled = key.archived;
-  removedBtn.disabled = key.archived;
+  checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
+  checkinBtn.disabled = !canMoveSelectedKey || isSelectedSetReserved;
+  reservedBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
+  rentedBtn.disabled = key.archived || isSelectedSetReserved || isSelectedSetOut;
+  removedBtn.disabled = key.archived || isSelectedSetReserved || isSelectedSetOut;
   deleteSelectedKeyBtn.disabled = key.archived;
+  keySetCountSelect.disabled = isArchiveView;
+  propertyInput.disabled = isArchiveView;
+  postalCodeInput.disabled = isArchiveView;
+  cityInput.disabled = isArchiveView;
+  ownerInput.disabled = isArchiveView;
+  notesInput.disabled = isArchiveView;
 
   historyList.innerHTML = "";
   if (!selectedSet.history.length) {
@@ -2361,7 +2364,7 @@ function renderPanel() {
     const title = document.createElement("strong");
     const date = document.createElement("small");
     item.dataset.historyAction = entry.type === "out" ? "out" : entry.type === "reserved" ? "reserved" : "in";
-    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : "Entr\u00e9e"} : ${entry.person || "Intervenant non pr\u00e9cis\u00e9"}`;
+    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${entry.person || "Intervenant non pr\u00e9cis\u00e9"}`;
     date.textContent =
       entry.type === "reserved"
         ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date} pour le ${entry.reservationDate || entry.date}`
@@ -2451,11 +2454,19 @@ function addMovement(type) {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+  const forcedPerson =
+    (type === "out" && selectedSet.status === "reserved") || (type === "in" && selectedSet.status === "out")
+      ? selectedSet.holder
+      : "";
+  const forcedPhone =
+    (type === "out" && selectedSet.status === "reserved") || (type === "in" && selectedSet.status === "out")
+      ? selectedSet.holderPhone
+      : "";
 
   const entry = {
     type,
-    person: movementPersonInput.value.trim(),
-    phone: movementPhoneInput.value.trim(),
+    person: forcedPerson || movementPersonInput.value.trim(),
+    phone: forcedPhone || movementPhoneInput.value.trim(),
     note: movementNoteInput.value.trim(),
     signature: hasSignature ? signatureCanvas.toDataURL("image/png") : "",
     date: new Intl.DateTimeFormat("fr-FR", {
@@ -2466,7 +2477,8 @@ function addMovement(type) {
 
   updateSelectedSet({
     status: type === "out" ? "out" : "available",
-    holder: entry.person || selectedSet.holder,
+    holder: type === "out" ? entry.person || selectedSet.holder : "",
+    holderPhone: type === "out" ? entry.phone || selectedSet.holderPhone : "",
     history: [entry, ...selectedSet.history],
   });
   logActivity(type === "out" ? "Sortie" : "Entrée", `${keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
@@ -2494,9 +2506,9 @@ async function reserveSelectedSet() {
 
   if (selectedSet.status === "reserved") {
     const entry = {
-      type: "in",
+      type: "cancel-reservation",
       person: selectedSet.holder || "R\u00e9servation annul\u00e9e",
-      phone: "",
+      phone: selectedSet.holderPhone || "",
       note: "Annulation r\u00e9servation",
       signature: "",
       date: new Intl.DateTimeFormat("fr-FR", {
@@ -2508,6 +2520,7 @@ async function reserveSelectedSet() {
     updateSelectedSet({
       status: "available",
       holder: "",
+      holderPhone: "",
       history: [entry, ...selectedSet.history],
     });
     logActivity("Annulation r\u00e9servation", `${keyLabel(key)} - ${selectedSet.label}`, entry.person);
@@ -2547,6 +2560,7 @@ async function reserveSelectedSet() {
   updateSelectedSet({
     status: "reserved",
     holder: person,
+    holderPhone: contact.phone || "",
     history: [entry, ...selectedSet.history],
   });
   logActivity("R\u00e9serv\u00e9", `${keyLabel(key)} - ${selectedSet.label}`, [person, `Pour le ${formattedDate}`, entry.note].filter(Boolean).join(" | "));
