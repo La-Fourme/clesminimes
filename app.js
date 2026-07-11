@@ -1958,51 +1958,51 @@ function renderGrid() {
       }${shouldShowPhotoTile ? " photo-view" : ""}${key.id === selectedId ? " is-selected" : ""}`;
       button.title = `${keyLabel(key)} - ${statusText(key)}`;
       if (shouldMatchPhotoRowHeight) {
-        tileShell.style.height = photoTileHeight;
-        tileShell.style.minHeight = photoTileHeight;
-        button.style.height = "100%";
-        button.style.minHeight = "100%";
+        tileShell.style.setProperty("height", photoTileHeight, "important");
+        tileShell.style.setProperty("min-height", photoTileHeight, "important");
+        button.style.setProperty("height", "100%", "important");
+        button.style.setProperty("min-height", "100%", "important");
       }
 
-        if (shouldShowPhotoTile) {
-          const photoContent = document.createElement("span");
-          photoContent.className = `key-photo-content${mainPhoto ? "" : " is-empty"}`;
-          if (mainPhoto) {
-            const photoImage = document.createElement("img");
-            photoImage.src = mainPhoto;
-            photoImage.alt = `Photo du jeu principal de ${keyLabel(key)}`;
-            photoContent.append(photoImage);
-          } else {
-            photoContent.textContent = "Aucune photo";
-          }
-          button.append(photoContent);
-        } else if (hasTileDetails) {
-          const details = document.createElement("span");
-          const heading = document.createElement("span");
-          const number = document.createElement("span");
-          const owner = document.createElement("span");
-          const address = document.createElement("span");
-          const city = document.createElement("span");
-          details.className = "key-details";
-          heading.className = "key-heading";
-          number.className = "key-number";
-          owner.className = "key-owner";
-          address.className = "key-address";
-          city.className = "key-city";
-          number.textContent = `${tileLabel(key)} :`;
-          owner.textContent = ownerName;
-          address.textContent = key.property.trim();
-          city.textContent = [key.postalCode, key.city].filter(Boolean).join(" ");
-          heading.append(number, owner);
-          details.append(heading, address);
-          if (city.textContent) details.append(city);
-          button.append(details);
+      if (shouldShowPhotoTile) {
+        const photoContent = document.createElement("span");
+        photoContent.className = `key-photo-content${mainPhoto ? "" : " is-empty"}`;
+        if (mainPhoto) {
+          const photoImage = document.createElement("img");
+          photoImage.src = mainPhoto;
+          photoImage.alt = `Photo du jeu principal de ${keyLabel(key)}`;
+          photoContent.append(photoImage);
         } else {
-          const number = document.createElement("span");
-          number.className = "key-number";
-          number.textContent = tileLabel(key);
-          button.append(number);
+          photoContent.textContent = "Aucune photo";
         }
+        button.append(photoContent);
+      } else if (hasTileDetails) {
+        const details = document.createElement("span");
+        const heading = document.createElement("span");
+        const number = document.createElement("span");
+        const owner = document.createElement("span");
+        const address = document.createElement("span");
+        const city = document.createElement("span");
+        details.className = "key-details";
+        heading.className = "key-heading";
+        number.className = "key-number";
+        owner.className = "key-owner";
+        address.className = "key-address";
+        city.className = "key-city";
+        number.textContent = `${tileLabel(key)} :`;
+        owner.textContent = ownerName;
+        address.textContent = key.property.trim();
+        city.textContent = [key.postalCode, key.city].filter(Boolean).join(" ");
+        heading.append(number, owner);
+        details.append(heading, address);
+        if (city.textContent) details.append(city);
+        button.append(details);
+      } else {
+        const number = document.createElement("span");
+        number.className = "key-number";
+        number.textContent = tileLabel(key);
+        button.append(number);
+      }
 
         const previewSet = key.sets.find((set) => set.photo);
         if (previewSet?.photo && !shouldShowPhotoTile) {
