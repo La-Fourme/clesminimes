@@ -2126,7 +2126,7 @@ body.is-moving-key .photo-hover {
 
 @media (orientation: landscape) and (pointer: coarse) {
   .workspace {
-    padding: 8px 6px;
+    padding: 6px 0;
   }
 
   .filters {
@@ -2162,9 +2162,18 @@ body.is-moving-key .photo-hover {
     padding-bottom: 0;
   }
 
-  .key-row {
+  .category-row {
+    grid-template-columns: 86px minmax(0, 1fr);
     gap: 6px;
-    grid-template-columns: repeat(10, minmax(62px, 1fr));
+  }
+
+  .category-title {
+    padding: 8px 6px;
+  }
+
+  .key-row {
+    gap: 4px;
+    grid-template-columns: repeat(10, minmax(66px, 1fr));
   }
 
   .key-grid[data-view-mode="photo"] .key-row {
@@ -2172,7 +2181,7 @@ body.is-moving-key .photo-hover {
   }
 
   .key-grid[data-view-mode="photo"] .key-tile.photo-view {
-    padding: 2px 4px 14px;
+    padding: 0 3px 10px;
   }
 
   .key-grid[data-view-mode="photo"] .key-photo-content {
