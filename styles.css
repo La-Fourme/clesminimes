@@ -2162,12 +2162,16 @@ body.is-moving-key .photo-hover {
     padding-bottom: 0;
   }
 
-  .key-tile-shell {
+  .key-grid[data-view-mode="photo"] .key-tile-shell,
+  .key-grid[data-view-mode="photo"] .key-tile-shell.photo-view-shell {
     height: 170px !important;
     min-height: 170px !important;
   }
 
-  .key-tile {
+  .key-grid[data-view-mode="photo"] .key-tile,
+  .key-grid[data-view-mode="photo"] .key-tile.empty,
+  .key-grid[data-view-mode="photo"] .key-tile.photo-view,
+  .key-grid[data-view-mode="photo"] .key-tile-shell.photo-view-shell .key-tile.photo-view {
     height: 100% !important;
     min-height: 100% !important;
   }
