@@ -105,7 +105,6 @@ const historyDataBtn = document.querySelector("#historyDataBtn");
 const globalHistoryPanel = document.querySelector("#globalHistoryPanel");
 const closeGlobalHistoryBtn = document.querySelector("#closeGlobalHistoryBtn");
 const globalHistoryList = document.querySelector("#globalHistoryList");
-const boardHistoryList = document.querySelector("#boardHistoryList");
 const exportFilledDataBtn = document.querySelector("#exportFilledDataBtn");
 const backupDataBtn = document.querySelector("#backupDataBtn");
 const importDataBtn = document.querySelector("#importDataBtn");
@@ -793,7 +792,6 @@ function render() {
   renderContactSelect();
   renderArchivesPanel();
   renderCompromisesPanel();
-  renderBoardHistoryPanel();
 }
 
 function isDetailPanelBusy() {
@@ -1396,11 +1394,6 @@ function renderGlobalHistoryItems(targetList = globalHistoryList) {
 
 function renderGlobalHistoryPanel() {
   renderGlobalHistoryItems(globalHistoryList);
-}
-
-function renderBoardHistoryPanel() {
-  if (!boardHistoryList) return;
-  renderGlobalHistoryItems(boardHistoryList);
 }
 
 function openGlobalHistoryPanel() {
