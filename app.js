@@ -8,7 +8,9 @@ const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const appActivityLogStorageKey = "cles-global-activity-v1";
 const deviceNameStorageKey = "cles-device-name-v1";
-const photoOptimizationStorageKey = "cles-photo-optimization-900-v1";
+const photoMaxSize = 750;
+const photoJpegQuality = 0.5;
+const photoOptimizationStorageKey = "cles-photo-optimization-750-v1";
 const registryConfig = {
   location: {
     title: "CENTURY 21 LES MINIMES\nCL\u00c9S LOCATION",
@@ -2068,8 +2070,7 @@ function compressPhotoFile(file) {
       const image = new Image();
       image.addEventListener("error", () => reject(new Error("Photo illisible.")));
       image.addEventListener("load", () => {
-        const maxSize = 900;
-        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+        const scale = Math.min(1, photoMaxSize / Math.max(image.width, image.height));
         const width = Math.max(1, Math.round(image.width * scale));
         const height = Math.max(1, Math.round(image.height * scale));
         const canvas = document.createElement("canvas");
@@ -2079,7 +2080,7 @@ function compressPhotoFile(file) {
         context.fillStyle = "#ffffff";
         context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.62));
+        resolve(canvas.toDataURL("image/jpeg", photoJpegQuality));
       });
       image.src = reader.result;
     });
@@ -2097,8 +2098,7 @@ function compressPhotoDataUrl(photo) {
     const image = new Image();
     image.addEventListener("error", () => resolve(photo));
     image.addEventListener("load", () => {
-      const maxSize = 900;
-      const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+      const scale = Math.min(1, photoMaxSize / Math.max(image.width, image.height));
       const width = Math.max(1, Math.round(image.width * scale));
       const height = Math.max(1, Math.round(image.height * scale));
       const canvas = document.createElement("canvas");
@@ -2108,7 +2108,7 @@ function compressPhotoDataUrl(photo) {
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, width, height);
       context.drawImage(image, 0, 0, width, height);
-      resolve(canvas.toDataURL("image/jpeg", 0.62));
+      resolve(canvas.toDataURL("image/jpeg", photoJpegQuality));
     });
     image.src = photo;
   });
