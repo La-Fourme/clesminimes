@@ -572,12 +572,16 @@ function formatCity(value) {
   });
 }
 
+function formatLastName(value) {
+  return String(value || "").trim().toLocaleUpperCase("fr-FR");
+}
+
 function getContactDisplayName(contact) {
   if (contact.type === "external") {
-    return [contact.firstName, contact.name, contact.companyName].filter(Boolean).join(" ");
+    return [contact.firstName, formatLastName(contact.name), contact.companyName].filter(Boolean).join(" ");
   }
 
-  return [contact.firstName, contact.name ? contact.name.toLocaleUpperCase("fr-FR") : ""].filter(Boolean).join(" ");
+  return [contact.firstName, formatLastName(contact.name)].filter(Boolean).join(" ");
 }
 
 function contactTypeText(type) {
@@ -594,7 +598,7 @@ function normalizeContact(contact) {
   return {
     id: contact.id || createContactId(),
     firstName: (contact.firstName || "").trim(),
-    name: type === "external" && !contact.companyName ? "" : (contact.name || "").trim(),
+    name: type === "external" && !contact.companyName ? "" : formatLastName(contact.name),
     companyName: type === "external" ? (contact.companyName || contact.name || "").trim() : "",
     phone: formatPhoneNumber(contact.phone),
     type,
@@ -2651,6 +2655,9 @@ closeContactsBtn.addEventListener("click", () => {
 contactPhoneInput.addEventListener("input", () => {
   contactPhoneInput.value = formatPhoneNumber(contactPhoneInput.value);
 });
+contactNameInput.addEventListener("input", () => {
+  contactNameInput.value = formatLastName(contactNameInput.value);
+});
 contactsList.addEventListener("dragstart", (event) => {
   const item = event.target.closest("[data-contact-id]");
   if (!item) return;
@@ -2751,7 +2758,7 @@ contactTabs.forEach((tab) => {
 contactForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
-  const name = contactNameInput.value.trim();
+  const name = formatLastName(contactNameInput.value);
   const firstName = contactFirstNameInput.value.trim();
   const companyName = activeContactType === "external" ? contactCompanyInput.value.trim() : "";
   const phone = formatPhoneNumber(contactPhoneInput.value);
