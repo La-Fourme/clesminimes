@@ -632,7 +632,7 @@ function getContactSelectName(contact) {
 
 function getMovementContactName(contact) {
   if (contact.type === "external") {
-    return [contact.companyName || contact.name, contact.firstName].filter(Boolean).join(" ");
+    return [contact.companyName || contact.name, contact.firstName].filter(Boolean).join(" - ");
   }
 
   return getContactDisplayName(contact);
