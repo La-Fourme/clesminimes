@@ -116,6 +116,7 @@ let archives = loadArchives();
 let contacts = loadContacts();
 let selectedId = null;
 let selectedSetId = "main";
+let selectedArchiveRecord = null;
 let draggedKeyId = null;
 let activeContactType = "internal";
 let isSigning = false;
@@ -385,6 +386,7 @@ function switchRegistry() {
   archives = loadArchives();
   contacts = loadContacts();
   selectedId = null;
+  selectedArchiveRecord = null;
   selectedSetId = "main";
   hoveredKeyId = null;
   isDetailPanelHovered = false;
@@ -630,6 +632,12 @@ function saveContacts() {
 }
 
 function getSelectedKey() {
+  if (selectedArchiveRecord) {
+    return {
+      ...normalizeKey(selectedArchiveRecord.key),
+      archived: true,
+    };
+  }
   return keys.find((key) => key.id === selectedId);
 }
 
@@ -762,6 +770,7 @@ function deleteKeyWithoutArchive(keyId) {
   keys = keys.map((savedKey) => (savedKey.id === keyId ? makeEmptyKey(savedKey) : savedKey));
   if (selectedId === keyId) {
     selectedId = null;
+    selectedArchiveRecord = null;
     selectedSetId = "main";
     clearSignature();
   }
@@ -808,6 +817,7 @@ function scheduleDetailPanelClose() {
     }
 
     selectedId = null;
+    selectedArchiveRecord = null;
     clearSignature();
     render();
   }, 1000);
@@ -1603,6 +1613,15 @@ async function editCompromiseDate(recordId) {
   renderCompromisesPanel();
 }
 
+function openArchivedKeyRecord(record) {
+  selectedArchiveRecord = record;
+  selectedId = `archive-${record.id}`;
+  selectedSetId = record.key.sets?.[0]?.id || "main";
+  clearTimeout(detailCloseTimer);
+  compromisesPanel.hidden = true;
+  render();
+}
+
 function renderArchiveList(list, reason, emptyText, options = {}) {
   const archivedRecords = archives
     .filter((record) => record.reason === reason)
@@ -1684,11 +1703,15 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     actions.append(restoreButton);
     item.append(details, actions);
     if (options.showCompromiseDetails) {
-      item.title = "Ctrl + clic pour modifier la date du compromis";
+      item.classList.add("is-clickable");
+      item.title = "Cliquer pour consulter la fiche. Ctrl + clic pour modifier la date du compromis";
       item.addEventListener("click", (event) => {
-        if (!event.ctrlKey) return;
         event.preventDefault();
-        editCompromiseDate(record.id);
+        if (event.ctrlKey) {
+          editCompromiseDate(record.id);
+          return;
+        }
+        openArchivedKeyRecord(record);
       });
     }
 
@@ -1876,6 +1899,7 @@ function renderGrid() {
         }
 
         button.addEventListener("click", () => {
+          selectedArchiveRecord = null;
           selectedId = key.id;
           selectedSetId = key.sets[0]?.id || "main";
           render();
@@ -2254,6 +2278,7 @@ function renderPanel() {
   reservedBtn.disabled = key.archived;
   rentedBtn.disabled = key.archived;
   removedBtn.disabled = key.archived;
+  deleteSelectedKeyBtn.disabled = key.archived;
 
   historyList.innerHTML = "";
   if (!selectedSet.history.length) {
@@ -2293,6 +2318,7 @@ function renderPanel() {
 }
 
 function updateSelectedKey(changes) {
+  if (selectedArchiveRecord) return;
   const previousKey = getSelectedKey();
   const wasFilled = previousKey ? isKeyFilled(previousKey) : false;
   rememberUndoStep();
@@ -2371,6 +2397,7 @@ function addMovement(type) {
   contactSelect.value = "";
   clearSignature();
   selectedId = null;
+  selectedArchiveRecord = null;
   selectedSetId = "main";
   render();
 }
@@ -2519,6 +2546,7 @@ async function archiveSelectedKey(reason) {
   ];
   keys = keys.map((savedKey) => (savedKey.id === key.id ? makeEmptyKey(savedKey) : savedKey));
   selectedId = null;
+  selectedArchiveRecord = null;
   selectedSetId = "main";
   logActivity(actionLabel, keyLabel(key), [key.owner, key.property, compromiseSignedAt ? `Signature : ${formatDateOnly(compromiseSignedAt)}` : ""].filter(Boolean).join(" - "));
   saveArchives();
@@ -2859,6 +2887,7 @@ backupFileInput.addEventListener("change", () => {
 closePanelBtn.addEventListener("click", () => {
   clearTimeout(detailCloseTimer);
   selectedId = null;
+  selectedArchiveRecord = null;
   render();
 });
 document.addEventListener("pointerdown", (event) => {
@@ -2870,6 +2899,7 @@ document.addEventListener("pointerdown", (event) => {
 
   clearTimeout(detailCloseTimer);
   selectedId = null;
+  selectedArchiveRecord = null;
   clearSignature();
   render();
 });
@@ -2886,11 +2916,11 @@ detailPanel.addEventListener("mouseleave", () => {
 exportKeyCsvBtn.addEventListener("click", () => {
   const key = getSelectedKey();
   if (!key) return;
-  exportKeyCsv(key);
+  exportKeyCsv(key, selectedArchiveRecord);
 });
 deleteSelectedKeyBtn.addEventListener("click", () => {
   const key = getSelectedKey();
-  if (!key) return;
+  if (!key || key.archived) return;
   deleteKeyWithoutArchive(key.id);
 });
 keySetPhotoList.addEventListener("change", (event) => {
