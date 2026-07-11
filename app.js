@@ -1274,15 +1274,16 @@ function parseStoredArray(storageKey, fallback = []) {
 
 function parseHistoryTimestamp(value) {
   if (!value) return 0;
+
+  const match = String(value).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[,\s]+(\d{1,2}):(\d{2}))?/);
+  if (match) {
+    const [, day, month, year, hour = "0", minute = "0"] = match;
+    const fullYear = year.length === 2 ? `20${year}` : year;
+    return new Date(Number(fullYear), Number(month) - 1, Number(day), Number(hour), Number(minute)).getTime();
+  }
+
   const isoTime = Date.parse(value);
-  if (!Number.isNaN(isoTime)) return isoTime;
-
-  const match = String(value).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?/);
-  if (!match) return 0;
-
-  const [, day, month, year, hour = "0", minute = "0"] = match;
-  const fullYear = year.length === 2 ? `20${year}` : year;
-  return new Date(Number(fullYear), Number(month) - 1, Number(day), Number(hour), Number(minute)).getTime();
+  return Number.isNaN(isoTime) ? 0 : isoTime;
 }
 
 function getRegistryHistoryEntries(registry) {
@@ -1354,9 +1355,9 @@ function renderGlobalHistoryItems(targetList = globalHistoryList) {
     details: entry.details || "",
     device: entry.device || "Appareil non renseigné",
   }));
-  const entries = [...activityEntries, ...["location", "transaction"].flatMap(getRegistryHistoryEntries)].sort(
-    (first, second) => second.timestamp - first.timestamp,
-  );
+  const entries = [...activityEntries, ...["location", "transaction"].flatMap(getRegistryHistoryEntries)]
+    .map((entry, index) => ({ ...entry, orderIndex: index }))
+    .sort((first, second) => second.timestamp - first.timestamp || first.orderIndex - second.orderIndex);
 
   targetList.innerHTML = "";
   if (!entries.length) {
