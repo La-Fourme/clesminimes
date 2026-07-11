@@ -2161,4 +2161,14 @@ body.is-moving-key .photo-hover {
     padding-top: 0;
     padding-bottom: 0;
   }
+
+  .key-tile-shell {
+    height: 170px !important;
+    min-height: 170px !important;
+  }
+
+  .key-tile {
+    height: 100% !important;
+    min-height: 100% !important;
+  }
 }

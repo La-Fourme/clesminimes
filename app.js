@@ -1941,6 +1941,7 @@ function renderGrid() {
         tileViewMode === "photo" &&
         isTouchLayout() &&
         (isTouchLandscape || pairedKeys.some((pairedKey) => isKeyFilled(pairedKey)));
+      const photoTileHeight = isTouchLandscape ? "170px" : "300px";
 
       const tileShell = document.createElement("span");
       const button = document.createElement("button");
@@ -1957,8 +1958,8 @@ function renderGrid() {
       }${shouldShowPhotoTile ? " photo-view" : ""}${key.id === selectedId ? " is-selected" : ""}`;
       button.title = `${keyLabel(key)} - ${statusText(key)}`;
       if (shouldMatchPhotoRowHeight) {
-        tileShell.style.height = "300px";
-        tileShell.style.minHeight = "300px";
+        tileShell.style.height = photoTileHeight;
+        tileShell.style.minHeight = photoTileHeight;
         button.style.height = "100%";
         button.style.minHeight = "100%";
       }
