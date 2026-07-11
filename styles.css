@@ -449,7 +449,7 @@ h3 {
 .view-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  min-width: 352px;
+  min-width: 317px;
   min-height: 42px;
   padding: 3px;
   border: 2px solid var(--line);
@@ -473,9 +473,9 @@ h3 {
 }
 
 .view-text-icon {
-  width: 21px;
-  height: 21px;
-  padding: 3px;
+  width: 18px;
+  height: 18px;
+  padding: 1px;
   border: 1.8px solid currentColor;
   border-radius: 4px;
   fill: none;
