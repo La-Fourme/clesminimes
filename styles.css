@@ -2108,3 +2108,10 @@ body.is-moving-key .photo-hover {
     min-height: 86px;
   }
 }
+
+@media (max-width: 520px) {
+  .key-grid[data-view-mode="photo"] .key-tile {
+    height: 260px;
+    min-height: 260px;
+  }
+}
