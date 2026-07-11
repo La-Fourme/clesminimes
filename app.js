@@ -8,9 +8,9 @@ const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const appActivityLogStorageKey = "cles-global-activity-v1";
 const deviceNameStorageKey = "cles-device-name-v1";
-const photoMaxSize = 560;
-const photoJpegQuality = 0.36;
-const photoOptimizationStorageKey = "cles-photo-optimization-560-v1";
+const photoMaxSize = 650;
+const photoJpegQuality = 0.45;
+const photoOptimizationStorageKey = "cles-photo-optimization-650-v1";
 const registryConfig = {
   location: {
     title: "CENTURY 21 LES MINIMES\nCL\u00c9S LOCATION",
