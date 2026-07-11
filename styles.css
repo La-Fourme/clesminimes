@@ -925,6 +925,11 @@ body.is-moving-key .photo-hover {
   gap: 14px;
 }
 
+.contacts-panel {
+  width: min(468px, 100vw);
+  max-width: 100vw;
+}
+
 .contacts-panel > * {
   min-width: 0;
 }

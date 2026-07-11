@@ -94,6 +94,8 @@ const contactFirstNameLabel = document.querySelector("#contactFirstNameLabel");
 const contactFirstNameInput = document.querySelector("#contactFirstNameInput");
 const contactNameLabel = document.querySelector("#contactNameLabel");
 const contactNameInput = document.querySelector("#contactNameInput");
+const contactCompanyLabel = document.querySelector("#contactCompanyLabel");
+const contactCompanyInput = document.querySelector("#contactCompanyInput");
 const contactPhoneInput = document.querySelector("#contactPhoneInput");
 const addContactBtn = document.querySelector("#addContactBtn");
 const contactsList = document.querySelector("#contactsList");
@@ -571,7 +573,11 @@ function formatCity(value) {
 }
 
 function getContactDisplayName(contact) {
-  return [contact.firstName, contact.name].filter(Boolean).join(" - ");
+  if (contact.type === "external") {
+    return [contact.firstName, contact.name, contact.companyName].filter(Boolean).join(" ");
+  }
+
+  return [contact.firstName, contact.name ? contact.name.toLocaleUpperCase("fr-FR") : ""].filter(Boolean).join(" ");
 }
 
 function contactTypeText(type) {
@@ -579,7 +585,7 @@ function contactTypeText(type) {
 }
 
 function getContactSelectName(contact) {
-  return contact.type === "external" ? contact.name : getContactDisplayName(contact);
+  return contact.type === "external" ? contact.companyName || contact.name : getContactDisplayName(contact);
 }
 
 function normalizeContact(contact) {
@@ -588,7 +594,8 @@ function normalizeContact(contact) {
   return {
     id: contact.id || createContactId(),
     firstName: (contact.firstName || "").trim(),
-    name: (contact.name || "").trim(),
+    name: type === "external" && !contact.companyName ? "" : (contact.name || "").trim(),
+    companyName: type === "external" ? (contact.companyName || contact.name || "").trim() : "",
     phone: formatPhoneNumber(contact.phone),
     type,
   };
@@ -600,7 +607,9 @@ function loadContacts() {
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed.map(normalizeContact).filter((contact) => contact.name) : [];
+    return Array.isArray(parsed)
+      ? parsed.map(normalizeContact).filter((contact) => contact.name || contact.companyName)
+      : [];
   } catch {
     return [];
   }
@@ -870,6 +879,7 @@ function renderContactsPanel() {
         activeContactType = contact.type;
         contactFirstNameInput.value = contact.firstName || "";
         contactNameInput.value = contact.name;
+        contactCompanyInput.value = contact.companyName || "";
         contactPhoneInput.value = contact.phone;
         updateContactFormMode();
         renderContactsPanel();
@@ -926,9 +936,11 @@ function updateContactFormMode() {
   const isExternal = activeContactType === "external";
   contactFirstNameLabel.hidden = false;
   contactFirstNameLabel.firstChild.textContent = "Pr\u00e9nom de l'intervenant\n            ";
-  contactNameLabel.firstChild.textContent = isExternal ? "Nom de famille / Nom de la soci\u00e9t\u00e9\n            " : "Nom de l'intervenant\n            ";
+  contactNameLabel.firstChild.textContent = isExternal ? "Nom de famille\n            " : "Nom de l'intervenant\n            ";
+  contactCompanyLabel.hidden = !isExternal;
   contactFirstNameInput.placeholder = "Pr\u00e9nom de l'intervenant";
-  contactNameInput.placeholder = isExternal ? "Nom de famille / Nom de la soci\u00e9t\u00e9" : "Nom de l'intervenant";
+  contactNameInput.placeholder = isExternal ? "Nom de famille" : "Nom de l'intervenant";
+  contactCompanyInput.placeholder = "Nom de soci\u00e9t\u00e9";
   addContactBtn.textContent = editingContactId ? "Enregistrer" : "Ajouter";
 }
 
@@ -2633,7 +2645,6 @@ contactSelect.addEventListener("change", () => {
 });
 contactsTabBtn.addEventListener("click", openContactsPanel);
 contactsPanel.addEventListener("mouseenter", () => clearTimeout(contactsCloseTimer));
-contactsPanel.addEventListener("mouseleave", scheduleCloseContactsPanel);
 closeContactsBtn.addEventListener("click", () => {
   contactsPanel.hidden = true;
 });
@@ -2742,8 +2753,9 @@ contactForm.addEventListener("submit", (event) => {
 
   const name = contactNameInput.value.trim();
   const firstName = contactFirstNameInput.value.trim();
+  const companyName = activeContactType === "external" ? contactCompanyInput.value.trim() : "";
   const phone = formatPhoneNumber(contactPhoneInput.value);
-  if (!name) return;
+  if (!name && !companyName) return;
 
   rememberUndoStep();
   if (editingContactId) {
@@ -2752,6 +2764,7 @@ contactForm.addEventListener("submit", (event) => {
       ...(previousContact || {}),
       firstName,
       name,
+      companyName,
       phone,
       type: activeContactType,
     };
@@ -2770,6 +2783,7 @@ contactForm.addEventListener("submit", (event) => {
       id: createContactId(),
       firstName,
       name,
+      companyName,
       phone,
       type: activeContactType,
     };
