@@ -2329,6 +2329,7 @@ function renderPanel() {
   ownerInput.value = formatOwner(key.owner);
   notesInput.value = key.notes;
   const canMoveSelectedKey = !key.archived || Boolean(selectedArchiveRecord);
+  checkinBtn.textContent = selectedSet.status === "out" || selectedSet.status === "reserved" ? "Rentr\u00e9e" : "Entr\u00e9e";
   checkoutBtn.disabled = !canMoveSelectedKey;
   checkinBtn.disabled = !canMoveSelectedKey;
   reservedBtn.disabled = !canMoveSelectedKey;
