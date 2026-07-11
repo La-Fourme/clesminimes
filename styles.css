@@ -1420,9 +1420,8 @@ body.is-moving-key .photo-hover {
 }
 
 .close-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   width: 32px;
   height: 32px;
   padding: 0;
@@ -1430,7 +1429,7 @@ body.is-moving-key .photo-hover {
   color: var(--ink);
   background: #eef1ef;
   font-size: 24px;
-  line-height: 0;
+  line-height: 1;
   text-align: center;
 }
 
@@ -2181,7 +2180,7 @@ body.is-moving-key .photo-hover {
   }
 
   .key-grid[data-view-mode="photo"] .key-tile.photo-view {
-    padding: 2px 2px 9px;
+    padding: 2px 4px 9px;
   }
 
   .key-grid[data-view-mode="photo"] .key-photo-content {
