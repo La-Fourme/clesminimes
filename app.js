@@ -888,6 +888,14 @@ function isTouchLayout() {
   return window.matchMedia("(max-width: 1040px), (pointer: coarse)").matches;
 }
 
+function isTouchDevice() {
+  return window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+}
+
+function isLandscapeLayout() {
+  return window.innerWidth > window.innerHeight || window.matchMedia("(orientation: landscape)").matches;
+}
+
 function scheduleDetailPanelClose() {
   clearTimeout(detailCloseTimer);
   if (isTouchLayout()) return;
@@ -1931,18 +1939,10 @@ function renderGrid() {
       .filter((key) => key.category === category)
       .filter(matchesFilter);
 
-    const isTouchLandscape = isTouchLayout() && window.matchMedia("(orientation: landscape)").matches;
-    const touchColumnCount = isTouchLandscape ? visibleKeys.length || 10 : 2;
+    const shouldForceTouchPhotoHeight = tileViewMode === "photo" && isTouchDevice();
+    const photoTileHeight = isLandscapeLayout() ? "170px" : "300px";
 
-    visibleKeys.forEach((key, index) => {
-      const rowStartIndex = Math.floor(index / touchColumnCount) * touchColumnCount;
-      const pairedKeys = visibleKeys.slice(rowStartIndex, rowStartIndex + touchColumnCount);
-      const shouldMatchPhotoRowHeight =
-        tileViewMode === "photo" &&
-        isTouchLayout() &&
-        (isTouchLandscape || pairedKeys.some((pairedKey) => isKeyFilled(pairedKey)));
-      const photoTileHeight = isTouchLandscape ? "170px" : "300px";
-
+    visibleKeys.forEach((key) => {
       const tileShell = document.createElement("span");
       const button = document.createElement("button");
       const ownerName = formatOwner(key.owner);
@@ -1957,7 +1957,7 @@ function renderGrid() {
         shouldShowSetStrip ? " has-set-strip" : ""
       }${shouldShowPhotoTile ? " photo-view" : ""}${key.id === selectedId ? " is-selected" : ""}`;
       button.title = `${keyLabel(key)} - ${statusText(key)}`;
-      if (shouldMatchPhotoRowHeight) {
+      if (shouldForceTouchPhotoHeight) {
         tileShell.style.setProperty("height", photoTileHeight, "important");
         tileShell.style.setProperty("min-height", photoTileHeight, "important");
         button.style.setProperty("height", "100%", "important");
