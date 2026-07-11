@@ -688,6 +688,13 @@ function getTileStatus(key) {
   return isKeyFilled(key) ? "available" : "empty";
 }
 
+function getCompromiseMovementStatus(record) {
+  const sets = record?.key?.sets || [];
+  if (sets.some((set) => set.status === "out")) return "out";
+  if (sets.some((set) => set.status === "reserved")) return "reserved";
+  return "";
+}
+
 function statusText(key) {
   if (key.archived) return "Archivée";
   const outCount = key.sets.filter((set) => set.status === "out").length;
@@ -1663,6 +1670,10 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
           ? "Acte authentique"
           : getRegistryConfig().rentedArchiveText;
     item.dataset.historyAction = getActionClass(archiveAction);
+    if (options.showCompromiseDetails) {
+      const movementStatus = getCompromiseMovementStatus(record);
+      if (movementStatus) item.dataset.movementStatus = movementStatus;
+    }
 
     title.textContent = `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`;
     if (options.showCompromiseDetails) {
@@ -1745,6 +1756,13 @@ function renderCompromisesPanel() {
     sortByCompromiseDate: true,
     hideExport: true,
   });
+  const compromisedRecords = archives.filter((record) => record.reason === "rented");
+  const tabStatus = compromisedRecords.some((record) => getCompromiseMovementStatus(record) === "out")
+    ? "out"
+    : compromisedRecords.some((record) => getCompromiseMovementStatus(record) === "reserved")
+      ? "reserved"
+      : "";
+  compromisesTabBtn.dataset.movementStatus = tabStatus;
 }
 
 function findRestoreSlot(archivedKey) {
@@ -2273,9 +2291,10 @@ function renderPanel() {
   cityInput.value = key.city || "";
   ownerInput.value = formatOwner(key.owner);
   notesInput.value = key.notes;
-  checkoutBtn.disabled = key.archived;
-  checkinBtn.disabled = key.archived;
-  reservedBtn.disabled = key.archived;
+  const canMoveSelectedKey = !key.archived || Boolean(selectedArchiveRecord);
+  checkoutBtn.disabled = !canMoveSelectedKey;
+  checkinBtn.disabled = !canMoveSelectedKey;
+  reservedBtn.disabled = !canMoveSelectedKey;
   rentedBtn.disabled = key.archived;
   removedBtn.disabled = key.archived;
   deleteSelectedKeyBtn.disabled = key.archived;
@@ -2336,6 +2355,20 @@ function updateSelectedSet(changes) {
   if (!key) return;
 
   const sets = key.sets.map((set) => (set.id === selectedSetId ? { ...set, ...changes } : set));
+  if (selectedArchiveRecord) {
+    const nextArchiveRecord = {
+      ...selectedArchiveRecord,
+      key: {
+        ...selectedArchiveRecord.key,
+        sets,
+      },
+    };
+    selectedArchiveRecord = nextArchiveRecord;
+    archives = archives.map((archive) => (archive.id === nextArchiveRecord.id ? nextArchiveRecord : archive));
+    saveArchives();
+    render();
+    return;
+  }
   updateSelectedKey({ sets });
 }
 
@@ -2370,7 +2403,7 @@ function setKeySetCount(count) {
 function addMovement(type) {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
-  if (!key || !selectedSet || key.archived) return;
+  if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
 
   const entry = {
     type,
@@ -2396,16 +2429,20 @@ function addMovement(type) {
   movementNoteInput.value = "";
   contactSelect.value = "";
   clearSignature();
-  selectedId = null;
-  selectedArchiveRecord = null;
-  selectedSetId = "main";
-  render();
+  if (selectedArchiveRecord) {
+    renderCompromisesPanel();
+  } else {
+    selectedId = null;
+    selectedArchiveRecord = null;
+    selectedSetId = "main";
+    render();
+  }
 }
 
 async function reserveSelectedSet() {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
-  if (!key || !selectedSet || key.archived) return;
+  if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
   clearTimeout(detailCloseTimer);
 
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
@@ -2449,6 +2486,7 @@ async function reserveSelectedSet() {
   movementNoteInput.value = "";
   contactSelect.value = "";
   clearSignature();
+  if (selectedArchiveRecord) renderCompromisesPanel();
 }
 
 function promptReservationDateTime() {

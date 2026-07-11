@@ -394,6 +394,18 @@ h3 {
   font-weight: 800;
 }
 
+.compromise-tab-button[data-movement-status="out"] {
+  border-color: #ce6a60;
+  color: var(--ink);
+  background: #f2cec8;
+}
+
+.compromise-tab-button[data-movement-status="reserved"] {
+  border-color: #d18427;
+  color: var(--ink);
+  background: #f8d19a;
+}
+
 .tab-icon {
   flex: 0 0 auto;
   width: 24px;
@@ -1126,6 +1138,16 @@ body.is-moving-key .photo-hover {
 .archive-list li[data-history-action="removed"] {
   border-color: #6b7275;
   background: #e5e7e6;
+}
+
+.archive-list li[data-movement-status="out"] {
+  border-color: #ce6a60;
+  background: #f2cec8;
+}
+
+.archive-list li[data-movement-status="reserved"] {
+  border-color: #d18427;
+  background: #f8d19a;
 }
 
 .global-history-list strong {
