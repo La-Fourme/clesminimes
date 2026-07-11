@@ -431,18 +431,46 @@ h3 {
 
 .filters {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   column-gap: 6px;
   margin: 20px 0 18px;
   align-items: end;
 }
 
+.view-filter-action,
 .filter-action {
   display: grid;
   gap: 7px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
+}
+
+.view-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-width: 160px;
+  min-height: 38px;
+  padding: 3px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: #d8dcd8;
+}
+
+.view-toggle button {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  color: #30383b;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.view-toggle button.is-active {
+  color: #f4f7f5;
+  background: var(--blue);
 }
 
 .undo-filter-action {
@@ -771,6 +799,35 @@ body.is-moving-key .photo-hover {
 
 .key-tile.has-set-strip {
   padding-bottom: 22px;
+}
+
+.key-tile.photo-view {
+  place-items: stretch;
+  padding: 6px 6px 22px;
+}
+
+.key-photo-content {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.36);
+}
+
+.key-photo-content img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.key-photo-content.is-empty {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .key-set-strip {
@@ -1963,6 +2020,8 @@ body.is-moving-key .photo-hover {
 
   .filter-action,
   .undo-filter-action,
+  .view-filter-action,
+  .view-toggle,
   .contacts-filter-button {
     width: 100%;
   }

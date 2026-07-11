@@ -8,6 +8,7 @@ const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const appActivityLogStorageKey = "cles-global-activity-v1";
 const deviceNameStorageKey = "cles-device-name-v1";
+const tileViewStorageKey = "cles-tile-view-mode-v1";
 const photoMaxSize = 650;
 const photoJpegQuality = 0.45;
 const photoOptimizationStorageKey = "cles-photo-optimization-650-v1";
@@ -72,6 +73,8 @@ const signatureCanvas = document.querySelector("#signatureCanvas");
 const clearSignatureBtn = document.querySelector("#clearSignatureBtn");
 const historyList = document.querySelector("#historyList");
 const searchInput = document.querySelector("#searchInput");
+const textViewBtn = document.querySelector("#textViewBtn");
+const photoViewBtn = document.querySelector("#photoViewBtn");
 const statusFilter = document.querySelector("#statusFilter");
 const closePanelBtn = document.querySelector("#closePanelBtn");
 const saleCelebration = document.querySelector("#saleCelebration");
@@ -134,6 +137,7 @@ let hoveredKeyId = null;
 let isDetailPanelHovered = false;
 let isPhotoImporting = false;
 let undoSnapshot = null;
+let tileViewMode = loadTileViewMode();
 let saleCelebrationTimer = null;
 const celebrationAudioFiles = ["Ados.mp3", "Adultes.mp3", "Langue.mp3"];
 let celebrationAudioPlayers = [];
@@ -144,6 +148,25 @@ let isApplyingCloudState = false;
 
 function markLocalEdit() {
   if (!isApplyingCloudState) lastLocalEditAt = Date.now();
+}
+
+function loadTileViewMode() {
+  return localStorage.getItem(tileViewStorageKey) === "photo" ? "photo" : "text";
+}
+
+function setTileViewMode(mode) {
+  tileViewMode = mode === "photo" ? "photo" : "text";
+  localStorage.setItem(tileViewStorageKey, tileViewMode);
+  updateTileViewToggle();
+  renderGrid();
+}
+
+function updateTileViewToggle() {
+  textViewBtn.classList.toggle("is-active", tileViewMode === "text");
+  photoViewBtn.classList.toggle("is-active", tileViewMode === "photo");
+  textViewBtn.setAttribute("aria-pressed", String(tileViewMode === "text"));
+  photoViewBtn.setAttribute("aria-pressed", String(tileViewMode === "photo"));
+  grid.dataset.viewMode = tileViewMode;
 }
 
 function getDeviceName() {
@@ -1903,15 +1926,29 @@ function renderGrid() {
         const ownerName = formatOwner(key.owner);
         const hasTileDetails = Boolean(ownerName && key.property?.trim());
         const shouldShowSetStrip = isKeyFilled(key);
+        const mainPhoto = key.sets[0]?.photo || "";
+        const shouldShowPhotoTile = tileViewMode === "photo" && shouldShowSetStrip;
         tileShell.className = "key-tile-shell";
         button.type = "button";
         button.draggable = shouldShowSetStrip;
         button.className = `key-tile ${getTileStatus(key)}${hasTileDetails ? " has-details" : ""}${
           shouldShowSetStrip ? " has-set-strip" : ""
-        }${key.id === selectedId ? " is-selected" : ""}`;
+        }${shouldShowPhotoTile ? " photo-view" : ""}${key.id === selectedId ? " is-selected" : ""}`;
         button.title = `${keyLabel(key)} - ${statusText(key)}`;
 
-        if (hasTileDetails) {
+        if (shouldShowPhotoTile) {
+          const photoContent = document.createElement("span");
+          photoContent.className = `key-photo-content${mainPhoto ? "" : " is-empty"}`;
+          if (mainPhoto) {
+            const photoImage = document.createElement("img");
+            photoImage.src = mainPhoto;
+            photoImage.alt = `Photo du jeu principal de ${keyLabel(key)}`;
+            photoContent.append(photoImage);
+          } else {
+            photoContent.textContent = "Aucune photo";
+          }
+          button.append(photoContent);
+        } else if (hasTileDetails) {
           const details = document.createElement("span");
           const heading = document.createElement("span");
           const number = document.createElement("span");
@@ -1940,7 +1977,7 @@ function renderGrid() {
         }
 
         const previewSet = key.sets.find((set) => set.photo);
-        if (previewSet?.photo) {
+        if (previewSet?.photo && !shouldShowPhotoTile) {
           const preview = document.createElement("span");
           const previewImage = document.createElement("img");
           button.classList.add("has-photo");
@@ -2999,6 +3036,8 @@ signatureCanvas.addEventListener("pointermove", drawSignature);
 signatureCanvas.addEventListener("pointerup", stopSignature);
 signatureCanvas.addEventListener("pointercancel", stopSignature);
 searchInput.addEventListener("input", render);
+textViewBtn.addEventListener("click", () => setTileViewMode("text"));
+photoViewBtn.addEventListener("click", () => setTileViewMode("photo"));
 statusFilter?.addEventListener("change", render);
 undoBtn.addEventListener("click", undoPreviousStep);
 historyDataBtn.addEventListener("click", openGlobalHistoryPanel);
@@ -3100,6 +3139,7 @@ async function initializeApp() {
   await loadStorageFromCloud();
   await optimizeStoredPhotos();
   updateRegistryHeader();
+  updateTileViewToggle();
   updateUndoButton();
   render();
   setInterval(async () => {
