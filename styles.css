@@ -838,14 +838,7 @@ body.is-moving-key .photo-hover {
 
 .key-tile.photo-view {
   place-items: stretch;
-  height: 210px !important;
-  min-height: 210px !important;
   padding: 6px 6px 22px;
-}
-
-.key-tile-shell.photo-view-shell {
-  height: 210px !important;
-  min-height: 210px !important;
 }
 
 .key-tile-shell.photo-view-shell .key-tile.photo-view {
@@ -2099,18 +2092,6 @@ body.is-moving-key .photo-hover {
 
   .key-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .key-tile-shell.photo-view-shell {
-    height: 300px !important;
-    min-height: 300px !important;
-  }
-
-  .key-tile.photo-view,
-  .key-grid[data-view-mode="photo"] .key-tile.photo-view,
-  .key-tile-shell.photo-view-shell .key-tile.photo-view {
-    height: 100% !important;
-    min-height: 100% !important;
   }
 
   .key-grid[data-view-mode="photo"] .category-title {

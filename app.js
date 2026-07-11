@@ -1939,8 +1939,8 @@ function renderGrid() {
       .filter((key) => key.category === category)
       .filter(matchesFilter);
 
-    const shouldForceTouchPhotoHeight = tileViewMode === "photo" && isTouchDevice();
-    const photoTileHeight = isLandscapeLayout() ? "170px" : "300px";
+    const shouldForcePhotoHeight = tileViewMode === "photo";
+    const photoTileHeight = isLandscapeLayout() ? "170px" : isTouchDevice() ? "300px" : "210px";
 
     visibleKeys.forEach((key) => {
       const tileShell = document.createElement("span");
@@ -1957,7 +1957,7 @@ function renderGrid() {
         shouldShowSetStrip ? " has-set-strip" : ""
       }${shouldShowPhotoTile ? " photo-view" : ""}${key.id === selectedId ? " is-selected" : ""}`;
       button.title = `${keyLabel(key)} - ${statusText(key)}`;
-      if (shouldForceTouchPhotoHeight) {
+      if (shouldForcePhotoHeight) {
         tileShell.style.setProperty("height", photoTileHeight, "important");
         tileShell.style.setProperty("min-height", photoTileHeight, "important");
         button.style.setProperty("height", "100%", "important");
