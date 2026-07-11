@@ -1931,8 +1931,11 @@ function renderGrid() {
       .filter((key) => key.category === category)
       .filter(matchesFilter);
 
+    const touchColumnCount = window.matchMedia("(max-width: 720px)").matches ? 2 : 10;
+
     visibleKeys.forEach((key, index) => {
-      const pairedKeys = visibleKeys.slice(Math.floor(index / 2) * 2, Math.floor(index / 2) * 2 + 2);
+      const rowStartIndex = Math.floor(index / touchColumnCount) * touchColumnCount;
+      const pairedKeys = visibleKeys.slice(rowStartIndex, rowStartIndex + touchColumnCount);
       const shouldMatchPhotoRowHeight =
         tileViewMode === "photo" && isTouchLayout() && pairedKeys.some((pairedKey) => isKeyFilled(pairedKey));
 
