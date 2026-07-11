@@ -1931,13 +1931,16 @@ function renderGrid() {
       .filter((key) => key.category === category)
       .filter(matchesFilter);
 
-    const touchColumnCount = window.matchMedia("(orientation: landscape)").matches ? 10 : 2;
+    const isTouchLandscape = isTouchLayout() && window.matchMedia("(orientation: landscape)").matches;
+    const touchColumnCount = isTouchLandscape ? visibleKeys.length || 10 : 2;
 
     visibleKeys.forEach((key, index) => {
       const rowStartIndex = Math.floor(index / touchColumnCount) * touchColumnCount;
       const pairedKeys = visibleKeys.slice(rowStartIndex, rowStartIndex + touchColumnCount);
       const shouldMatchPhotoRowHeight =
-        tileViewMode === "photo" && isTouchLayout() && pairedKeys.some((pairedKey) => isKeyFilled(pairedKey));
+        tileViewMode === "photo" &&
+        isTouchLayout() &&
+        (isTouchLandscape || pairedKeys.some((pairedKey) => isKeyFilled(pairedKey)));
 
       const tileShell = document.createElement("span");
       const button = document.createElement("button");
