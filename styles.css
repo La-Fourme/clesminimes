@@ -1029,6 +1029,26 @@ body.is-moving-key .photo-hover {
   white-space: nowrap;
 }
 
+.contact-company,
+.contact-person {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-company {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.contact-person {
+  margin-top: 2px;
+  color: rgba(30, 37, 40, 0.72);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .contact-phone {
   display: block;
   margin-top: 1px;

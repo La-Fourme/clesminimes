@@ -875,7 +875,17 @@ function renderContactsPanel() {
       deleteButton.className = "contact-delete";
       deleteButton.type = "button";
 
-      name.textContent = getContactDisplayName(contact);
+      if (contact.type === "external") {
+        const company = document.createElement("span");
+        const person = document.createElement("span");
+        company.className = "contact-company";
+        person.className = "contact-person";
+        company.textContent = contact.companyName || "Soci\u00e9t\u00e9 non renseign\u00e9e";
+        person.textContent = [contact.firstName, formatLastName(contact.name)].filter(Boolean).join(" ");
+        name.append(company, person);
+      } else {
+        name.textContent = getContactDisplayName(contact);
+      }
       phone.textContent = contact.phone || "Téléphone non renseigné";
       editButton.textContent = "Modifier";
       editButton.addEventListener("click", () => {
