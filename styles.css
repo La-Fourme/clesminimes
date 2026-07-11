@@ -2180,7 +2180,7 @@ body.is-moving-key .photo-hover {
   }
 
   .key-grid[data-view-mode="photo"] .key-tile.photo-view {
-    padding: 4px 4px 13px;
+    padding: 4px 4px 17px;
   }
 
   .key-grid[data-view-mode="photo"] .key-photo-content {
