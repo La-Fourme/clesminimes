@@ -105,6 +105,7 @@ const historyDataBtn = document.querySelector("#historyDataBtn");
 const globalHistoryPanel = document.querySelector("#globalHistoryPanel");
 const closeGlobalHistoryBtn = document.querySelector("#closeGlobalHistoryBtn");
 const globalHistoryList = document.querySelector("#globalHistoryList");
+const boardHistoryList = document.querySelector("#boardHistoryList");
 const exportFilledDataBtn = document.querySelector("#exportFilledDataBtn");
 const backupDataBtn = document.querySelector("#backupDataBtn");
 const importDataBtn = document.querySelector("#importDataBtn");
@@ -792,6 +793,7 @@ function render() {
   renderContactSelect();
   renderArchivesPanel();
   renderCompromisesPanel();
+  renderBoardHistoryPanel();
 }
 
 function isDetailPanelBusy() {
@@ -1344,7 +1346,7 @@ function getActionClass(action) {
   return "neutral";
 }
 
-function renderGlobalHistoryPanel() {
+function renderGlobalHistoryItems(targetList = globalHistoryList) {
   const activityEntries = loadActivityLog().map((entry) => ({
     timestamp: parseHistoryTimestamp(entry.date),
     date: formatArchiveDate(entry.date),
@@ -1358,11 +1360,11 @@ function renderGlobalHistoryPanel() {
     (first, second) => second.timestamp - first.timestamp,
   );
 
-  globalHistoryList.innerHTML = "";
+  targetList.innerHTML = "";
   if (!entries.length) {
     const item = document.createElement("li");
     item.textContent = "Aucun historique enregistré.";
-    globalHistoryList.append(item);
+    targetList.append(item);
     return;
   }
 
@@ -1388,8 +1390,17 @@ function renderGlobalHistoryPanel() {
     item.append(title, meta, deviceButton);
     if (entry.details) item.append(details);
     item.append(device);
-    globalHistoryList.append(item);
+    targetList.append(item);
   });
+}
+
+function renderGlobalHistoryPanel() {
+  renderGlobalHistoryItems(globalHistoryList);
+}
+
+function renderBoardHistoryPanel() {
+  if (!boardHistoryList) return;
+  renderGlobalHistoryItems(boardHistoryList);
 }
 
 function openGlobalHistoryPanel() {
