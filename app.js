@@ -7,6 +7,7 @@ const supabaseClient = globalThis.supabase?.createClient(supabaseUrl, supabaseAn
 const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const appActivityLogStorageKey = "cles-global-activity-v1";
+const deviceNameStorageKey = "cles-device-name-v1";
 const photoOptimizationStorageKey = "cles-photo-optimization-900-v1";
 const registryConfig = {
   location: {
@@ -157,6 +158,37 @@ function getDeviceName() {
           ? "Safari"
           : "Navigateur";
   return [deviceType, platform, browser].filter(Boolean).join(" - ");
+}
+
+function getDetectedDeviceName() {
+  const userAgent = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+  const isIpad = /iPad/i.test(userAgent) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isIphone = /iPhone/i.test(userAgent);
+  const isAndroid = /Android/i.test(userAgent);
+  const isMac = /Mac/i.test(platform);
+  const isWindows = /Win/i.test(platform);
+
+  if (isIphone) return "iPhone";
+  if (isIpad) return "iPad";
+  if (isAndroid) return "Téléphone Android";
+  if (isMac) return "Mac";
+  if (isWindows) return "PC Windows";
+  return "Appareil";
+}
+
+function getDeviceName() {
+  const savedName = localStorage.getItem(deviceNameStorageKey);
+  if (savedName?.trim()) return savedName.trim();
+
+  const detectedName = getDetectedDeviceName();
+  const customName = prompt(
+    "Nom de cet appareil pour l'historique ?\nExemple : iPhone de Julien, PC accueil, iPad agence.",
+    detectedName,
+  );
+  const deviceName = (customName || detectedName).trim();
+  localStorage.setItem(deviceNameStorageKey, deviceName);
+  return deviceName;
 }
 
 function loadActivityLog() {
