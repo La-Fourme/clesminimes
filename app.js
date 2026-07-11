@@ -630,6 +630,14 @@ function getContactSelectName(contact) {
   return contact.firstName || contact.name;
 }
 
+function getMovementContactName(contact) {
+  if (contact.type === "external") {
+    return [contact.companyName || contact.name, contact.firstName].filter(Boolean).join(" ");
+  }
+
+  return getContactDisplayName(contact);
+}
+
 function normalizeContact(contact) {
   const type = contact.type === "external" ? "external" : "internal";
 
@@ -2330,7 +2338,7 @@ function renderPanel() {
   notesInput.value = key.notes;
   const canMoveSelectedKey = !key.archived || Boolean(selectedArchiveRecord);
   checkinBtn.textContent = selectedSet.status === "out" || selectedSet.status === "reserved" ? "Rentr\u00e9e" : "Entr\u00e9e";
-  reservedBtn.textContent = selectedSet.status === "reserved" ? "Annulation r\u00e9servation" : "R\u00e9serv\u00e9";
+  reservedBtn.textContent = selectedSet.status === "reserved" ? "Annulation" : "R\u00e9serv\u00e9";
   checkoutBtn.disabled = !canMoveSelectedKey;
   checkinBtn.disabled = !canMoveSelectedKey;
   reservedBtn.disabled = !canMoveSelectedKey;
@@ -2353,7 +2361,7 @@ function renderPanel() {
     const title = document.createElement("strong");
     const date = document.createElement("small");
     item.dataset.historyAction = entry.type === "out" ? "out" : entry.type === "reserved" ? "reserved" : "in";
-    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : "Entr\u00e9e"} - ${entry.person || "Intervenant non pr\u00e9cis\u00e9"}`;
+    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : "Entr\u00e9e"} : ${entry.person || "Intervenant non pr\u00e9cis\u00e9"}`;
     date.textContent =
       entry.type === "reserved"
         ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date} pour le ${entry.reservationDate || entry.date}`
@@ -2518,7 +2526,7 @@ async function reserveSelectedSet() {
   if (!reservationDateTime) return;
   clearTimeout(detailCloseTimer);
 
-  const person = getContactDisplayName(contact);
+  const person = getMovementContactName(contact);
   const dateTimeFormatter = new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "short",
     timeStyle: "short",
@@ -2786,7 +2794,7 @@ contactSelect.addEventListener("change", () => {
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
   if (!contact) return;
 
-  movementPersonInput.value = getContactDisplayName(contact);
+  movementPersonInput.value = getMovementContactName(contact);
   movementPhoneInput.value = contact.phone;
 });
 contactsTabBtn.addEventListener("click", openContactsPanel);
