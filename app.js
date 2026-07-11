@@ -1946,7 +1946,7 @@ function renderGrid() {
           shouldShowSetStrip ? " has-set-strip" : ""
         }${shouldShowPhotoTile ? " photo-view" : ""}${key.id === selectedId ? " is-selected" : ""}`;
         button.title = `${keyLabel(key)} - ${statusText(key)}`;
-        if (shouldShowPhotoTile && isTouchLayout()) {
+        if (tileViewMode === "photo" && isTouchLayout()) {
           tileShell.style.height = "300px";
           tileShell.style.minHeight = "300px";
           button.style.height = "100%";
