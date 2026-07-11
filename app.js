@@ -1927,31 +1927,35 @@ function renderGrid() {
     const keyRow = document.createElement("div");
     keyRow.className = "key-row";
 
-    keys
+    const visibleKeys = keys
       .filter((key) => key.category === category)
-      .forEach((key) => {
-        if (!matchesFilter(key)) return;
+      .filter(matchesFilter);
 
-        const tileShell = document.createElement("span");
-        const button = document.createElement("button");
-        const ownerName = formatOwner(key.owner);
-        const hasTileDetails = Boolean(ownerName && key.property?.trim());
-        const shouldShowSetStrip = isKeyFilled(key);
-        const mainPhoto = key.sets[0]?.photo || "";
-        const shouldShowPhotoTile = tileViewMode === "photo" && shouldShowSetStrip;
-        tileShell.className = `key-tile-shell${shouldShowPhotoTile ? " photo-view-shell" : ""}`;
-        button.type = "button";
-        button.draggable = shouldShowSetStrip;
-        button.className = `key-tile ${getTileStatus(key)}${hasTileDetails ? " has-details" : ""}${
-          shouldShowSetStrip ? " has-set-strip" : ""
-        }${shouldShowPhotoTile ? " photo-view" : ""}${key.id === selectedId ? " is-selected" : ""}`;
-        button.title = `${keyLabel(key)} - ${statusText(key)}`;
-        if (tileViewMode === "photo" && isTouchLayout()) {
-          tileShell.style.height = "300px";
-          tileShell.style.minHeight = "300px";
-          button.style.height = "100%";
-          button.style.minHeight = "100%";
-        }
+    visibleKeys.forEach((key, index) => {
+      const pairedKeys = visibleKeys.slice(Math.floor(index / 2) * 2, Math.floor(index / 2) * 2 + 2);
+      const shouldMatchPhotoRowHeight =
+        tileViewMode === "photo" && isTouchLayout() && pairedKeys.some((pairedKey) => isKeyFilled(pairedKey));
+
+      const tileShell = document.createElement("span");
+      const button = document.createElement("button");
+      const ownerName = formatOwner(key.owner);
+      const hasTileDetails = Boolean(ownerName && key.property?.trim());
+      const shouldShowSetStrip = isKeyFilled(key);
+      const mainPhoto = key.sets[0]?.photo || "";
+      const shouldShowPhotoTile = tileViewMode === "photo" && shouldShowSetStrip;
+      tileShell.className = `key-tile-shell${shouldShowPhotoTile ? " photo-view-shell" : ""}`;
+      button.type = "button";
+      button.draggable = shouldShowSetStrip;
+      button.className = `key-tile ${getTileStatus(key)}${hasTileDetails ? " has-details" : ""}${
+        shouldShowSetStrip ? " has-set-strip" : ""
+      }${shouldShowPhotoTile ? " photo-view" : ""}${key.id === selectedId ? " is-selected" : ""}`;
+      button.title = `${keyLabel(key)} - ${statusText(key)}`;
+      if (shouldMatchPhotoRowHeight) {
+        tileShell.style.height = "300px";
+        tileShell.style.minHeight = "300px";
+        button.style.height = "100%";
+        button.style.minHeight = "100%";
+      }
 
         if (shouldShowPhotoTile) {
           const photoContent = document.createElement("span");
