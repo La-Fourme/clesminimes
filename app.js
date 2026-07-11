@@ -590,7 +590,7 @@ function contactTypeText(type) {
 
 function getContactSelectName(contact) {
   if (contact.type === "external") {
-    return [contact.companyName || contact.name, contact.firstName].filter(Boolean).join(" ");
+    return [contact.companyName || contact.name, contact.firstName].filter(Boolean).join(" - ");
   }
 
   return contact.firstName || contact.name;
