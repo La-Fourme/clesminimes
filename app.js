@@ -374,7 +374,6 @@ async function loadStorageFromCloud() {
       localStorage.removeItem(storageKey);
     }
   });
-  localStorage.removeItem(photoOptimizationStorageKey);
   isApplyingCloudState = false;
 
   refreshDataFromStorage({ keepSelection: true });
@@ -3183,14 +3182,12 @@ async function initializeApp() {
   migrateArchivedSlots();
   ensureDeviceName();
   await loadStorageFromCloud();
-  await optimizeStoredPhotos();
   updateRegistryHeader();
   updateTileViewToggle();
   updateUndoButton();
   render();
   setInterval(async () => {
     await loadStorageFromCloud();
-    await optimizeStoredPhotos();
   }, 7000);
 }
 
