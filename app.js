@@ -755,6 +755,10 @@ function isValidPhoto(photo) {
   return typeof photo === "string" && photo.startsWith("data:image/") && photo.length >= 200;
 }
 
+function getDisplayPhoto(key) {
+  return key.sets?.find((set) => isValidPhoto(set.photo))?.photo || "";
+}
+
 function formatOwner(owner) {
   return (owner || "").trim().toLocaleUpperCase("fr-FR");
 }
@@ -1983,7 +1987,7 @@ function renderGrid() {
       const ownerName = formatOwner(key.owner);
       const hasTileDetails = Boolean(ownerName && key.property?.trim());
       const shouldShowSetStrip = isKeyFilled(key);
-      const mainPhoto = isValidPhoto(key.sets[0]?.photo) ? key.sets[0].photo : "";
+      const displayPhoto = getDisplayPhoto(key);
       const shouldShowPhotoTile = tileViewMode === "photo" && shouldShowSetStrip;
       tileShell.className = `key-tile-shell${shouldShowPhotoTile ? " photo-view-shell" : ""}`;
       button.type = "button";
@@ -1995,11 +1999,11 @@ function renderGrid() {
 
       if (shouldShowPhotoTile) {
         const photoContent = document.createElement("span");
-        photoContent.className = `key-photo-content${mainPhoto ? "" : " is-empty"}`;
-        if (mainPhoto) {
+        photoContent.className = `key-photo-content${displayPhoto ? "" : " is-empty"}`;
+        if (displayPhoto) {
           const photoImage = document.createElement("img");
-          photoImage.src = mainPhoto;
-          photoImage.alt = `Photo du jeu principal de ${keyLabel(key)}`;
+          photoImage.src = displayPhoto;
+          photoImage.alt = `Photo de ${keyLabel(key)}`;
           photoContent.append(photoImage);
         } else {
           photoContent.textContent = "Aucune photo";
