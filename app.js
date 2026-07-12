@@ -678,6 +678,16 @@ function getMovementContactName(contact) {
   return getContactDisplayName(contact);
 }
 
+function getHistoryPersonName(entry) {
+  let person = entry.person || "Intervenant non pr\u00e9cis\u00e9";
+  const company = String(entry.company || "").trim();
+  if (company && person.startsWith(`${company} - `)) {
+    person = person.slice(company.length + 3).trim();
+  }
+
+  return [person, entry.phone ? formatPhoneNumber(entry.phone) : ""].filter(Boolean).join(" - ");
+}
+
 function normalizeContact(contact) {
   const type = contact.type === "external" ? "external" : "internal";
 
@@ -2441,17 +2451,14 @@ function renderPanel() {
         : entry.type === "reserved" || entry.type === "cancel-reservation"
           ? "reserved"
           : "in";
-    const historyPerson = [entry.person || "Intervenant non pr\u00e9cis\u00e9", entry.phone ? formatPhoneNumber(entry.phone) : ""]
-      .filter(Boolean)
-      .join(" - ");
-    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${historyPerson}`;
+    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${getHistoryPersonName(entry)}`;
     date.textContent =
       entry.type === "reserved"
         ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date} pour le ${entry.reservationDate || entry.date}`
         : entry.type === "cancel-reservation" && entry.note
           ? `${entry.date} - ${entry.note}`
         : entry.date;
-    item.append(title, date);
+    item.append(title);
     if (entry.company) {
       const company = document.createElement("p");
       company.textContent = `Soci\u00e9t\u00e9 : ${entry.company}`;
@@ -2469,6 +2476,7 @@ function renderPanel() {
       signature.alt = `Signature ${entry.type === "out" ? "Sortie" : "Entrée"}`;
       item.append(signature);
     }
+    item.append(date);
     historyList.append(item);
   });
 }
@@ -2625,9 +2633,12 @@ async function reserveSelectedSet() {
   }
 
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
-  if (!contact) {
-    alert("S\u00e9lectionne d'abord un intervenant dans la liste.");
-    contactSelect.focus();
+  const person = contact ? getMovementContactName(contact) : movementPersonInput.value.trim();
+  const company = contact?.type === "external" ? contact.companyName || "" : movementCompanyInput.value.trim();
+  const phone = formatPhoneNumber(contact?.phone || movementPhoneInput.value);
+  if (!person) {
+    alert("Renseigne le nom de l'intervenant avant de r\u00e9server.");
+    movementPersonInput.focus();
     return;
   }
 
@@ -2635,7 +2646,6 @@ async function reserveSelectedSet() {
   if (!reservationDateTime) return;
   clearTimeout(detailCloseTimer);
 
-  const person = getMovementContactName(contact);
   const dateTimeFormatter = new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "short",
     timeStyle: "short",
@@ -2645,8 +2655,8 @@ async function reserveSelectedSet() {
   const entry = {
     type: "reserved",
     person,
-    company: contact.type === "external" ? contact.companyName || "" : movementCompanyInput.value.trim(),
-    phone: formatPhoneNumber(contact.phone || ""),
+    company,
+    phone,
     note: movementNoteInput.value.trim(),
     signature: "",
     date: createdAt,

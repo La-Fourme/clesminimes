@@ -1815,6 +1815,7 @@ body.is-moving-key .photo-hover {
 }
 
 .history-list li {
+  display: grid;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1842,6 +1843,9 @@ body.is-moving-key .photo-hover {
 }
 
 .history-list small {
+  display: block;
+  justify-self: start;
+  margin-top: 8px;
   color: var(--muted);
 }
 
