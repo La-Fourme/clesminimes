@@ -1996,9 +1996,7 @@ function renderGrid() {
         if (mainPhoto) {
           const photoImage = document.createElement("img");
           photoImage.src = mainPhoto;
-          photoImage.alt = "";
-          photoImage.loading = "lazy";
-          photoImage.decoding = "async";
+          photoImage.alt = `Photo du jeu principal de ${keyLabel(key)}`;
           photoContent.append(photoImage);
         } else {
           photoContent.textContent = "Aucune photo";
