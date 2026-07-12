@@ -60,6 +60,7 @@ const keySetPhotoList = document.querySelector("#keySetPhotoList");
 const keySetSelect = document.querySelector("#keySetSelect");
 const contactSelect = document.querySelector("#contactSelect");
 const movementPersonInput = document.querySelector("#movementPersonInput");
+const movementCompanyInput = document.querySelector("#movementCompanyInput");
 const movementPhoneInput = document.querySelector("#movementPhoneInput");
 const movementNoteInput = document.querySelector("#movementNoteInput");
 const checkoutBtn = document.querySelector("#checkoutBtn");
@@ -248,6 +249,8 @@ function makeKeySet(id) {
     label: option.label,
     photo: "",
     holder: "",
+    holderCompany: "",
+    holderPhone: "",
     status: "available",
     history: [],
   };
@@ -515,6 +518,7 @@ function normalizeSet(set, index = 0) {
     label: option.label,
     photo: set.photo || "",
     holder: set.holder || "",
+    holderCompany: set.holderCompany || "",
     holderPhone: set.holderPhone || "",
     status,
     history: Array.isArray(set.history) ? set.history : [],
@@ -2437,7 +2441,10 @@ function renderPanel() {
         : entry.type === "reserved" || entry.type === "cancel-reservation"
           ? "reserved"
           : "in";
-    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${entry.person || "Intervenant non pr\u00e9cis\u00e9"}`;
+    const historyPerson = [entry.person || "Intervenant non pr\u00e9cis\u00e9", entry.phone ? formatPhoneNumber(entry.phone) : ""]
+      .filter(Boolean)
+      .join(" - ");
+    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${historyPerson}`;
     date.textContent =
       entry.type === "reserved"
         ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date} pour le ${entry.reservationDate || entry.date}`
@@ -2445,6 +2452,11 @@ function renderPanel() {
           ? `${entry.date} - ${entry.note}`
         : entry.date;
     item.append(title, date);
+    if (entry.company) {
+      const company = document.createElement("p");
+      company.textContent = `Soci\u00e9t\u00e9 : ${entry.company}`;
+      item.append(company);
+    }
     if (entry.note && entry.type !== "cancel-reservation") {
       const note = document.createElement("p");
       note.textContent = entry.note;
@@ -2537,11 +2549,16 @@ function addMovement(type) {
     (type === "out" && selectedSet.status === "reserved") || (type === "in" && selectedSet.status === "out")
       ? selectedSet.holderPhone
       : "";
+  const forcedCompany =
+    (type === "out" && selectedSet.status === "reserved") || (type === "in" && selectedSet.status === "out")
+      ? selectedSet.holderCompany
+      : "";
 
   const entry = {
     type,
     person: forcedPerson || movementPersonInput.value.trim(),
-    phone: forcedPhone || movementPhoneInput.value.trim(),
+    company: forcedCompany || movementCompanyInput.value.trim(),
+    phone: formatPhoneNumber(forcedPhone || movementPhoneInput.value),
     note: movementNoteInput.value.trim(),
     signature: hasSignature ? signatureCanvas.toDataURL("image/png") : "",
     date: new Intl.DateTimeFormat("fr-FR", {
@@ -2553,12 +2570,14 @@ function addMovement(type) {
   updateSelectedSet({
     status: type === "out" ? "out" : "available",
     holder: type === "out" ? entry.person || selectedSet.holder : "",
+    holderCompany: type === "out" ? entry.company || selectedSet.holderCompany : "",
     holderPhone: type === "out" ? entry.phone || selectedSet.holderPhone : "",
     history: [entry, ...selectedSet.history],
   });
   logActivity(type === "out" ? "Sortie" : "Entrée", `${keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
+  movementCompanyInput.value = "";
   movementPhoneInput.value = "";
   movementNoteInput.value = "";
   contactSelect.value = "";
@@ -2583,6 +2602,7 @@ async function reserveSelectedSet() {
     const entry = {
       type: "cancel-reservation",
       person: selectedSet.holder || "R\u00e9servation annul\u00e9e",
+      company: selectedSet.holderCompany || "",
       phone: selectedSet.holderPhone || "",
       note: "Annulation r\u00e9servation",
       signature: "",
@@ -2595,6 +2615,7 @@ async function reserveSelectedSet() {
     updateSelectedSet({
       status: "available",
       holder: "",
+      holderCompany: "",
       holderPhone: "",
       history: [entry, ...selectedSet.history],
     });
@@ -2624,7 +2645,8 @@ async function reserveSelectedSet() {
   const entry = {
     type: "reserved",
     person,
-    phone: contact.phone || "",
+    company: contact.type === "external" ? contact.companyName || "" : movementCompanyInput.value.trim(),
+    phone: formatPhoneNumber(contact.phone || ""),
     note: movementNoteInput.value.trim(),
     signature: "",
     date: createdAt,
@@ -2635,12 +2657,14 @@ async function reserveSelectedSet() {
   updateSelectedSet({
     status: "reserved",
     holder: person,
-    holderPhone: contact.phone || "",
+    holderCompany: entry.company || "",
+    holderPhone: entry.phone || "",
     history: [entry, ...selectedSet.history],
   });
   logActivity("R\u00e9serv\u00e9", `${keyLabel(key)} - ${selectedSet.label}`, [person, `Pour le ${formattedDate}`, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
+  movementCompanyInput.value = "";
   movementPhoneInput.value = "";
   movementNoteInput.value = "";
   contactSelect.value = "";
@@ -2881,10 +2905,17 @@ removedBtn.addEventListener("click", () => archiveSelectedKey("removed"));
 clearSignatureBtn.addEventListener("click", clearSignature);
 contactSelect.addEventListener("change", () => {
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
-  if (!contact) return;
+  if (!contact) {
+    movementCompanyInput.value = "";
+    return;
+  }
 
   movementPersonInput.value = getMovementContactName(contact);
-  movementPhoneInput.value = contact.phone;
+  movementCompanyInput.value = contact.type === "external" ? contact.companyName || "" : "";
+  movementPhoneInput.value = formatPhoneNumber(contact.phone);
+});
+movementPhoneInput.addEventListener("input", () => {
+  movementPhoneInput.value = formatPhoneNumber(movementPhoneInput.value);
 });
 contactsTabBtn.addEventListener("click", openContactsPanel);
 contactsPanel.addEventListener("mouseenter", () => clearTimeout(contactsCloseTimer));
