@@ -751,6 +751,10 @@ function tileLabel(key) {
   return `${tilePrefix(key)} #${key.number}`;
 }
 
+function isValidPhoto(photo) {
+  return typeof photo === "string" && photo.startsWith("data:image/") && photo.length >= 200;
+}
+
 function formatOwner(owner) {
   return (owner || "").trim().toLocaleUpperCase("fr-FR");
 }
@@ -1979,7 +1983,7 @@ function renderGrid() {
       const ownerName = formatOwner(key.owner);
       const hasTileDetails = Boolean(ownerName && key.property?.trim());
       const shouldShowSetStrip = isKeyFilled(key);
-      const mainPhoto = key.sets[0]?.photo || "";
+      const mainPhoto = isValidPhoto(key.sets[0]?.photo) ? key.sets[0].photo : "";
       const shouldShowPhotoTile = tileViewMode === "photo" && shouldShowSetStrip;
       tileShell.className = `key-tile-shell${shouldShowPhotoTile ? " photo-view-shell" : ""}`;
       button.type = "button";
@@ -2171,7 +2175,12 @@ function compressPhotoFile(file) {
         context.fillStyle = "#ffffff";
         context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", photoJpegQuality));
+        const photo = canvas.toDataURL("image/jpeg", photoJpegQuality);
+        if (!photo.startsWith("data:image/") || photo.length < 200) {
+          reject(new Error("Photo compressée invalide."));
+          return;
+        }
+        resolve(photo);
       });
       image.src = reader.result;
     });
@@ -2199,7 +2208,8 @@ function compressPhotoDataUrl(photo) {
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, width, height);
       context.drawImage(image, 0, 0, width, height);
-      resolve(canvas.toDataURL("image/jpeg", photoJpegQuality));
+      const nextPhoto = canvas.toDataURL("image/jpeg", photoJpegQuality);
+      resolve(nextPhoto.startsWith("data:image/") && nextPhoto.length >= 200 ? nextPhoto : photo);
     });
     image.src = photo;
   });
