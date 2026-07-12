@@ -137,6 +137,7 @@ let editingContactId = null;
 let hoveredKeyId = null;
 let isDetailPanelHovered = false;
 let isPhotoImporting = false;
+let photoImportResetTimer = null;
 let undoSnapshot = null;
 let tileViewMode = loadTileViewMode();
 let saleCelebrationTimer = null;
@@ -341,6 +342,7 @@ function getCloudSnapshot(rows) {
 
 async function loadStorageFromCloud() {
   if (!supabaseClient) return;
+  if (isPhotoImporting) return;
 
   const { data, error } = await supabaseClient.from("app_state").select("key,value");
   if (error) {
@@ -908,6 +910,25 @@ function isTouchDevice() {
 
 function isLandscapeLayout() {
   return window.innerWidth > window.innerHeight || window.matchMedia("(orientation: landscape)").matches;
+}
+
+function beginPhotoImport(event) {
+  if (event?.currentTarget instanceof HTMLInputElement) {
+    event.currentTarget.value = "";
+  }
+  isPhotoImporting = true;
+  markLocalEdit();
+  clearTimeout(detailCloseTimer);
+  clearTimeout(photoImportResetTimer);
+  photoImportResetTimer = setTimeout(() => {
+    isPhotoImporting = false;
+  }, 120000);
+}
+
+function finishPhotoImport() {
+  clearTimeout(photoImportResetTimer);
+  isPhotoImporting = false;
+  scheduleDetailPanelClose();
 }
 
 function scheduleDetailPanelClose() {
@@ -2278,24 +2299,8 @@ function renderKeySetPhotos(key) {
     cameraInput.setAttribute("capture", "environment");
     cameraInput.dataset.setId = set.id;
     cameraButton.style.display = isArchiveView ? "none" : "";
-    cameraInput.addEventListener("click", () => {
-      isPhotoImporting = true;
-      clearTimeout(detailCloseTimer);
-      setTimeout(() => {
-        window.addEventListener(
-          "focus",
-          () => {
-            setTimeout(() => {
-              if (!cameraInput.files?.length) {
-                isPhotoImporting = false;
-                scheduleDetailPanelClose();
-              }
-            }, 300);
-          },
-          { once: true },
-        );
-      }, 0);
-    });
+    cameraInput.addEventListener("click", beginPhotoImport);
+    cameraInput.addEventListener("cancel", finishPhotoImport);
 
     importButton.className = "photo-button photo-import-button";
     importButtonText.textContent = "Importer une photo";
@@ -2303,24 +2308,8 @@ function renderKeySetPhotos(key) {
     importInput.accept = "image/*";
     importInput.dataset.setId = set.id;
     importButton.style.display = isArchiveView ? "none" : "";
-    importInput.addEventListener("click", () => {
-      isPhotoImporting = true;
-      clearTimeout(detailCloseTimer);
-      setTimeout(() => {
-        window.addEventListener(
-          "focus",
-          () => {
-            setTimeout(() => {
-              if (!importInput.files?.length) {
-                isPhotoImporting = false;
-                scheduleDetailPanelClose();
-              }
-            }, 300);
-          },
-          { once: true },
-        );
-      }, 0);
-    });
+    importInput.addEventListener("click", beginPhotoImport);
+    importInput.addEventListener("cancel", finishPhotoImport);
     importButton.append(importButtonText, importInput);
 
     cameraButton.append(cameraButtonText, cameraInput);
@@ -3171,8 +3160,7 @@ keySetPhotoList.addEventListener("change", (event) => {
   const file = input.files?.[0];
   const setId = input.dataset.setId;
   if (!file) {
-    isPhotoImporting = false;
-    scheduleDetailPanelClose();
+    finishPhotoImport();
     return;
   }
 
@@ -3187,10 +3175,7 @@ keySetPhotoList.addEventListener("change", (event) => {
     .catch(() => {
       alert("La photo n'a pas pu être importée.");
     })
-    .finally(() => {
-      isPhotoImporting = false;
-      scheduleDetailPanelClose();
-    });
+    .finally(finishPhotoImport);
   input.value = "";
 });
 
