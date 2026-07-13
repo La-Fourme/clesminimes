@@ -1863,7 +1863,7 @@ body.is-moving-key .photo-hover {
 }
 
 .history-list li p {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .reservation-comment-field {
@@ -1882,7 +1882,7 @@ body.is-moving-key .photo-hover {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
-  background: #f9faf9;
+  background: rgba(249, 250, 249, 0.5);
   font-family: inherit;
   font-size: 12px;
   resize: vertical;
@@ -1975,7 +1975,7 @@ body.is-moving-key .photo-hover {
   display: block;
   width: 140px;
   max-width: 100%;
-  margin-top: 8px;
+  margin-top: 3px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #daddda;
