@@ -2572,6 +2572,27 @@ function renderPanel() {
 
       actions.append(movementButton, cancelButton);
       item.append(actions);
+
+      const signatureField = document.createElement("div");
+      const signatureLabel = document.createElement("div");
+      const signatureCanvas = document.createElement("canvas");
+      const clearReservationSignatureBtn = document.createElement("button");
+
+      signatureField.className = "reservation-signature-field";
+      signatureLabel.className = "reservation-signature-label";
+      signatureLabel.innerHTML = "<span>Signature</span>";
+      clearReservationSignatureBtn.type = "button";
+      clearReservationSignatureBtn.textContent = "Effacer";
+      signatureCanvas.className = "reservation-signature-canvas";
+      signatureCanvas.width = 320;
+      signatureCanvas.height = 120;
+      signatureCanvas.dataset.reservationId = entry.reservationId;
+      signatureCanvas.setAttribute("aria-label", "Zone de signature de la réservation");
+      clearReservationSignatureBtn.addEventListener("click", () => clearInlineSignature(signatureCanvas));
+      signatureLabel.append(clearReservationSignatureBtn);
+      signatureField.append(signatureLabel, signatureCanvas);
+      item.append(signatureField);
+      setupInlineSignatureCanvas(signatureCanvas);
     }
     item.append(date);
     historyList.append(item);
@@ -2728,6 +2749,59 @@ function getMovementDateText() {
   }).format(new Date());
 }
 
+function getInlineReservationSignature(reservationId) {
+  const canvas = historyList.querySelector(`.reservation-signature-canvas[data-reservation-id="${reservationId}"]`);
+  return canvas?.dataset.signed === "true" ? canvas.toDataURL("image/png") : "";
+}
+
+function clearInlineSignature(canvas) {
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  canvas.dataset.signed = "false";
+}
+
+function setupInlineSignatureCanvas(canvas) {
+  let isDrawing = false;
+  const context = canvas.getContext("2d");
+  context.lineWidth = 2.4;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeStyle = "#1e2528";
+
+  const getPoint = (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const clampedX = Math.min(Math.max(event.clientX, rect.left), rect.right);
+    const clampedY = Math.min(Math.max(event.clientY, rect.top), rect.bottom);
+    return {
+      x: ((clampedX - rect.left) / rect.width) * canvas.width,
+      y: ((clampedY - rect.top) / rect.height) * canvas.height,
+    };
+  };
+
+  canvas.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    isDrawing = true;
+    canvas.dataset.signed = "true";
+    canvas.setPointerCapture?.(event.pointerId);
+    const point = getPoint(event);
+    context.beginPath();
+    context.moveTo(point.x, point.y);
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!isDrawing) return;
+    event.preventDefault();
+    const point = getPoint(event);
+    context.lineTo(point.x, point.y);
+    context.stroke();
+  });
+  const stopDrawing = (event) => {
+    if (event?.pointerId !== undefined) canvas.releasePointerCapture?.(event.pointerId);
+    isDrawing = false;
+  };
+  canvas.addEventListener("pointerup", stopDrawing);
+  canvas.addEventListener("pointercancel", stopDrawing);
+}
+
 function toggleReservationMovement(reservationId) {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
@@ -2746,7 +2820,7 @@ function toggleReservationMovement(reservationId) {
     note: isReservationOut
       ? `Rentr\u00e9e r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
       : `Sortie r\u00e9servation du ${reservation.reservationDate || ""}`.trim(),
-    signature: "",
+    signature: getInlineReservationSignature(reservationId),
     date: getMovementDateText(),
     reservationId,
   };
