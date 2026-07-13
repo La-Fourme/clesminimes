@@ -1843,7 +1843,8 @@ body.is-moving-key .photo-hover {
 .history-list strong {
   display: block;
   margin-bottom: 3px;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .history-list small {
