@@ -2551,6 +2551,8 @@ function renderPanel() {
         ? (selectedSet.reservations || []).find((reservation) => reservation.id === entry.reservationId && isActiveReservation(reservation))
         : null;
     if (activeReservation) {
+      const reservationCommentField = document.createElement("label");
+      const reservationCommentLabel = document.createElement("span");
       const reservationComment = document.createElement("textarea");
       const actions = document.createElement("div");
       const movementButton = document.createElement("button");
@@ -2558,11 +2560,14 @@ function renderPanel() {
       const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === entry.reservationId;
       const isOutForAnotherReason = selectedSet.status === "out" && selectedSet.holderReservationId !== entry.reservationId;
 
+      reservationCommentField.className = "reservation-comment-field";
+      reservationCommentLabel.textContent = "Commentaire";
       reservationComment.className = "reservation-comment-input";
       reservationComment.rows = 2;
-      reservationComment.placeholder = "Commentaire";
+      reservationComment.placeholder = "Motif, rendez-vous, r\u00e9f\u00e9rence...";
       reservationComment.dataset.reservationId = entry.reservationId;
-      item.append(reservationComment);
+      reservationCommentField.append(reservationCommentLabel, reservationComment);
+      item.append(reservationCommentField);
 
       actions.className = "reservation-history-actions";
       movementButton.type = "button";
@@ -2830,14 +2835,7 @@ function toggleReservationMovement(reservationId) {
     person: reservation.person || "",
     company: reservation.company || "",
     phone: formatPhoneNumber(reservation.phone || ""),
-    note: [
-      isReservationOut
-        ? `Rentr\u00e9e r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
-        : `Sortie r\u00e9servation du ${reservation.reservationDate || ""}`.trim(),
-      inlineComment,
-    ]
-      .filter(Boolean)
-      .join(" | "),
+    note: inlineComment ? `Commentaire : ${inlineComment}` : "",
     signature: getInlineReservationSignature(reservationId),
     date: getMovementDateText(),
     reservationId,

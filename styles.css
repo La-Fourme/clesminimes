@@ -1856,9 +1856,9 @@ body.is-moving-key .photo-hover {
 }
 
 .history-list li[data-history-action="reserved"] p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -1866,11 +1866,19 @@ body.is-moving-key .photo-hover {
   font-size: 10px;
 }
 
+.reservation-comment-field {
+  display: grid;
+  gap: 5px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .reservation-comment-input {
   width: 100%;
-  min-height: 38px;
-  margin-top: 8px;
-  padding: 7px 9px;
+  min-height: 36px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
@@ -1926,7 +1934,7 @@ body.is-moving-key .photo-hover {
 .reservation-signature-field {
   display: grid;
   gap: 6px;
-  margin: 8px 0 3px;
+  margin: 5px 0 10px;
 }
 
 .reservation-signature-label {
