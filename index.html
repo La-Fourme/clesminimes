@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CENTURY 21 LES MINIMES - TABLEAUX DE GESTION DES CL&Eacute;S</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20260713" />
+    <link rel="shortcut icon" href="favicon.svg?v=20260713" />
     <link rel="stylesheet" href="styles.css?v=20260713" />
   </head>
   <body>
@@ -81,7 +83,7 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
           </div>
           <label>
             Recherche
-            <input id="searchInput" type="search" placeholder="T1 #1, intervenant, adresse..." />
+            <input id="searchInput" type="search" placeholder="T1 #1, intervenant, adresse..." autocomplete="off" autocapitalize="off" spellcheck="false" />
           </label>
           <div class="filter-action">
             <span>Répertoire</span>
@@ -122,7 +124,7 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
       </section>
 
       <aside id="detailPanel" class="detail-panel" aria-label="Detail du jeu de cles" hidden>
-        <form id="keyForm" class="key-form" hidden>
+        <form id="keyForm" class="key-form" hidden autocomplete="off">
           <div class="panel-header">
             <div>
               <p class="eyebrow">Fiche clé</p>
@@ -146,27 +148,27 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
 
           <label>
             Nom du propriétaire
-            <input id="ownerInput" type="text" placeholder="Nom du propriétaire" />
+            <input id="ownerInput" type="text" placeholder="Nom du propriétaire" autocomplete="off" autocapitalize="words" spellcheck="false" />
           </label>
 
           <label>
             Adresse du bien
-            <input id="propertyInput" type="text" placeholder="Ex. 12 rue Victor Hugo" />
+            <input id="propertyInput" type="text" placeholder="Ex. 12 rue Victor Hugo" autocomplete="off" autocapitalize="words" spellcheck="false" />
           </label>
 
           <label>
             Code postal du bien
-            <input id="postalCodeInput" type="text" inputmode="numeric" placeholder="Ex. 31000" />
+            <input id="postalCodeInput" type="text" inputmode="numeric" placeholder="Ex. 31000" autocomplete="off" spellcheck="false" />
           </label>
 
           <label>
             Ville du bien
-            <input id="cityInput" type="text" placeholder="Ex. Toulouse" />
+            <input id="cityInput" type="text" placeholder="Ex. Toulouse" autocomplete="off" autocapitalize="words" spellcheck="false" />
           </label>
 
           <label>
             Notes
-            <textarea id="notesInput" rows="2" placeholder="Badge, boîte aux lettres, remarques..."></textarea>
+            <textarea id="notesInput" rows="2" placeholder="Badge, boîte aux lettres, remarques..." autocomplete="off" autocapitalize="sentences" spellcheck="false"></textarea>
           </label>
 
           <section class="photo-box">
@@ -188,19 +190,19 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
             </label>
             <label>
               Intervenant
-              <input id="movementPersonInput" type="text" placeholder="Qui prend ou rend les clés ?" />
+              <input id="movementPersonInput" type="text" placeholder="Qui prend ou rend les clés ?" autocomplete="off" autocapitalize="words" spellcheck="false" />
             </label>
             <label>
               Soci&eacute;t&eacute; de l'intervenant
-              <input id="movementCompanyInput" type="text" placeholder="Soci&eacute;t&eacute; de l'intervenant" />
+              <input id="movementCompanyInput" type="text" placeholder="Soci&eacute;t&eacute; de l'intervenant" autocomplete="off" autocapitalize="words" spellcheck="false" />
             </label>
             <label>
               Num&eacute;ro de t&eacute;l&eacute;phone de l'intervenant
-              <input id="movementPhoneInput" type="tel" placeholder="Ex. 06 12 34 56 78" />
+              <input id="movementPhoneInput" type="tel" placeholder="Ex. 06 12 34 56 78" autocomplete="off" spellcheck="false" />
             </label>
             <label>
               Commentaire
-              <input id="movementNoteInput" type="text" placeholder="Motif, rendez-vous, référence..." />
+              <input id="movementNoteInput" type="text" placeholder="Motif, rendez-vous, référence..." autocomplete="off" autocapitalize="sentences" spellcheck="false" />
             </label>
             <div class="signature-field">
               <div class="signature-label">
@@ -248,22 +250,22 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
           </button>
         </div>
 
-        <form id="contactForm" class="contact-form">
+        <form id="contactForm" class="contact-form" autocomplete="off">
           <label id="contactFirstNameLabel">
             Pr&eacute;nom de l'intervenant
-            <input id="contactFirstNameInput" type="text" placeholder="Pr&eacute;nom de l'intervenant" />
+            <input id="contactFirstNameInput" type="text" placeholder="Pr&eacute;nom de l'intervenant" autocomplete="off" autocapitalize="words" spellcheck="false" />
           </label>
           <label id="contactNameLabel">
             Nom de l'intervenant
-            <input id="contactNameInput" type="text" placeholder="Nom de l'intervenant" />
+            <input id="contactNameInput" type="text" placeholder="Nom de l'intervenant" autocomplete="off" autocapitalize="characters" spellcheck="false" />
           </label>
           <label id="contactCompanyLabel" hidden>
             Nom de société
-            <input id="contactCompanyInput" type="text" placeholder="Nom de société" />
+            <input id="contactCompanyInput" type="text" placeholder="Nom de société" autocomplete="off" autocapitalize="words" spellcheck="false" />
           </label>
           <label>
             Téléphone
-            <input id="contactPhoneInput" type="tel" placeholder="Ex. 06 12 34 56 78" />
+            <input id="contactPhoneInput" type="tel" placeholder="Ex. 06 12 34 56 78" autocomplete="off" spellcheck="false" />
           </label>
           <button id="addContactBtn" type="submit">Ajouter</button>
         </form>
