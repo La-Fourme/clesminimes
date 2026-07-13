@@ -1823,6 +1823,7 @@ body.is-moving-key .photo-hover {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
+  color: var(--ink);
   background: #d8dcd8;
 }
 
@@ -1859,13 +1860,13 @@ body.is-moving-key .photo-hover {
 
 .history-list li[data-history-action="reserved"] p {
   margin: 4px 0 0;
-  color: var(--muted);
+  color: var(--ink);
   font-size: 13px;
   line-height: 1.35;
 }
 
 .history-list li p {
-  color: var(--muted);
+  color: var(--ink);
   font-size: 13px;
   line-height: 1.35;
 }
@@ -1874,7 +1875,7 @@ body.is-moving-key .photo-hover {
   display: grid;
   gap: 5px;
   margin-top: 6px;
-  color: var(--muted);
+  color: var(--ink);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1945,7 +1946,7 @@ body.is-moving-key .photo-hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--muted);
+  color: var(--ink);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1971,7 +1972,7 @@ body.is-moving-key .photo-hover {
 
 .history-phone {
   margin: 6px 0 0;
-  color: var(--muted);
+  color: var(--ink);
   font-size: 12px;
 }
 
@@ -1979,7 +1980,7 @@ body.is-moving-key .photo-hover {
   display: block;
   width: 140px;
   max-width: 100%;
-  margin: 3px 0 4px;
+  margin: 3px 0 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #daddda;
