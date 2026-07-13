@@ -1851,19 +1851,23 @@ body.is-moving-key .photo-hover {
 .history-list small {
   display: block;
   justify-self: start;
-  margin-top: 4px;
+  margin-top: 0;
   color: var(--ink);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .history-list li[data-history-action="reserved"] p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.35;
 }
 
 .history-list li p {
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .reservation-comment-field {
@@ -1975,7 +1979,7 @@ body.is-moving-key .photo-hover {
   display: block;
   width: 140px;
   max-width: 100%;
-  margin-top: 3px;
+  margin: 3px 0 4px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #daddda;
