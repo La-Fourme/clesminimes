@@ -519,7 +519,7 @@ function normalizeSet(set, index = 0) {
   const id = keySetOptions.some((option) => option.id === set.id) ? set.id : fallback.id;
   const option = keySetOptions.find((savedOption) => savedOption.id === id) || fallback;
   const status = set.status === "out" ? "out" : "available";
-  const reservations = Array.isArray(set.reservations) ? set.reservations : [];
+  const reservations = Array.isArray(set.reservations) ? set.reservations.filter(isActiveReservation) : [];
   const migratedReservationId = `reservation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const migratedReservation =
     set.status === "reserved" && (set.holder || set.holderCompany || set.holderPhone)
@@ -828,7 +828,16 @@ function isKeyFilled(key) {
 }
 
 function hasActiveReservations(set) {
-  return Array.isArray(set?.reservations) && set.reservations.length > 0;
+  return Array.isArray(set?.reservations) && set.reservations.some(isActiveReservation);
+}
+
+function isActiveReservation(reservation) {
+  return Boolean(
+    reservation &&
+      (String(reservation.reservationDate || "").trim() ||
+        String(reservation.createdAt || "").trim() ||
+        String(reservation.note || "").trim()),
+  );
 }
 
 function getSetDisplayStatus(set) {
@@ -2539,7 +2548,7 @@ function renderPanel() {
     }
     const activeReservation =
       entry.type === "reserved"
-        ? (selectedSet.reservations || []).find((reservation) => reservation.id === entry.reservationId)
+        ? (selectedSet.reservations || []).find((reservation) => reservation.id === entry.reservationId && isActiveReservation(reservation))
         : null;
     if (activeReservation) {
       const actions = document.createElement("div");
