@@ -2551,11 +2551,18 @@ function renderPanel() {
         ? (selectedSet.reservations || []).find((reservation) => reservation.id === entry.reservationId && isActiveReservation(reservation))
         : null;
     if (activeReservation) {
+      const reservationComment = document.createElement("textarea");
       const actions = document.createElement("div");
       const movementButton = document.createElement("button");
       const cancelButton = document.createElement("button");
       const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === entry.reservationId;
       const isOutForAnotherReason = selectedSet.status === "out" && selectedSet.holderReservationId !== entry.reservationId;
+
+      reservationComment.className = "reservation-comment-input";
+      reservationComment.rows = 2;
+      reservationComment.placeholder = "Commentaire";
+      reservationComment.dataset.reservationId = entry.reservationId;
+      item.append(reservationComment);
 
       actions.className = "reservation-history-actions";
       movementButton.type = "button";
@@ -2754,6 +2761,11 @@ function getInlineReservationSignature(reservationId) {
   return canvas?.dataset.signed === "true" ? canvas.toDataURL("image/png") : "";
 }
 
+function getInlineReservationComment(reservationId) {
+  const input = historyList.querySelector(`.reservation-comment-input[data-reservation-id="${reservationId}"]`);
+  return input?.value.trim() || "";
+}
+
 function clearInlineSignature(canvas) {
   const context = canvas.getContext("2d");
   context.clearRect(0, 0, canvas.width, canvas.height);
@@ -2811,15 +2823,21 @@ function toggleReservationMovement(reservationId) {
   if (!reservation) return;
 
   const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === reservationId;
+  const inlineComment = getInlineReservationComment(reservationId);
   const entry = {
     id: createHistoryId(),
     type: isReservationOut ? "in" : "out",
     person: reservation.person || "",
     company: reservation.company || "",
     phone: formatPhoneNumber(reservation.phone || ""),
-    note: isReservationOut
-      ? `Rentr\u00e9e r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
-      : `Sortie r\u00e9servation du ${reservation.reservationDate || ""}`.trim(),
+    note: [
+      isReservationOut
+        ? `Rentr\u00e9e r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
+        : `Sortie r\u00e9servation du ${reservation.reservationDate || ""}`.trim(),
+      inlineComment,
+    ]
+      .filter(Boolean)
+      .join(" | "),
     signature: getInlineReservationSignature(reservationId),
     date: getMovementDateText(),
     reservationId,
