@@ -1887,7 +1887,7 @@ body.is-moving-key .photo-hover {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
-  background: rgba(249, 250, 249, 0.75);
+  background: rgba(249, 250, 249, 0.25);
   font-family: inherit;
   font-size: 12px;
   resize: vertical;
