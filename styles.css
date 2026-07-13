@@ -1454,7 +1454,7 @@ body.is-moving-key .photo-hover {
   flex-wrap: wrap;
   gap: 5px;
   padding: 0;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 800;
   background: transparent;
 }
@@ -1843,12 +1843,13 @@ body.is-moving-key .photo-hover {
 .history-list strong {
   display: block;
   margin-bottom: 3px;
+  font-size: 12px;
 }
 
 .history-list small {
   display: block;
   justify-self: start;
-  margin-top: 8px;
+  margin-top: 4px;
   color: var(--muted);
 }
 
