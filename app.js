@@ -2534,9 +2534,21 @@ function renderPanel() {
       company.textContent = `Soci\u00e9t\u00e9 : ${entry.company}`;
       item.append(company);
     }
-    if (entry.note && entry.type !== "cancel-reservation") {
+    const legacyReservationNoteParts =
+      !entry.reservationMovement && entry.note?.includes(" | ") ? entry.note.split(" | ") : [];
+    const reservationMovementText = entry.reservationMovement || legacyReservationNoteParts[0] || "";
+    const commentText =
+      entry.note && legacyReservationNoteParts.length > 1
+        ? `Commentaire : ${legacyReservationNoteParts.slice(1).join(" | ")}`
+        : entry.note || "";
+    if (reservationMovementText) {
+      const reservationMovement = document.createElement("p");
+      reservationMovement.textContent = reservationMovementText;
+      item.append(reservationMovement);
+    }
+    if (commentText && entry.type !== "cancel-reservation") {
       const note = document.createElement("p");
-      note.textContent = entry.note;
+      note.textContent = commentText;
       item.append(note);
     }
     if (entry.signature) {
@@ -2829,12 +2841,16 @@ function toggleReservationMovement(reservationId) {
 
   const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === reservationId;
   const inlineComment = getInlineReservationComment(reservationId);
+  const reservationMovement = isReservationOut
+    ? `Rentr\u00e9e r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
+    : `Sortie r\u00e9servation du ${reservation.reservationDate || ""}`.trim();
   const entry = {
     id: createHistoryId(),
     type: isReservationOut ? "in" : "out",
     person: reservation.person || "",
     company: reservation.company || "",
     phone: formatPhoneNumber(reservation.phone || ""),
+    reservationMovement,
     note: inlineComment ? `Commentaire : ${inlineComment}` : "",
     signature: getInlineReservationSignature(reservationId),
     date: getMovementDateText(),
