@@ -259,6 +259,10 @@ function makeKeySet(id) {
   };
 }
 
+function createHistoryId() {
+  return `history-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function loadActiveRegistry() {
   const saved = localStorage.getItem(registryStorageKey);
   return saved === "transaction" ? "transaction" : "location";
@@ -543,11 +547,14 @@ function normalizeSet(set, index = 0) {
     status,
     reservations: reservations.length ? reservations : migratedReservation,
     history: Array.isArray(set.history)
-      ? set.history.map((entry) =>
-          migratedReservation.length && entry.type === "reserved" && !entry.reservationId
-            ? { ...entry, reservationId: migratedReservationId }
-            : entry,
-        )
+      ? set.history.map((entry) => ({
+          ...entry,
+          id: entry.id || createHistoryId(),
+          reservationId:
+            migratedReservation.length && entry.type === "reserved" && !entry.reservationId
+              ? migratedReservationId
+              : entry.reservationId,
+        }))
       : [],
   };
 }
@@ -2497,6 +2504,8 @@ function renderPanel() {
     const item = document.createElement("li");
     const title = document.createElement("strong");
     const date = document.createElement("small");
+    item.dataset.historyId = entry.id;
+    item.title = "Ctrl + clic pour supprimer cette ligne d'historique";
     item.dataset.historyAction =
       entry.type === "out"
         ? "out"
@@ -2557,6 +2566,33 @@ function renderPanel() {
     }
     item.append(date);
     historyList.append(item);
+  });
+}
+
+function deleteHistoryEntry(historyId) {
+  const key = getSelectedKey();
+  const selectedSet = getSelectedSet(key);
+  if (!key || !selectedSet || !historyId) return;
+
+  const entry = selectedSet.history.find((item) => item.id === historyId);
+  if (!entry) return;
+  if (entry.type === "reserved" && selectedSet.status === "out" && selectedSet.holderReservationId === entry.reservationId) {
+    alert("Cette r\u00e9servation est sortie : fais d'abord Rentr\u00e9 avant de supprimer cette ligne.");
+    return;
+  }
+
+  const confirmed = confirm("Supprimer cette ligne d'historique ?");
+  if (!confirmed) return;
+
+  const nextHistory = selectedSet.history.filter((item) => item.id !== historyId);
+  const nextReservations =
+    entry.type === "reserved" && entry.reservationId
+      ? (selectedSet.reservations || []).filter((reservation) => reservation.id !== entry.reservationId)
+      : selectedSet.reservations || [];
+
+  updateSelectedSet({
+    reservations: nextReservations,
+    history: nextHistory,
   });
 }
 
@@ -2633,6 +2669,7 @@ function addMovement(type) {
   const forcedCompany = type === "in" && selectedSet.status === "out" ? selectedSet.holderCompany : "";
 
   const entry = {
+    id: createHistoryId(),
     type,
     person: forcedPerson || movementPersonInput.value.trim(),
     company: forcedCompany || movementCompanyInput.value.trim(),
@@ -2692,6 +2729,7 @@ function toggleReservationMovement(reservationId) {
 
   const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === reservationId;
   const entry = {
+    id: createHistoryId(),
     type: isReservationOut ? "in" : "out",
     person: reservation.person || "",
     company: reservation.company || "",
@@ -2736,6 +2774,7 @@ function cancelReservation(reservationId) {
   }
 
   const entry = {
+    id: createHistoryId(),
     type: "cancel-reservation",
     person: reservation.person || "R\u00e9servation annul\u00e9e",
     company: reservation.company || "",
@@ -2781,6 +2820,7 @@ async function reserveSelectedSet() {
   const createdAt = dateTimeFormatter.format(new Date());
   const formattedDate = dateTimeFormatter.format(new Date(reservationDateTime));
   const entry = {
+    id: createHistoryId(),
     type: "reserved",
     reservationId: `reservation-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     person,
@@ -3050,6 +3090,15 @@ reservedBtn.addEventListener("click", reserveSelectedSet);
 rentedBtn.addEventListener("click", () => archiveSelectedKey("rented"));
 removedBtn.addEventListener("click", () => archiveSelectedKey("removed"));
 clearSignatureBtn.addEventListener("click", clearSignature);
+historyList.addEventListener("click", (event) => {
+  if (!event.ctrlKey) return;
+  if (event.target.closest("button")) return;
+
+  const item = event.target.closest("[data-history-id]");
+  if (!item) return;
+  event.preventDefault();
+  deleteHistoryEntry(item.dataset.historyId);
+});
 contactSelect.addEventListener("change", () => {
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
   if (!contact) {
