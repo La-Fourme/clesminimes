@@ -325,7 +325,8 @@ h3 {
 .archive-list button,
 .export-csv-button,
 .delete-key-button,
-.reserved-button {
+.reserved-button,
+.reservation-history-button {
   min-height: 42px;
   padding: 0 14px;
   border-radius: 8px;
@@ -1878,8 +1879,8 @@ body.is-moving-key .photo-hover {
   border-radius: 8px;
   color: var(--ink);
   font-family: inherit;
-  font-size: inherit;
-  font-weight: 800;
+  font-size: 100%;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
 }
