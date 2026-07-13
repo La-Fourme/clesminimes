@@ -252,6 +252,7 @@ function makeKeySet(id) {
     holder: "",
     holderCompany: "",
     holderPhone: "",
+    holderReservationId: "",
     status: "available",
     reservations: [],
     history: [],
@@ -515,11 +516,12 @@ function normalizeSet(set, index = 0) {
   const option = keySetOptions.find((savedOption) => savedOption.id === id) || fallback;
   const status = set.status === "out" ? "out" : "available";
   const reservations = Array.isArray(set.reservations) ? set.reservations : [];
+  const migratedReservationId = `reservation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const migratedReservation =
     set.status === "reserved" && (set.holder || set.holderCompany || set.holderPhone)
       ? [
           {
-            id: `reservation-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            id: migratedReservationId,
             person: set.holder || "",
             company: set.holderCompany || "",
             phone: set.holderPhone || "",
@@ -537,9 +539,16 @@ function normalizeSet(set, index = 0) {
     holder: set.holder || "",
     holderCompany: set.holderCompany || "",
     holderPhone: set.holderPhone || "",
+    holderReservationId: set.holderReservationId || "",
     status,
     reservations: reservations.length ? reservations : migratedReservation,
-    history: Array.isArray(set.history) ? set.history : [],
+    history: Array.isArray(set.history)
+      ? set.history.map((entry) =>
+          migratedReservation.length && entry.type === "reserved" && !entry.reservationId
+            ? { ...entry, reservationId: migratedReservationId }
+            : entry,
+        )
+      : [],
   };
 }
 
@@ -2519,6 +2528,33 @@ function renderPanel() {
       signature.alt = `Signature ${entry.type === "out" ? "Sortie" : "Entrée"}`;
       item.append(signature);
     }
+    const activeReservation =
+      entry.type === "reserved"
+        ? (selectedSet.reservations || []).find((reservation) => reservation.id === entry.reservationId)
+        : null;
+    if (activeReservation) {
+      const actions = document.createElement("div");
+      const movementButton = document.createElement("button");
+      const cancelButton = document.createElement("button");
+      const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === entry.reservationId;
+      const isOutForAnotherReason = selectedSet.status === "out" && selectedSet.holderReservationId !== entry.reservationId;
+
+      actions.className = "reservation-history-actions";
+      movementButton.type = "button";
+      movementButton.className = `reservation-history-button ${isReservationOut ? "in" : "out"}`;
+      movementButton.textContent = isReservationOut ? "Rentr\u00e9" : "Sortie";
+      movementButton.disabled = isOutForAnotherReason;
+      movementButton.addEventListener("click", () => toggleReservationMovement(entry.reservationId));
+
+      cancelButton.type = "button";
+      cancelButton.className = "reservation-history-button cancel";
+      cancelButton.textContent = "Annulation";
+      cancelButton.disabled = isReservationOut;
+      cancelButton.addEventListener("click", () => cancelReservation(entry.reservationId));
+
+      actions.append(movementButton, cancelButton);
+      item.append(actions);
+    }
     item.append(date);
     historyList.append(item);
   });
@@ -2568,7 +2604,7 @@ function setKeySetCount(count) {
   const previousCount = key.sets.length;
   const nextIds = keySetOptions.slice(0, nextCount).map((option) => option.id);
   const removedSets = key.sets.filter((set) => !nextIds.includes(set.id));
-  const removedHasData = removedSets.some((set) => set.status === "out" || set.holder || set.history.length);
+  const removedHasData = removedSets.some((set) => set.status === "out" || set.holder || set.history.length || hasActiveReservations(set));
 
   if (removedHasData) {
     const confirmed = confirm("Réduire le nombre de jeux supprimera l'historique des jeux retirés. Continuer ?");
@@ -2614,6 +2650,11 @@ function addMovement(type) {
     holder: type === "out" ? entry.person || selectedSet.holder : "",
     holderCompany: type === "out" ? entry.company || selectedSet.holderCompany : "",
     holderPhone: type === "out" ? entry.phone || selectedSet.holderPhone : "",
+    holderReservationId: "",
+    reservations:
+      type === "in" && selectedSet.holderReservationId
+        ? (selectedSet.reservations || []).filter((reservation) => reservation.id !== selectedSet.holderReservationId)
+        : selectedSet.reservations || [],
     history: [entry, ...selectedSet.history],
   });
   logActivity(type === "out" ? "Sortie" : "Entrée", `${keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
@@ -2632,6 +2673,85 @@ function addMovement(type) {
     selectedSetId = "main";
     render();
   }
+}
+
+function getMovementDateText() {
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date());
+}
+
+function toggleReservationMovement(reservationId) {
+  const key = getSelectedKey();
+  const selectedSet = getSelectedSet(key);
+  if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+
+  const reservation = (selectedSet.reservations || []).find((item) => item.id === reservationId);
+  if (!reservation) return;
+
+  const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === reservationId;
+  const entry = {
+    type: isReservationOut ? "in" : "out",
+    person: reservation.person || "",
+    company: reservation.company || "",
+    phone: formatPhoneNumber(reservation.phone || ""),
+    note: isReservationOut
+      ? `Rentr\u00e9e r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
+      : `Sortie r\u00e9servation du ${reservation.reservationDate || ""}`.trim(),
+    signature: "",
+    date: getMovementDateText(),
+    reservationId,
+  };
+
+  updateSelectedSet({
+    status: isReservationOut ? "available" : "out",
+    holder: isReservationOut ? "" : entry.person,
+    holderCompany: isReservationOut ? "" : entry.company,
+    holderPhone: isReservationOut ? "" : entry.phone,
+    holderReservationId: isReservationOut ? "" : reservationId,
+    reservations: isReservationOut
+      ? (selectedSet.reservations || []).filter((item) => item.id !== reservationId)
+      : selectedSet.reservations || [],
+    history: [entry, ...selectedSet.history],
+  });
+  logActivity(
+    isReservationOut ? "Rentr\u00e9e" : "Sortie",
+    `${keyLabel(key)} - ${selectedSet.label}`,
+    [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "),
+  );
+  if (selectedArchiveRecord) renderCompromisesPanel();
+}
+
+function cancelReservation(reservationId) {
+  const key = getSelectedKey();
+  const selectedSet = getSelectedSet(key);
+  if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+
+  const reservation = (selectedSet.reservations || []).find((item) => item.id === reservationId);
+  if (!reservation) return;
+  if (selectedSet.status === "out" && selectedSet.holderReservationId === reservationId) {
+    alert("Cette r\u00e9servation est sortie : fais d'abord Rentr\u00e9.");
+    return;
+  }
+
+  const entry = {
+    type: "cancel-reservation",
+    person: reservation.person || "R\u00e9servation annul\u00e9e",
+    company: reservation.company || "",
+    phone: formatPhoneNumber(reservation.phone || ""),
+    note: `Annulation r\u00e9servation du ${reservation.reservationDate || ""}`.trim(),
+    signature: "",
+    date: getMovementDateText(),
+    reservationId,
+  };
+
+  updateSelectedSet({
+    reservations: (selectedSet.reservations || []).filter((item) => item.id !== reservationId),
+    history: [entry, ...selectedSet.history],
+  });
+  logActivity("Annulation r\u00e9servation", `${keyLabel(key)} - ${selectedSet.label}`, entry.person);
+  if (selectedArchiveRecord) renderCompromisesPanel();
 }
 
 async function reserveSelectedSet() {

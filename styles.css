@@ -1861,6 +1861,42 @@ body.is-moving-key .photo-hover {
   line-height: 1.35;
 }
 
+.reservation-history-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.reservation-history-button {
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.reservation-history-button.out {
+  border-color: #ce6a60;
+  background: #f2cec8;
+}
+
+.reservation-history-button.in {
+  border-color: #55aa73;
+  background: #caebd5;
+}
+
+.reservation-history-button.cancel {
+  border-color: #d18427;
+  background: #f8d19a;
+}
+
+.reservation-history-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .history-phone {
   margin: 6px 0 0;
   color: var(--muted);
