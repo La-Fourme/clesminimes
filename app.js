@@ -259,6 +259,37 @@ function makeKeySet(id) {
   };
 }
 
+function getLatestMovementEntry(history = []) {
+  return [...history]
+    .filter((entry) => entry.type === "out" || entry.type === "in")
+    .sort((first, second) => parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date))[0];
+}
+
+function shouldKeepSetOut(set) {
+  if (set.status !== "out") return false;
+  const latestMovement = getLatestMovementEntry(set.history);
+  if (!latestMovement || latestMovement.type !== "out") return false;
+  if (set.holderReservationId) return latestMovement.reservationId === set.holderReservationId;
+  return !latestMovement.reservationId;
+}
+
+function repairSetMovementState(set) {
+  const reservations = Array.isArray(set.reservations) ? set.reservations.filter(isActiveReservation) : [];
+  if (shouldKeepSetOut({ ...set, reservations })) {
+    return { ...set, reservations, status: "out" };
+  }
+
+  return {
+    ...set,
+    holder: "",
+    holderCompany: "",
+    holderPhone: "",
+    holderReservationId: "",
+    reservations,
+    status: "available",
+  };
+}
+
 function createHistoryId() {
   return `history-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -536,7 +567,7 @@ function normalizeSet(set, index = 0) {
         ]
       : [];
 
-  return {
+  return repairSetMovementState({
     id: option.id,
     label: option.label,
     photo: set.photo || "",
@@ -556,7 +587,7 @@ function normalizeSet(set, index = 0) {
               : entry.reservationId,
         }))
       : [],
-  };
+  });
 }
 
 function normalizeKey(key) {
@@ -2655,10 +2686,20 @@ function deleteHistoryEntry(historyId) {
     entry.type === "reserved" && entry.reservationId
       ? (selectedSet.reservations || []).filter((reservation) => reservation.id !== entry.reservationId)
       : selectedSet.reservations || [];
-
-  updateSelectedSet({
+  const repairedSet = repairSetMovementState({
+    ...selectedSet,
     reservations: nextReservations,
     history: nextHistory,
+  });
+
+  updateSelectedSet({
+    status: repairedSet.status,
+    holder: repairedSet.holder,
+    holderCompany: repairedSet.holderCompany,
+    holderPhone: repairedSet.holderPhone,
+    holderReservationId: repairedSet.holderReservationId,
+    reservations: repairedSet.reservations,
+    history: repairedSet.history,
   });
 }
 
