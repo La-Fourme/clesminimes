@@ -1851,7 +1851,7 @@ body.is-moving-key .photo-hover {
   display: block;
   justify-self: start;
   margin-top: 4px;
-  color: var(--muted);
+  color: var(--ink);
 }
 
 .history-list li[data-history-action="reserved"] p {
@@ -1877,6 +1877,8 @@ body.is-moving-key .photo-hover {
   border: 2px solid transparent;
   border-radius: 8px;
   color: var(--ink);
+  font-family: inherit;
+  font-size: inherit;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -1905,7 +1907,7 @@ body.is-moving-key .photo-hover {
 .reservation-signature-field {
   display: grid;
   gap: 6px;
-  margin-top: 8px;
+  margin: 8px 0 8px;
 }
 
 .reservation-signature-label {
