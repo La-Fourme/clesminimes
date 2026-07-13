@@ -253,6 +253,7 @@ function makeKeySet(id) {
     holderCompany: "",
     holderPhone: "",
     status: "available",
+    reservations: [],
     history: [],
   };
 }
@@ -512,7 +513,22 @@ function normalizeSet(set, index = 0) {
   const fallback = keySetOptions[index] || keySetOptions[0];
   const id = keySetOptions.some((option) => option.id === set.id) ? set.id : fallback.id;
   const option = keySetOptions.find((savedOption) => savedOption.id === id) || fallback;
-  const status = ["available", "out", "reserved"].includes(set.status) ? set.status : "available";
+  const status = set.status === "out" ? "out" : "available";
+  const reservations = Array.isArray(set.reservations) ? set.reservations : [];
+  const migratedReservation =
+    set.status === "reserved" && (set.holder || set.holderCompany || set.holderPhone)
+      ? [
+          {
+            id: `reservation-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            person: set.holder || "",
+            company: set.holderCompany || "",
+            phone: set.holderPhone || "",
+            createdAt: "",
+            reservationDate: "",
+            note: "",
+          },
+        ]
+      : [];
 
   return {
     id: option.id,
@@ -522,6 +538,7 @@ function normalizeSet(set, index = 0) {
     holderCompany: set.holderCompany || "",
     holderPhone: set.holderPhone || "",
     status,
+    reservations: reservations.length ? reservations : migratedReservation,
     history: Array.isArray(set.history) ? set.history : [],
   };
 }
@@ -535,7 +552,21 @@ function normalizeKey(key) {
             ...makeKeySet("main"),
             photo: key.photo || "",
             holder: key.holder || "",
-            status: ["available", "out", "reserved"].includes(key.status) ? key.status : "available",
+            status: key.status === "out" ? "out" : "available",
+            reservations:
+              key.status === "reserved" && key.holder
+                ? [
+                    {
+                      id: `reservation-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                      person: key.holder,
+                      company: "",
+                      phone: "",
+                      createdAt: "",
+                      reservationDate: "",
+                      note: "",
+                    },
+                  ]
+                : [],
             history: Array.isArray(key.history) ? key.history : [],
           },
         ];
@@ -766,7 +797,7 @@ function formatOwner(owner) {
 function getStatus(key) {
   if (key.archived) return "archived";
   if (key.sets.some((set) => set.status === "out")) return "out";
-  return key.sets.some((set) => set.status === "reserved") ? "reserved" : "available";
+  return key.sets.some(hasActiveReservations) ? "reserved" : "available";
 }
 
 function isKeyFilled(key) {
@@ -776,28 +807,37 @@ function isKeyFilled(key) {
       key.city?.trim() ||
       key.owner?.trim() ||
       key.notes?.trim() ||
-      key.sets?.some((set) => set.photo || set.holder?.trim() || set.history?.length),
+      key.sets?.some((set) => set.photo || set.holder?.trim() || set.history?.length || hasActiveReservations(set)),
   );
+}
+
+function hasActiveReservations(set) {
+  return Array.isArray(set?.reservations) && set.reservations.length > 0;
+}
+
+function getSetDisplayStatus(set) {
+  if (set.status === "out") return "out";
+  return hasActiveReservations(set) ? "reserved" : "available";
 }
 
 function getTileStatus(key) {
   if (key.archived) return "archived";
   if (key.sets.some((set) => set.status === "out")) return "out";
-  if (key.sets.some((set) => set.status === "reserved")) return "reserved";
+  if (key.sets.some(hasActiveReservations)) return "reserved";
   return isKeyFilled(key) ? "available" : "empty";
 }
 
 function getCompromiseMovementStatus(record) {
   const sets = record?.key?.sets || [];
   if (sets.some((set) => set.status === "out")) return "out";
-  if (sets.some((set) => set.status === "reserved")) return "reserved";
+  if (sets.some(hasActiveReservations)) return "reserved";
   return "";
 }
 
 function statusText(key) {
   if (key.archived) return "Archivée";
   const outCount = key.sets.filter((set) => set.status === "out").length;
-  const reservedCount = key.sets.filter((set) => set.status === "reserved").length;
+  const reservedCount = key.sets.filter(hasActiveReservations).length;
   if (outCount) return key.sets.length === 1 ? "Sortie" : `${outCount} jeu${outCount > 1 ? "x" : ""} sorti${outCount > 1 ? "s" : ""}`;
   if (reservedCount) return key.sets.length === 1 ? "Réservé" : `${reservedCount} jeu${reservedCount > 1 ? "x" : ""} réservé${reservedCount > 1 ? "s" : ""}`;
   return "Disponible";
@@ -2054,8 +2094,9 @@ function renderGrid() {
           strip.className = "key-set-strip";
           key.sets.forEach((set) => {
             const segment = document.createElement("span");
-            segment.className = `key-set-segment ${set.status}`;
-            segment.title = `${set.label} - ${set.status === "out" ? "Sortie" : set.status === "reserved" ? "R\u00e9serv\u00e9" : "Disponible"}`;
+            const displayStatus = getSetDisplayStatus(set);
+            segment.className = `key-set-segment ${displayStatus}`;
+            segment.title = `${set.label} - ${displayStatus === "out" ? "Sortie" : displayStatus === "reserved" ? "R\u00e9serv\u00e9" : "Disponible"}`;
             strip.append(segment);
           });
           button.append(strip);
@@ -2403,8 +2444,9 @@ function renderPanel() {
   statusPill.innerHTML = "";
   key.sets.forEach((set, index) => {
     const item = document.createElement("span");
-    item.className = `set-status ${set.status}`;
-    item.textContent = `${index + 1} : ${set.status === "out" ? "indisponible" : set.status === "reserved" ? "r\u00e9serv\u00e9" : "disponible"}`;
+    const displayStatus = getSetDisplayStatus(set);
+    item.className = `set-status ${displayStatus}`;
+    item.textContent = `${index + 1} : ${displayStatus === "out" ? "indisponible" : displayStatus === "reserved" ? "r\u00e9serv\u00e9" : "disponible"}`;
     statusPill.append(item);
   });
   keySetCountSelect.value = String(key.sets.length);
@@ -2416,15 +2458,14 @@ function renderPanel() {
   ownerInput.value = formatOwner(key.owner);
   notesInput.value = key.notes;
   const canMoveSelectedKey = !key.archived || Boolean(selectedArchiveRecord);
-  const isSelectedSetReserved = selectedSet.status === "reserved";
   const isSelectedSetOut = selectedSet.status === "out";
-  checkinBtn.textContent = selectedSet.status === "out" || selectedSet.status === "reserved" ? "Rentr\u00e9e" : "Entr\u00e9e";
-  reservedBtn.textContent = selectedSet.status === "reserved" ? "Annulation" : "R\u00e9serv\u00e9";
+  checkinBtn.textContent = selectedSet.status === "out" ? "Rentr\u00e9e" : "Entr\u00e9e";
+  reservedBtn.textContent = "R\u00e9serv\u00e9";
   checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
-  checkinBtn.disabled = !canMoveSelectedKey || isSelectedSetReserved || (isCompromiseView && !isSelectedSetOut);
-  reservedBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
-  rentedBtn.disabled = key.archived || isSelectedSetReserved || isSelectedSetOut;
-  removedBtn.disabled = key.archived || isSelectedSetReserved || isSelectedSetOut;
+  checkinBtn.disabled = !canMoveSelectedKey || (isCompromiseView && !isSelectedSetOut);
+  reservedBtn.disabled = !canMoveSelectedKey;
+  rentedBtn.disabled = key.archived || isSelectedSetOut;
+  removedBtn.disabled = key.archived || isSelectedSetOut;
   deleteSelectedKeyBtn.disabled = key.archived;
   keySetCountSelect.disabled = isArchiveView;
   propertyInput.disabled = isArchiveView;
@@ -2551,18 +2592,9 @@ function addMovement(type) {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
-  const forcedPerson =
-    (type === "out" && selectedSet.status === "reserved") || (type === "in" && selectedSet.status === "out")
-      ? selectedSet.holder
-      : "";
-  const forcedPhone =
-    (type === "out" && selectedSet.status === "reserved") || (type === "in" && selectedSet.status === "out")
-      ? selectedSet.holderPhone
-      : "";
-  const forcedCompany =
-    (type === "out" && selectedSet.status === "reserved") || (type === "in" && selectedSet.status === "out")
-      ? selectedSet.holderCompany
-      : "";
+  const forcedPerson = type === "in" && selectedSet.status === "out" ? selectedSet.holder : "";
+  const forcedPhone = type === "in" && selectedSet.status === "out" ? selectedSet.holderPhone : "";
+  const forcedCompany = type === "in" && selectedSet.status === "out" ? selectedSet.holderCompany : "";
 
   const entry = {
     type,
@@ -2608,32 +2640,6 @@ async function reserveSelectedSet() {
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
   clearTimeout(detailCloseTimer);
 
-  if (selectedSet.status === "reserved") {
-    const entry = {
-      type: "cancel-reservation",
-      person: selectedSet.holder || "R\u00e9servation annul\u00e9e",
-      company: selectedSet.holderCompany || "",
-      phone: selectedSet.holderPhone || "",
-      note: "Annulation r\u00e9servation",
-      signature: "",
-      date: new Intl.DateTimeFormat("fr-FR", {
-        dateStyle: "short",
-        timeStyle: "short",
-      }).format(new Date()),
-    };
-
-    updateSelectedSet({
-      status: "available",
-      holder: "",
-      holderCompany: "",
-      holderPhone: "",
-      history: [entry, ...selectedSet.history],
-    });
-    logActivity("Annulation r\u00e9servation", `${keyLabel(key)} - ${selectedSet.label}`, entry.person);
-    if (selectedArchiveRecord) renderCompromisesPanel();
-    return;
-  }
-
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
   const person = contact ? getMovementContactName(contact) : movementPersonInput.value.trim();
   const company = contact?.type === "external" ? contact.companyName || "" : movementCompanyInput.value.trim();
@@ -2656,6 +2662,7 @@ async function reserveSelectedSet() {
   const formattedDate = dateTimeFormatter.format(new Date(reservationDateTime));
   const entry = {
     type: "reserved",
+    reservationId: `reservation-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     person,
     company,
     phone,
@@ -2667,10 +2674,18 @@ async function reserveSelectedSet() {
   };
 
   updateSelectedSet({
-    status: "reserved",
-    holder: person,
-    holderCompany: entry.company || "",
-    holderPhone: entry.phone || "",
+    reservations: [
+      {
+        id: entry.reservationId,
+        person,
+        company: entry.company || "",
+        phone: entry.phone || "",
+        note: entry.note || "",
+        createdAt,
+        reservationDate: formattedDate,
+      },
+      ...(selectedSet.reservations || []),
+    ],
     history: [entry, ...selectedSet.history],
   });
   logActivity("R\u00e9serv\u00e9", `${keyLabel(key)} - ${selectedSet.label}`, [person, `Pour le ${formattedDate}`, entry.note].filter(Boolean).join(" | "));
