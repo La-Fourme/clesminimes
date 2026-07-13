@@ -774,6 +774,21 @@ function formatReservationHistoryDate(value) {
   return `${match[1]} \u00e0 ${match[2]}`;
 }
 
+function sortKeyHistoryEntries(first, second) {
+  const firstIsReservation = first.type === "reserved";
+  const secondIsReservation = second.type === "reserved";
+
+  if (firstIsReservation && secondIsReservation) {
+    const firstReservationTime = parseHistoryTimestamp(first.reservationDate || first.date);
+    const secondReservationTime = parseHistoryTimestamp(second.reservationDate || second.date);
+    return firstReservationTime - secondReservationTime || parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
+  }
+
+  if (firstIsReservation) return -1;
+  if (secondIsReservation) return 1;
+  return parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
+}
+
 function normalizeContact(contact) {
   const type = contact.type === "external" ? "external" : "internal";
 
@@ -2546,7 +2561,7 @@ function renderPanel() {
   }
 
   [...selectedSet.history]
-    .sort((first, second) => parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date))
+    .sort(sortKeyHistoryEntries)
     .forEach((entry) => {
     const item = document.createElement("li");
     const title = document.createElement("strong");
