@@ -736,6 +736,13 @@ function getHistoryPersonName(entry) {
   return [person, entry.phone ? formatPhoneNumber(entry.phone) : ""].filter(Boolean).join(" - ");
 }
 
+function formatReservationHistoryDate(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2})$/);
+  if (!match) return text;
+  return `${match[1]} \u00e0 ${match[2]}`;
+}
+
 function normalizeContact(contact) {
   const type = contact.type === "external" ? "external" : "internal";
 
@@ -2524,11 +2531,16 @@ function renderPanel() {
     title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${getHistoryPersonName(entry)}`;
     date.textContent =
       entry.type === "reserved"
-        ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date} pour le ${entry.reservationDate || entry.date}`
+        ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date}`
         : entry.type === "cancel-reservation" && entry.note
           ? `${entry.date} - ${entry.note}`
         : entry.date;
     item.append(title);
+    if (entry.type === "reserved") {
+      const reservationDate = document.createElement("strong");
+      reservationDate.textContent = `Pour le ${formatReservationHistoryDate(entry.reservationDate || entry.date)}`;
+      item.append(reservationDate);
+    }
     if (entry.company) {
       const company = document.createElement("p");
       company.textContent = `Soci\u00e9t\u00e9 : ${entry.company}`;
