@@ -775,18 +775,9 @@ function formatReservationHistoryDate(value) {
 }
 
 function sortKeyHistoryEntries(first, second) {
-  const firstIsReservation = first.type === "reserved";
-  const secondIsReservation = second.type === "reserved";
-
-  if (firstIsReservation && secondIsReservation) {
-    const firstReservationTime = parseHistoryTimestamp(first.reservationDate || first.date);
-    const secondReservationTime = parseHistoryTimestamp(second.reservationDate || second.date);
-    return firstReservationTime - secondReservationTime || parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
-  }
-
-  if (firstIsReservation) return -1;
-  if (secondIsReservation) return 1;
-  return parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
+  const firstTime = parseHistoryTimestamp(first.type === "reserved" ? first.reservationDate || first.date : first.date);
+  const secondTime = parseHistoryTimestamp(second.type === "reserved" ? second.reservationDate || second.date : second.date);
+  return firstTime - secondTime || parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
 }
 
 function normalizeContact(contact) {
