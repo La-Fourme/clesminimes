@@ -344,6 +344,7 @@ h3 {
 
 .registry-toggle-button {
   justify-self: start;
+  align-self: center;
   width: 290px;
   min-width: 0;
   min-height: 60px;
@@ -526,7 +527,7 @@ h3 {
   color: var(--ink);
   background: transparent;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 650;
 }
 
 .key-status-filter-button + .key-status-filter-button::before {
