@@ -556,7 +556,7 @@ h3 {
 }
 
 .key-status-filter-button[data-key-status-filter="out"] .key-status-dot {
-  background: #ce6a60;
+  background: #d9251d;
 }
 
 .key-status-filter-button [data-key-status-count] {
