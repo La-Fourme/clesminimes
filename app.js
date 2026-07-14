@@ -301,7 +301,7 @@ function shouldKeepSetOut(set) {
 
 function repairSetMovementState(set) {
   const reservations = Array.isArray(set.reservations) ? set.reservations.filter(isActiveReservation) : [];
-  if (shouldKeepSetOut({ ...set, reservations })) {
+  if (set.status === "out") {
     return { ...set, reservations, status: "out" };
   }
 
