@@ -9,6 +9,7 @@ const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const appActivityLogStorageKey = "cles-global-activity-v1";
 const deviceNameStorageKey = "cles-device-name-v1";
 const tileViewStorageKey = "cles-tile-view-mode-v1";
+const keyStatusFilterStorageKey = "cles-key-status-filter-v1";
 const photoMaxSize = 650;
 const photoJpegQuality = 0.45;
 const photoOptimizationStorageKey = "cles-photo-optimization-650-v1";
@@ -76,6 +77,7 @@ const historyList = document.querySelector("#historyList");
 const searchInput = document.querySelector("#searchInput");
 const textViewBtn = document.querySelector("#textViewBtn");
 const photoViewBtn = document.querySelector("#photoViewBtn");
+const keyStatusFilterButtons = [...document.querySelectorAll(".key-status-filter-button")];
 const statusFilter = document.querySelector("#statusFilter");
 const closePanelBtn = document.querySelector("#closePanelBtn");
 const saleCelebration = document.querySelector("#saleCelebration");
@@ -140,6 +142,7 @@ let isPhotoImporting = false;
 let photoImportResetTimer = null;
 let undoSnapshot = null;
 let tileViewMode = loadTileViewMode();
+let keyStatusFilter = loadKeyStatusFilter();
 let saleCelebrationTimer = null;
 const celebrationAudioFiles = ["Ados.mp3", "Adultes.mp3", "Langue.mp3"];
 let celebrationAudioPlayers = [];
@@ -156,10 +159,21 @@ function loadTileViewMode() {
   return localStorage.getItem(tileViewStorageKey) === "photo" ? "photo" : "text";
 }
 
+function loadKeyStatusFilter() {
+  const saved = localStorage.getItem(keyStatusFilterStorageKey);
+  return ["all", "available", "reserved", "out"].includes(saved) ? saved : "all";
+}
+
 function setTileViewMode(mode) {
   tileViewMode = mode === "photo" ? "photo" : "text";
   localStorage.setItem(tileViewStorageKey, tileViewMode);
   updateTileViewToggle();
+  renderGrid();
+}
+
+function setKeyStatusFilter(filter) {
+  keyStatusFilter = ["all", "available", "reserved", "out"].includes(filter) ? filter : "all";
+  localStorage.setItem(keyStatusFilterStorageKey, keyStatusFilter);
   renderGrid();
 }
 
@@ -169,6 +183,17 @@ function updateTileViewToggle() {
   textViewBtn.setAttribute("aria-pressed", String(tileViewMode === "text"));
   photoViewBtn.setAttribute("aria-pressed", String(tileViewMode === "photo"));
   grid.dataset.viewMode = tileViewMode;
+}
+
+function updateKeyStatusFilterBar() {
+  const counts = getKeyStatusCounts();
+  keyStatusFilterButtons.forEach((button) => {
+    const filter = button.dataset.keyStatusFilter || "all";
+    const count = button.querySelector("[data-key-status-count]");
+    button.classList.toggle("is-active", filter === keyStatusFilter);
+    button.setAttribute("aria-pressed", String(filter === keyStatusFilter));
+    if (count) count.textContent = String(counts[filter] || 0);
+  });
 }
 
 function getDeviceName() {
@@ -894,6 +919,32 @@ function getTileStatus(key) {
   if (key.sets.some((set) => set.status === "out")) return "out";
   if (key.sets.some(hasActiveReservations)) return "reserved";
   return isKeyFilled(key) ? "available" : "empty";
+}
+
+function getCountableSets(key) {
+  if (key.archived || !isKeyFilled(key)) return [];
+  return key.sets || [];
+}
+
+function keyHasSetStatus(key, filter) {
+  if (filter === "all") return true;
+  return getCountableSets(key).some((set) => getSetDisplayStatus(set) === filter);
+}
+
+function getKeyStatusCounts() {
+  return keys.reduce(
+    (counts, key) => {
+      getCountableSets(key).forEach((set) => {
+        const status = getSetDisplayStatus(set);
+        counts.all += 1;
+        if (status === "available") counts.available += 1;
+        if (status === "reserved") counts.reserved += 1;
+        if (status === "out") counts.out += 1;
+      });
+      return counts;
+    },
+    { all: 0, available: 0, reserved: 0, out: 0 },
+  );
 }
 
 function getCompromiseMovementStatus(record) {
@@ -2069,11 +2120,12 @@ function matchesFilter(key) {
     (status === "available" && !key.archived && key.sets.some((set) => set.status === "available")) ||
     (status === "out" && !key.archived && key.sets.some((set) => set.status === "out"));
 
-  return statusMatches && (!query || haystack.includes(query));
+  return statusMatches && keyHasSetStatus(key, keyStatusFilter) && (!query || haystack.includes(query));
 }
 
 function renderGrid() {
   grid.innerHTML = "";
+  updateKeyStatusFilterBar();
 
   categories.forEach((category) => {
     const row = document.createElement("section");
@@ -3458,6 +3510,9 @@ signatureCanvas.addEventListener("pointercancel", stopSignature);
 searchInput.addEventListener("input", render);
 textViewBtn.addEventListener("click", () => setTileViewMode("text"));
 photoViewBtn.addEventListener("click", () => setTileViewMode("photo"));
+keyStatusFilterButtons.forEach((button) => {
+  button.addEventListener("click", () => setKeyStatusFilter(button.dataset.keyStatusFilter));
+});
 statusFilter?.addEventListener("change", render);
 undoBtn.addEventListener("click", undoPreviousStep);
 historyDataBtn.addEventListener("click", openGlobalHistoryPanel);

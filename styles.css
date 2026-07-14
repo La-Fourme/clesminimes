@@ -500,6 +500,71 @@ h3 {
   background: var(--blue);
 }
 
+.key-status-filter {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  width: min(100%, 560px);
+  margin: 8px 0 12px auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #d8dcd8;
+  box-shadow: 0 6px 14px rgba(30, 37, 40, 0.12);
+}
+
+.key-status-filter-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  color: var(--ink);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.key-status-filter-button + .key-status-filter-button::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  bottom: 7px;
+  width: 1px;
+  background: rgba(100, 109, 105, 0.46);
+}
+
+.key-status-filter-button span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.52);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.key-status-filter-button.is-active {
+  color: #f4f7f5;
+  background: var(--blue);
+}
+
+.key-status-filter-button.is-active::before,
+.key-status-filter-button.is-active + .key-status-filter-button::before {
+  opacity: 0;
+}
+
+.key-status-filter-button.is-active span {
+  color: var(--blue);
+  background: #f4f7f5;
+}
+
 .undo-filter-action {
   display: grid;
   gap: 7px;
@@ -2193,9 +2258,30 @@ body.is-moving-key .photo-hover {
   .filter-action,
   .undo-filter-action,
   .view-filter-action,
+  .key-status-filter,
   .view-toggle,
   .contacts-filter-button {
     width: 100%;
+  }
+
+  .key-status-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin: 12px 0 12px;
+    border-radius: 14px;
+  }
+
+  .key-status-filter-button {
+    min-height: 42px;
+    font-size: 12px;
+  }
+
+  .key-status-filter-button:nth-child(3)::before {
+    opacity: 0;
+  }
+
+  .key-status-filter-button:nth-child(n + 3) {
+    border-top: 1px solid rgba(100, 109, 105, 0.36);
   }
 
   .backup-panel {
@@ -2248,6 +2334,31 @@ body.is-moving-key .photo-hover {
 @media (orientation: landscape) and (pointer: coarse) {
   .workspace {
     padding: 8px 6px;
+  }
+
+  .key-status-filter {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: min(100%, 560px);
+    margin: 8px 0 10px auto;
+  }
+
+  .key-status-filter-button {
+    min-height: 38px;
+    font-size: 11px;
+  }
+
+  .key-status-filter-button:nth-child(3)::before {
+    opacity: 1;
+  }
+
+  .key-status-filter-button:nth-child(n + 3) {
+    border-top: 0;
+  }
+
+  .key-status-filter-button span {
+    min-width: 20px;
+    height: 20px;
+    font-size: 11px;
   }
 
   .filters {
