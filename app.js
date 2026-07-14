@@ -763,6 +763,12 @@ function formatCompanyName(value) {
   });
 }
 
+function formatSentenceStart(value) {
+  return String(value || "").replace(/^(\s*)(\p{L})/u, (match, spaces, letter) => {
+    return `${spaces}${letter.toLocaleUpperCase("fr-FR")}`;
+  });
+}
+
 function formatLastName(value) {
   return String(value || "").trim().toLocaleUpperCase("fr-FR");
 }
@@ -2680,7 +2686,8 @@ function renderPanel() {
     }
     if (commentText && entry.type !== "cancel-reservation") {
       const note = document.createElement("p");
-      note.textContent = commentText;
+      const normalizedComment = commentText.replace(/^Commentaire\s*:\s*/i, "");
+      note.textContent = `Commentaire : ${formatSentenceStart(normalizedComment)}`;
       item.append(note);
     }
     if (entry.signature) {
@@ -2871,7 +2878,7 @@ function addMovement(type) {
     person: forcedPerson || getMovementPersonInputName(),
     company: forcedCompany || formatCompanyName(movementCompanyInput.value).trim(),
     phone: formatPhoneNumber(forcedPhone || movementPhoneInput.value),
-    note: movementNoteInput.value.trim(),
+    note: formatSentenceStart(movementNoteInput.value).trim(),
     signature: hasSignature ? signatureCanvas.toDataURL("image/png") : "",
     date: new Intl.DateTimeFormat("fr-FR", {
       dateStyle: "short",
@@ -2985,7 +2992,7 @@ function toggleReservationMovement(reservationId) {
 
   const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === reservationId;
   if (!isReservationOut) showCheckoutReservationWarning(selectedSet, reservationId);
-  const inlineComment = getInlineReservationComment(reservationId);
+  const inlineComment = formatSentenceStart(getInlineReservationComment(reservationId)).trim();
   const reservationMovement = isReservationOut
     ? `Rentr\u00e9e r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
     : `Sortie r\u00e9servation du ${reservation.reservationDate || ""}`.trim();
@@ -3086,7 +3093,7 @@ async function reserveSelectedSet() {
     person,
     company,
     phone,
-    note: movementNoteInput.value.trim(),
+    note: formatSentenceStart(movementNoteInput.value).trim(),
     signature: "",
     date: createdAt,
     createdAt,
@@ -3384,6 +3391,9 @@ movementCompanyInput.addEventListener("input", () => {
 });
 movementPhoneInput.addEventListener("input", () => {
   movementPhoneInput.value = formatPhoneNumber(movementPhoneInput.value);
+});
+movementNoteInput.addEventListener("input", () => {
+  movementNoteInput.value = formatSentenceStart(movementNoteInput.value);
 });
 contactsTabBtn.addEventListener("click", openContactsPanel);
 contactsPanel.addEventListener("mouseenter", () => clearTimeout(contactsCloseTimer));
