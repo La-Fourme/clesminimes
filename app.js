@@ -2658,7 +2658,7 @@ function renderPanel() {
       clearReservationSignatureBtn.textContent = "Effacer";
       signatureCanvas.className = "reservation-signature-canvas";
       signatureCanvas.width = 320;
-      signatureCanvas.height = 120;
+      signatureCanvas.height = 150;
       signatureCanvas.dataset.reservationId = entry.reservationId;
       signatureCanvas.setAttribute("aria-label", "Zone de signature de la réservation");
       clearReservationSignatureBtn.addEventListener("click", () => clearInlineSignature(signatureCanvas));
