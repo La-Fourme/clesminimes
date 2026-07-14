@@ -805,6 +805,21 @@ function sortKeyHistoryEntries(first, second) {
   return firstTime - secondTime || parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
 }
 
+function getReservationPersonName(reservation) {
+  return [reservation.company, reservation.person].filter(Boolean).join(" - ") || "intervenant non renseign\u00e9";
+}
+
+function showCheckoutReservationWarning(set) {
+  const nextReservation = [...(set.reservations || [])]
+    .filter(isActiveReservation)
+    .sort((first, second) => parseHistoryTimestamp(first.reservationDate || first.createdAt) - parseHistoryTimestamp(second.reservationDate || second.createdAt))[0];
+  if (!nextReservation) return;
+
+  alert(
+    `Attention, jeu de cl\u00e9 r\u00e9serv\u00e9 pour le ${formatReservationHistoryDate(nextReservation.reservationDate || nextReservation.createdAt)} par ${getReservationPersonName(nextReservation)} ; pense \u00e0 bien le ramener avant.`,
+  );
+}
+
 function normalizeContact(contact) {
   const type = contact.type === "external" ? "external" : "internal";
 
@@ -2829,6 +2844,7 @@ function addMovement(type) {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+  if (type === "out") showCheckoutReservationWarning(selectedSet);
   const forcedPerson = type === "in" && selectedSet.status === "out" ? selectedSet.holder : "";
   const forcedPhone = type === "in" && selectedSet.status === "out" ? selectedSet.holderPhone : "";
   const forcedCompany = type === "in" && selectedSet.status === "out" ? selectedSet.holderCompany : "";
