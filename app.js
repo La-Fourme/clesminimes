@@ -809,9 +809,10 @@ function getReservationPersonName(reservation) {
   return [reservation.company, reservation.person].filter(Boolean).join(" - ") || "intervenant non renseign\u00e9";
 }
 
-function showCheckoutReservationWarning(set) {
+function showCheckoutReservationWarning(set, ignoredReservationId = "") {
   const nextReservation = [...(set.reservations || [])]
     .filter(isActiveReservation)
+    .filter((reservation) => reservation.id !== ignoredReservationId)
     .sort((first, second) => parseHistoryTimestamp(first.reservationDate || first.createdAt) - parseHistoryTimestamp(second.reservationDate || second.createdAt))[0];
   if (!nextReservation) return;
 
@@ -2967,6 +2968,7 @@ function toggleReservationMovement(reservationId) {
   if (!reservation) return;
 
   const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === reservationId;
+  if (!isReservationOut) showCheckoutReservationWarning(selectedSet, reservationId);
   const inlineComment = getInlineReservationComment(reservationId);
   const reservationMovement = isReservationOut
     ? `Rentr\u00e9e r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
