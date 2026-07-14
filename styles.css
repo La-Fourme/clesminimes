@@ -2368,8 +2368,8 @@ body.is-moving-key .photo-hover {
 
   .key-status-filter {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    width: min(100%, 560px);
-    margin: 4px 0 8px auto;
+    width: 100%;
+    margin: 14px 0 8px;
   }
 
   .key-status-filter-button {
