@@ -817,7 +817,7 @@ function showCheckoutReservationWarning(set, ignoredReservationId = "") {
   if (!nextReservation) return;
 
   alert(
-    `Attention, jeu de cl\u00e9 r\u00e9serv\u00e9 pour le ${formatReservationHistoryDate(nextReservation.reservationDate || nextReservation.createdAt)} par ${getReservationPersonName(nextReservation)} ; pense \u00e0 bien le ramener avant.`,
+    `ATTENTION ! Ce jeu de cl\u00e9s est r\u00e9serv\u00e9 par ${getReservationPersonName(nextReservation)} le ${formatReservationHistoryDate(nextReservation.reservationDate || nextReservation.createdAt)} ; pense bien \u00e0 le remettre sur le tableau avant !`,
   );
 }
 
