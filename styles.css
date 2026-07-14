@@ -506,7 +506,7 @@ h3 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
-  width: min(100%, 520px);
+  width: min(100%, 430px);
   margin: -34px 0 10px auto;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -526,7 +526,7 @@ h3 {
   border-radius: 0;
   color: var(--ink);
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   line-height: 1;
 }
