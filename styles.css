@@ -238,6 +238,7 @@ button {
 .topbar {
   display: grid;
   grid-template-columns: 310px minmax(0, 1fr) 260px;
+  align-items: start;
   column-gap: 24px;
 }
 
@@ -434,7 +435,7 @@ h3 {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   column-gap: 6px;
-  margin: 20px 0 18px;
+  margin: 12px 0 18px;
   align-items: end;
 }
 
@@ -505,7 +506,7 @@ h3 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
   width: min(100%, 560px);
-  margin: 8px 0 12px auto;
+  margin: -34px 0 10px auto;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #d8dcd8;
@@ -517,7 +518,7 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   min-height: 34px;
   padding: 0 8px;
   border: 0;
@@ -538,7 +539,26 @@ h3 {
   background: rgba(100, 109, 105, 0.46);
 }
 
-.key-status-filter-button span {
+.key-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--blue);
+}
+
+.key-status-filter-button[data-key-status-filter="available"] .key-status-dot {
+  background: #3d8f5e;
+}
+
+.key-status-filter-button[data-key-status-filter="reserved"] .key-status-dot {
+  background: #d18427;
+}
+
+.key-status-filter-button[data-key-status-filter="out"] .key-status-dot {
+  background: #ce6a60;
+}
+
+.key-status-filter-button [data-key-status-count] {
   display: inline-grid;
   place-items: center;
   min-width: 24px;
@@ -551,18 +571,26 @@ h3 {
 }
 
 .key-status-filter-button.is-active {
-  color: #f4f7f5;
-  background: var(--blue);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: inset 0 -3px 0 var(--blue);
 }
 
-.key-status-filter-button.is-active::before,
-.key-status-filter-button.is-active + .key-status-filter-button::before {
-  opacity: 0;
+.key-status-filter-button[data-key-status-filter="available"].is-active {
+  box-shadow: inset 0 -3px 0 #3d8f5e;
 }
 
-.key-status-filter-button.is-active span {
-  color: var(--blue);
-  background: #f4f7f5;
+.key-status-filter-button[data-key-status-filter="reserved"].is-active {
+  box-shadow: inset 0 -3px 0 #d18427;
+}
+
+.key-status-filter-button[data-key-status-filter="out"].is-active {
+  box-shadow: inset 0 -3px 0 #ce6a60;
+}
+
+.key-status-filter-button.is-active [data-key-status-count] {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .undo-filter-action {
@@ -2193,6 +2221,7 @@ body.is-moving-key .photo-hover {
 
   .topbar {
     grid-template-columns: 1fr;
+    align-items: stretch;
     row-gap: 14px;
   }
 
@@ -2267,7 +2296,7 @@ body.is-moving-key .photo-hover {
   .key-status-filter {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
-    margin: 12px 0 12px;
+    margin: 8px 0 10px;
     border-radius: 14px;
   }
 
@@ -2339,7 +2368,7 @@ body.is-moving-key .photo-hover {
   .key-status-filter {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     width: min(100%, 560px);
-    margin: 8px 0 10px auto;
+    margin: 4px 0 8px auto;
   }
 
   .key-status-filter-button {
@@ -2355,7 +2384,7 @@ body.is-moving-key .photo-hover {
     border-top: 0;
   }
 
-  .key-status-filter-button span {
+  .key-status-filter-button [data-key-status-count] {
     min-width: 20px;
     height: 20px;
     font-size: 11px;
