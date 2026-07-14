@@ -1755,7 +1755,7 @@ body.is-moving-key .photo-hover {
 
 #signatureCanvas {
   width: 100%;
-  height: 150px;
+  height: 143px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #daddda;
@@ -1962,7 +1962,7 @@ body.is-moving-key .photo-hover {
 
 .reservation-signature-canvas {
   width: 100%;
-  height: 150px;
+  height: 143px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #daddda;
@@ -2099,7 +2099,11 @@ body.is-moving-key .photo-hover {
   }
 
   #signatureCanvas {
-    height: 150px;
+    height: 158px;
+  }
+
+  .reservation-signature-canvas {
+    height: 158px;
   }
 
   #contactSelect {
