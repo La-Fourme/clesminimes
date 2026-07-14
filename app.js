@@ -757,6 +757,12 @@ function formatFirstName(value) {
     .replace(/(^|[\s-])(\p{L})/gu, (match, separator, letter) => `${separator}${letter.toLocaleUpperCase("fr-FR")}`);
 }
 
+function formatCompanyName(value) {
+  return String(value || "").replace(/(^|[\s-])(\p{L})/gu, (match, separator, letter) => {
+    return `${separator}${letter.toLocaleUpperCase("fr-FR")}`;
+  });
+}
+
 function formatLastName(value) {
   return String(value || "").trim().toLocaleUpperCase("fr-FR");
 }
@@ -811,9 +817,7 @@ function formatReservationHistoryDate(value) {
 }
 
 function sortKeyHistoryEntries(first, second) {
-  const firstTime = parseHistoryTimestamp(first.type === "reserved" ? first.reservationDate || first.date : first.date);
-  const secondTime = parseHistoryTimestamp(second.type === "reserved" ? second.reservationDate || second.date : second.date);
-  return firstTime - secondTime || parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
+  return parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
 }
 
 function getReservationPersonName(reservation) {
@@ -839,7 +843,7 @@ function normalizeContact(contact) {
     id: contact.id || createContactId(),
     firstName: formatFirstName(contact.firstName).trim(),
     name: type === "external" && !contact.companyName ? "" : formatLastName(contact.name),
-    companyName: type === "external" ? (contact.companyName || contact.name || "").trim() : "",
+    companyName: type === "external" ? formatCompanyName(contact.companyName || contact.name).trim() : "",
     phone: formatPhoneNumber(contact.phone),
     type,
   };
@@ -1260,8 +1264,8 @@ function renderContactsPanel() {
 function updateLegacyContactFormMode() {
   const isExternal = activeContactType === "external";
   contactFirstNameLabel.hidden = !isExternal;
-  contactNameLabel.firstChild.textContent = isExternal ? "Nom de la société\n            " : "Nom\n            ";
-  contactNameInput.placeholder = isExternal ? "Nom de la société" : "Nom de l'intervenant";
+  contactNameLabel.firstChild.textContent = "Nom de l'intervenant\n            ";
+  contactNameInput.placeholder = "Nom de l'intervenant";
   contactFirstNameLabel.hidden = false;
   contactFirstNameLabel.firstChild.textContent = "Pr\u00e9nom de l'intervenant\n            ";
   contactNameLabel.firstChild.textContent = "Nom de l'intervenant\n            ";
@@ -1274,9 +1278,9 @@ function updatePreviousContactFormMode() {
   const isExternal = activeContactType === "external";
   contactFirstNameLabel.hidden = false;
   contactFirstNameLabel.firstChild.textContent = "Prénom de l'intervenant\n            ";
-  contactNameLabel.firstChild.textContent = isExternal ? "Nom de la société\n            " : "NOM de l'intervenant\n            ";
+  contactNameLabel.firstChild.textContent = "Nom de l'intervenant\n            ";
   contactFirstNameInput.placeholder = "Prénom de l'intervenant";
-  contactNameInput.placeholder = isExternal ? "Nom de la société" : "NOM de l'intervenant";
+  contactNameInput.placeholder = "Nom de l'intervenant";
   addContactBtn.textContent = editingContactId ? "Enregistrer" : "Ajouter";
 }
 
@@ -1288,7 +1292,7 @@ function updateContactFormMode() {
   contactCompanyLabel.hidden = !isExternal;
   contactFirstNameInput.placeholder = "Pr\u00e9nom de l'intervenant";
   contactNameInput.placeholder = "Nom de l'intervenant";
-  contactCompanyInput.placeholder = "Nom de soci\u00e9t\u00e9";
+  contactCompanyInput.placeholder = "Nom de la soci\u00e9t\u00e9 de l'intervenant";
   addContactBtn.textContent = editingContactId ? "Enregistrer" : "Ajouter";
 }
 
@@ -2865,7 +2869,7 @@ function addMovement(type) {
     id: createHistoryId(),
     type,
     person: forcedPerson || getMovementPersonInputName(),
-    company: forcedCompany || movementCompanyInput.value.trim(),
+    company: forcedCompany || formatCompanyName(movementCompanyInput.value).trim(),
     phone: formatPhoneNumber(forcedPhone || movementPhoneInput.value),
     note: movementNoteInput.value.trim(),
     signature: hasSignature ? signatureCanvas.toDataURL("image/png") : "",
@@ -3057,7 +3061,7 @@ async function reserveSelectedSet() {
 
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
   const person = getMovementPersonInputName();
-  const company = contact?.type === "external" ? contact.companyName || "" : movementCompanyInput.value.trim();
+  const company = contact?.type === "external" ? formatCompanyName(contact.companyName || "").trim() : formatCompanyName(movementCompanyInput.value).trim();
   const phone = formatPhoneNumber(contact?.phone || movementPhoneInput.value);
   if (!person) {
     alert("Renseigne le nom de l'intervenant avant de r\u00e9server.");
@@ -3366,7 +3370,7 @@ contactSelect.addEventListener("change", () => {
 
   movementPersonInput.value = formatFirstName(contact.firstName || "");
   movementNameInput.value = formatLastName(contact.name || "");
-  movementCompanyInput.value = contact.type === "external" ? contact.companyName || "" : "";
+  movementCompanyInput.value = contact.type === "external" ? formatCompanyName(contact.companyName || "") : "";
   movementPhoneInput.value = formatPhoneNumber(contact.phone);
 });
 movementPersonInput.addEventListener("input", () => {
@@ -3374,6 +3378,9 @@ movementPersonInput.addEventListener("input", () => {
 });
 movementNameInput.addEventListener("input", () => {
   movementNameInput.value = formatLastName(movementNameInput.value);
+});
+movementCompanyInput.addEventListener("input", () => {
+  movementCompanyInput.value = formatCompanyName(movementCompanyInput.value);
 });
 movementPhoneInput.addEventListener("input", () => {
   movementPhoneInput.value = formatPhoneNumber(movementPhoneInput.value);
@@ -3391,6 +3398,9 @@ contactFirstNameInput.addEventListener("input", () => {
 });
 contactNameInput.addEventListener("input", () => {
   contactNameInput.value = formatLastName(contactNameInput.value);
+});
+contactCompanyInput.addEventListener("input", () => {
+  contactCompanyInput.value = formatCompanyName(contactCompanyInput.value);
 });
 contactsList.addEventListener("dragstart", (event) => {
   const item = event.target.closest("[data-contact-id]");
@@ -3494,7 +3504,7 @@ contactForm.addEventListener("submit", (event) => {
 
   const name = formatLastName(contactNameInput.value);
   const firstName = formatFirstName(contactFirstNameInput.value).trim();
-  const companyName = activeContactType === "external" ? contactCompanyInput.value.trim() : "";
+  const companyName = activeContactType === "external" ? formatCompanyName(contactCompanyInput.value).trim() : "";
   const phone = formatPhoneNumber(contactPhoneInput.value);
   if (!name && !companyName) return;
 
