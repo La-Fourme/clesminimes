@@ -61,6 +61,7 @@ const keySetPhotoList = document.querySelector("#keySetPhotoList");
 const keySetSelect = document.querySelector("#keySetSelect");
 const contactSelect = document.querySelector("#contactSelect");
 const movementPersonInput = document.querySelector("#movementPersonInput");
+const movementNameInput = document.querySelector("#movementNameInput");
 const movementCompanyInput = document.querySelector("#movementCompanyInput");
 const movementPhoneInput = document.querySelector("#movementPhoneInput");
 const movementNoteInput = document.querySelector("#movementNoteInput");
@@ -750,8 +751,18 @@ function formatCity(value) {
   });
 }
 
+function formatFirstName(value) {
+  return String(value || "")
+    .toLocaleLowerCase("fr-FR")
+    .replace(/(^|[\s-])(\p{L})/gu, (match, separator, letter) => `${separator}${letter.toLocaleUpperCase("fr-FR")}`);
+}
+
 function formatLastName(value) {
   return String(value || "").trim().toLocaleUpperCase("fr-FR");
+}
+
+function getMovementPersonInputName() {
+  return [formatFirstName(movementPersonInput.value).trim(), formatLastName(movementNameInput.value)].filter(Boolean).join(" ");
 }
 
 function getContactDisplayName(contact) {
@@ -826,7 +837,7 @@ function normalizeContact(contact) {
 
   return {
     id: contact.id || createContactId(),
-    firstName: (contact.firstName || "").trim(),
+    firstName: formatFirstName(contact.firstName).trim(),
     name: type === "external" && !contact.companyName ? "" : formatLastName(contact.name),
     companyName: type === "external" ? (contact.companyName || contact.name || "").trim() : "",
     phone: formatPhoneNumber(contact.phone),
@@ -1253,9 +1264,9 @@ function updateLegacyContactFormMode() {
   contactNameInput.placeholder = isExternal ? "Nom de la société" : "Nom de l'intervenant";
   contactFirstNameLabel.hidden = false;
   contactFirstNameLabel.firstChild.textContent = "Pr\u00e9nom de l'intervenant\n            ";
-  contactNameLabel.firstChild.textContent = isExternal ? "Nom de famille / Nom de la soci\u00e9t\u00e9\n            " : "Nom de l'intervenant\n            ";
+  contactNameLabel.firstChild.textContent = "Nom de l'intervenant\n            ";
   contactFirstNameInput.placeholder = "Pr\u00e9nom de l'intervenant";
-  contactNameInput.placeholder = isExternal ? "Nom de famille / Nom de la soci\u00e9t\u00e9" : "Nom de l'intervenant";
+  contactNameInput.placeholder = "Nom de l'intervenant";
   addContactBtn.textContent = editingContactId ? "Enregistrer" : "Ajouter";
 }
 
@@ -1273,10 +1284,10 @@ function updateContactFormMode() {
   const isExternal = activeContactType === "external";
   contactFirstNameLabel.hidden = false;
   contactFirstNameLabel.firstChild.textContent = "Pr\u00e9nom de l'intervenant\n            ";
-  contactNameLabel.firstChild.textContent = isExternal ? "Nom de famille\n            " : "Nom de l'intervenant\n            ";
+  contactNameLabel.firstChild.textContent = "Nom de l'intervenant\n            ";
   contactCompanyLabel.hidden = !isExternal;
   contactFirstNameInput.placeholder = "Pr\u00e9nom de l'intervenant";
-  contactNameInput.placeholder = isExternal ? "Nom de famille" : "Nom de l'intervenant";
+  contactNameInput.placeholder = "Nom de l'intervenant";
   contactCompanyInput.placeholder = "Nom de soci\u00e9t\u00e9";
   addContactBtn.textContent = editingContactId ? "Enregistrer" : "Ajouter";
 }
@@ -2853,7 +2864,7 @@ function addMovement(type) {
   const entry = {
     id: createHistoryId(),
     type,
-    person: forcedPerson || movementPersonInput.value.trim(),
+    person: forcedPerson || getMovementPersonInputName(),
     company: forcedCompany || movementCompanyInput.value.trim(),
     phone: formatPhoneNumber(forcedPhone || movementPhoneInput.value),
     note: movementNoteInput.value.trim(),
@@ -2879,6 +2890,7 @@ function addMovement(type) {
   logActivity(type === "out" ? "Sortie" : "Entrée", `${keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
+  movementNameInput.value = "";
   movementCompanyInput.value = "";
   movementPhoneInput.value = "";
   movementNoteInput.value = "";
@@ -3044,7 +3056,7 @@ async function reserveSelectedSet() {
   clearTimeout(detailCloseTimer);
 
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
-  const person = contact ? getMovementContactName(contact) : movementPersonInput.value.trim();
+  const person = getMovementPersonInputName();
   const company = contact?.type === "external" ? contact.companyName || "" : movementCompanyInput.value.trim();
   const phone = formatPhoneNumber(contact?.phone || movementPhoneInput.value);
   if (!person) {
@@ -3095,6 +3107,7 @@ async function reserveSelectedSet() {
   logActivity("R\u00e9serv\u00e9", `${keyLabel(key)} - ${selectedSet.label}`, [person, `Pour le ${formattedDate}`, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
+  movementNameInput.value = "";
   movementCompanyInput.value = "";
   movementPhoneInput.value = "";
   movementNoteInput.value = "";
@@ -3346,13 +3359,21 @@ historyList.addEventListener("click", (event) => {
 contactSelect.addEventListener("change", () => {
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
   if (!contact) {
+    movementNameInput.value = "";
     movementCompanyInput.value = "";
     return;
   }
 
-  movementPersonInput.value = getMovementContactName(contact);
+  movementPersonInput.value = formatFirstName(contact.firstName || "");
+  movementNameInput.value = formatLastName(contact.name || "");
   movementCompanyInput.value = contact.type === "external" ? contact.companyName || "" : "";
   movementPhoneInput.value = formatPhoneNumber(contact.phone);
+});
+movementPersonInput.addEventListener("input", () => {
+  movementPersonInput.value = formatFirstName(movementPersonInput.value);
+});
+movementNameInput.addEventListener("input", () => {
+  movementNameInput.value = formatLastName(movementNameInput.value);
 });
 movementPhoneInput.addEventListener("input", () => {
   movementPhoneInput.value = formatPhoneNumber(movementPhoneInput.value);
@@ -3364,6 +3385,9 @@ closeContactsBtn.addEventListener("click", () => {
 });
 contactPhoneInput.addEventListener("input", () => {
   contactPhoneInput.value = formatPhoneNumber(contactPhoneInput.value);
+});
+contactFirstNameInput.addEventListener("input", () => {
+  contactFirstNameInput.value = formatFirstName(contactFirstNameInput.value);
 });
 contactNameInput.addEventListener("input", () => {
   contactNameInput.value = formatLastName(contactNameInput.value);
@@ -3469,7 +3493,7 @@ contactForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
   const name = formatLastName(contactNameInput.value);
-  const firstName = contactFirstNameInput.value.trim();
+  const firstName = formatFirstName(contactFirstNameInput.value).trim();
   const companyName = activeContactType === "external" ? contactCompanyInput.value.trim() : "";
   const phone = formatPhoneNumber(contactPhoneInput.value);
   if (!name && !companyName) return;
