@@ -2625,7 +2625,7 @@ function renderPanel() {
   rentedBtn.disabled = key.archived || isSelectedSetOut;
   removedBtn.disabled = key.archived || isSelectedSetOut;
   deleteSelectedKeyBtn.disabled = key.archived;
-  keySetCountSelect.disabled = isArchiveView;
+  keySetCountSelect.disabled = isArchiveView && !isCompromiseView;
   propertyInput.disabled = isArchiveView;
   postalCodeInput.disabled = isArchiveView;
   cityInput.disabled = isArchiveView;
@@ -2859,6 +2859,21 @@ function setKeySetCount(count) {
     logActivity("Création jeu", keyLabel(key), `${nextCount} jeux au total`);
   } else if (nextCount < previousCount) {
     logActivity("Suppression jeu", keyLabel(key), `${removedSets.map((set) => set.label).join(", ")} supprimé(s)`);
+  }
+  if (selectedArchiveRecord) {
+    const nextArchiveRecord = {
+      ...selectedArchiveRecord,
+      key: {
+        ...selectedArchiveRecord.key,
+        sets: nextSets,
+      },
+    };
+    selectedArchiveRecord = nextArchiveRecord;
+    archives = archives.map((archive) => (archive.id === nextArchiveRecord.id ? nextArchiveRecord : archive));
+    saveArchives();
+    renderCompromisesPanel();
+    render();
+    return;
   }
   updateSelectedKey({ sets: nextSets });
 }
