@@ -151,6 +151,8 @@ let lastCloudSnapshot = "";
 let photoViewer = null;
 let lastLocalEditAt = 0;
 let isApplyingCloudState = false;
+let pendingCloudSync = Promise.resolve();
+let failedCloudSyncKeys = new Set();
 
 function markLocalEdit() {
   if (!isApplyingCloudState) lastLocalEditAt = Date.now();
@@ -367,20 +369,38 @@ function saveStorageValue(storageKey, value) {
 
 function syncStorageKeyToCloud(storageKey) {
   if (!supabaseClient) return Promise.resolve();
+  failedCloudSyncKeys.delete(storageKey);
 
   const value = localStorage.getItem(storageKey);
-  const request =
-    value === null
-      ? supabaseClient.from("app_state").delete().eq("key", storageKey)
-      : supabaseClient.from("app_state").upsert({
-          key: storageKey,
-          value: parseStorageValue(value),
-          updated_at: new Date().toISOString(),
-        });
+  pendingCloudSync = pendingCloudSync
+    .catch(() => {})
+    .then(async () => {
+      const request =
+        value === null
+          ? supabaseClient.from("app_state").delete().eq("key", storageKey)
+          : supabaseClient.from("app_state").upsert({
+              key: storageKey,
+              value: parseStorageValue(value),
+              updated_at: new Date().toISOString(),
+            });
 
-  return request.then(({ error }) => {
-    if (error) console.warn("Supabase sync failed", storageKey, error.message);
-  });
+      const { error } = await request;
+      if (error) {
+        failedCloudSyncKeys.add(storageKey);
+        console.warn("Supabase sync failed", storageKey, error.message);
+        return;
+      }
+      failedCloudSyncKeys.delete(storageKey);
+    });
+
+  return pendingCloudSync;
+}
+
+function retryFailedCloudSyncs() {
+  if (!failedCloudSyncKeys.size) return Promise.resolve();
+  const keys = [...failedCloudSyncKeys];
+  failedCloudSyncKeys.clear();
+  return Promise.all(keys.map(syncStorageKeyToCloud));
 }
 
 function syncAllStorageToCloud() {
@@ -406,6 +426,8 @@ function getCloudSnapshot(rows) {
 async function loadStorageFromCloud() {
   if (!supabaseClient) return;
   if (isPhotoImporting) return;
+  await pendingCloudSync.catch(() => {});
+  await retryFailedCloudSyncs();
 
   const { data, error } = await supabaseClient.from("app_state").select("key,value");
   if (error) {
@@ -425,7 +447,7 @@ async function loadStorageFromCloud() {
   const cloudSnapshot = getCloudSnapshot(data);
   if (cloudSnapshot === lastCloudSnapshot) return;
   if (isKeyFormBeingEdited()) return;
-  if (Date.now() - lastLocalEditAt < 5000) return;
+  if (Date.now() - lastLocalEditAt < 20000) return;
   lastCloudSnapshot = cloudSnapshot;
 
   const cloudRows = new Map(data.map((row) => [row.key, row.value]));
@@ -3715,6 +3737,15 @@ async function initializeApp() {
   setInterval(async () => {
     await loadStorageFromCloud();
   }, 7000);
+  setInterval(retryFailedCloudSyncs, 12000);
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") syncCurrentRegistryToCloud();
+});
+window.addEventListener("pagehide", () => {
+  syncCurrentRegistryToCloud();
+});
+window.addEventListener("online", retryFailedCloudSyncs);
 
 initializeApp();
