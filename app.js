@@ -2473,6 +2473,7 @@ async function optimizeStoredPhotos() {
 function renderKeySetPhotos(key) {
   keySetPhotoList.innerHTML = "";
   const isArchiveView = Boolean(selectedArchiveRecord);
+  const canEditPhotos = !isArchiveView || selectedArchiveRecord?.reason === "rented";
 
   key.sets.forEach((set) => {
     const item = document.createElement("article");
@@ -2492,7 +2493,7 @@ function renderKeySetPhotos(key) {
     preview.innerHTML = set.photo
       ? `<img src="${set.photo}" alt="Photo du jeu ${set.label} de ${keyLabel(key)}" />`
       : `<span>Aucune photo</span>`;
-    if (set.photo && !isArchiveView) {
+    if (set.photo && canEditPhotos) {
       preview.tabIndex = 0;
       preview.setAttribute("role", "button");
       preview.setAttribute("aria-label", `Afficher la photo du ${set.label}`);
@@ -2510,7 +2511,7 @@ function renderKeySetPhotos(key) {
     cameraInput.accept = "image/*";
     cameraInput.setAttribute("capture", "environment");
     cameraInput.dataset.setId = set.id;
-    cameraButton.style.display = isArchiveView ? "none" : "";
+    cameraButton.style.display = canEditPhotos ? "" : "none";
     cameraInput.addEventListener("click", beginPhotoImport);
     cameraInput.addEventListener("cancel", finishPhotoImport);
 
@@ -2519,7 +2520,7 @@ function renderKeySetPhotos(key) {
     importInput.type = "file";
     importInput.accept = "image/*";
     importInput.dataset.setId = set.id;
-    importButton.style.display = isArchiveView ? "none" : "";
+    importButton.style.display = canEditPhotos ? "" : "none";
     importInput.addEventListener("click", beginPhotoImport);
     importInput.addEventListener("cancel", finishPhotoImport);
     importButton.append(importButtonText, importInput);
@@ -2527,7 +2528,7 @@ function renderKeySetPhotos(key) {
     cameraButton.append(cameraButtonText, cameraInput);
     actions.append(cameraButton, importButton);
 
-    if (set.photo && !isArchiveView) {
+    if (set.photo && canEditPhotos) {
       const deleteButton = document.createElement("button");
       deleteButton.className = "photo-delete-button";
       deleteButton.type = "button";
@@ -2542,7 +2543,7 @@ function renderKeySetPhotos(key) {
         const sets = currentKey.sets.map((savedSet) =>
           savedSet.id === set.id ? { ...savedSet, photo: "" } : savedSet,
         );
-        updateSelectedKey({ sets });
+        updateSelectedKeySets(sets);
       });
       actions.append(deleteButton);
     }
@@ -2597,6 +2598,7 @@ function renderPanel() {
   form.hidden = false;
   form.classList.toggle("is-archive-view", isArchiveView);
   form.classList.toggle("is-compromise-view", isCompromiseView);
+  form.classList.toggle("can-edit-archive-photos", isCompromiseView);
   selectedTitle.textContent = keyLabel(key);
   statusPill.className = "status-pill status-summary";
   statusPill.innerHTML = "";
@@ -2617,10 +2619,11 @@ function renderPanel() {
   notesInput.value = key.notes;
   const canMoveSelectedKey = !key.archived || Boolean(selectedArchiveRecord);
   const isSelectedSetOut = selectedSet.status === "out";
+  const canCheckInSelectedKey = canMoveSelectedKey && (!isCompromiseView || isSelectedSetOut);
   checkinBtn.textContent = selectedSet.status === "out" ? "Rentr\u00e9e" : "Entr\u00e9e";
   reservedBtn.textContent = "R\u00e9serv\u00e9";
   checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
-  checkinBtn.disabled = !canMoveSelectedKey || (isCompromiseView && !isSelectedSetOut);
+  checkinBtn.disabled = !canCheckInSelectedKey;
   reservedBtn.disabled = !canMoveSelectedKey;
   rentedBtn.disabled = key.archived || isSelectedSetOut;
   removedBtn.disabled = key.archived || isSelectedSetOut;
@@ -2829,6 +2832,25 @@ function updateSelectedSet(changes) {
     selectedArchiveRecord = nextArchiveRecord;
     archives = archives.map((archive) => (archive.id === nextArchiveRecord.id ? nextArchiveRecord : archive));
     saveArchives();
+    render();
+    return;
+  }
+  updateSelectedKey({ sets });
+}
+
+function updateSelectedKeySets(sets) {
+  if (selectedArchiveRecord) {
+    const nextArchiveRecord = {
+      ...selectedArchiveRecord,
+      key: {
+        ...selectedArchiveRecord.key,
+        sets,
+      },
+    };
+    selectedArchiveRecord = nextArchiveRecord;
+    archives = archives.map((archive) => (archive.id === nextArchiveRecord.id ? nextArchiveRecord : archive));
+    saveArchives();
+    renderCompromisesPanel();
     render();
     return;
   }
@@ -3673,7 +3695,7 @@ keySetPhotoList.addEventListener("change", (event) => {
       if (!key) return;
 
       const sets = key.sets.map((set) => (set.id === setId ? { ...set, photo } : set));
-      updateSelectedKey({ sets });
+      updateSelectedKeySets(sets);
     })
     .catch(() => {
       alert("La photo n'a pas pu être importée.");
