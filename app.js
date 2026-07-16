@@ -59,6 +59,7 @@ const ownerInput = document.querySelector("#ownerInput");
 const notesInput = document.querySelector("#notesInput");
 const keySetPhotoList = document.querySelector("#keySetPhotoList");
 const keySetSelect = document.querySelector("#keySetSelect");
+const activeReservationPanel = document.querySelector("#activeReservationPanel");
 const contactSelect = document.querySelector("#contactSelect");
 const movementPersonInput = document.querySelector("#movementPersonInput");
 const movementNameInput = document.querySelector("#movementNameInput");
@@ -1696,7 +1697,7 @@ function getRegistryHistoryEntries(registry) {
         entries.push({
           timestamp: parseHistoryTimestamp(movement.date),
           date: movement.date || "Date non renseignée",
-          title: `${registryLabel} - ${keyLabel(key)} - ${set.label}`,
+          title: `${registryLabel} - ${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${set.label}`,
           action: movement.type === "out" ? "Sortie" : movement.type === "reserved" ? "Réservé" : "Entrée",
           actor: movement.person || "Intervenant non renseigné",
           details: [key.owner ? `Propriétaire : ${formatOwner(key.owner)}` : "", movement.phone ? `Téléphone : ${movement.phone}` : "", movement.note || ""]
@@ -1721,7 +1722,7 @@ function getRegistryHistoryEntries(registry) {
     entries.push({
       timestamp: parseHistoryTimestamp(record.archivedAt),
       date: formatArchiveDate(record.archivedAt),
-      title: `${registryLabel} - ${keyLabel(key)}`,
+      title: `${registryLabel} - ${key.owner ? formatOwner(key.owner) : keyLabel(key)}`,
       action,
       actor: key.owner ? formatOwner(key.owner) : "Fiche clé",
       details: [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
@@ -1743,10 +1744,32 @@ function getActionClass(action) {
 }
 
 function renderGlobalHistoryItems(targetList = globalHistoryList) {
+  const ownerMaps = Object.fromEntries(
+    ["location", "transaction"].map((registry) => {
+      const config = registryConfig[registry];
+      const registryKeys = parseStoredArray(config.keysStorageKey, makeInitialKeys()).map(normalizeKey);
+      const archivedKeys = parseStoredArray(config.archivesStorageKey, []).map(normalizeArchive).map((record) => record.key);
+      return [
+        registry,
+        new Map(
+          [...registryKeys, ...archivedKeys]
+            .filter((key) => key.owner)
+            .map((key) => [keyLabel(key), formatOwner(key.owner)]),
+        ),
+      ];
+    }),
+  );
+  const replaceKeyLabelWithOwner = (entry) => {
+    const ownerMap = ownerMaps[entry.registry] || new Map();
+    const keyLabelEntry = [...ownerMap.keys()].find(
+      (label) => entry.title === label || entry.title.startsWith(`${label} - `),
+    );
+    return keyLabelEntry ? entry.title.replace(keyLabelEntry, ownerMap.get(keyLabelEntry)) : entry.title;
+  };
   const activityEntries = loadActivityLog().map((entry) => ({
     timestamp: parseHistoryTimestamp(entry.date),
     date: formatArchiveDate(entry.date),
-    title: `${entry.registry === "transaction" ? "Transaction" : "Location"} - ${entry.title}`,
+    title: `${entry.registry === "transaction" ? "Transaction" : "Location"} - ${replaceKeyLabelWithOwner(entry)}`,
     action: entry.action,
     actor: "Action enregistrée",
     details: entry.details || "",
@@ -2724,6 +2747,8 @@ function renderPanel() {
   signatureCanvas.classList.toggle("is-readonly", isReadOnlyArchive);
 
   historyList.innerHTML = "";
+  activeReservationPanel.innerHTML = "";
+  activeReservationPanel.hidden = true;
   if (!selectedSet.history.length) {
     const item = document.createElement("li");
     item.textContent = "Aucun mouvement enregistré pour ce jeu.";
@@ -2792,7 +2817,9 @@ function renderPanel() {
       entry.type === "reserved"
         ? (selectedSet.reservations || []).find((reservation) => reservation.id === entry.reservationId && isActiveReservation(reservation))
         : null;
+    let historySummary = null;
     if (activeReservation) {
+      historySummary = item.cloneNode(true);
       const reservationCommentField = document.createElement("label");
       const reservationCommentLabel = document.createElement("span");
       const reservationComment = document.createElement("textarea");
@@ -2852,7 +2879,14 @@ function renderPanel() {
       if (!isReadOnlyArchive) setupInlineSignatureCanvas(signatureCanvas);
     }
     item.append(date);
-    historyList.append(item);
+    if (historySummary) {
+      historySummary.append(date.cloneNode(true));
+      activeReservationPanel.hidden = false;
+      activeReservationPanel.append(item);
+      historyList.append(historySummary);
+    } else {
+      historyList.append(item);
+    }
   });
 }
 
@@ -3029,7 +3063,7 @@ function addMovement(type) {
         : selectedSet.reservations || [],
     history: [entry, ...selectedSet.history],
   });
-  logActivity(type === "out" ? "Sortie" : "Entrée", `${keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
+  logActivity(type === "out" ? "Sortie" : "Entrée", `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
   movementNameInput.value = "";
@@ -3056,12 +3090,12 @@ function getMovementDateText() {
 }
 
 function getInlineReservationSignature(reservationId) {
-  const canvas = historyList.querySelector(`.reservation-signature-canvas[data-reservation-id="${reservationId}"]`);
+  const canvas = activeReservationPanel.querySelector(`.reservation-signature-canvas[data-reservation-id="${reservationId}"]`);
   return canvas?.dataset.signed === "true" ? canvas.toDataURL("image/png") : "";
 }
 
 function getInlineReservationComment(reservationId) {
-  const input = historyList.querySelector(`.reservation-comment-input[data-reservation-id="${reservationId}"]`);
+  const input = activeReservationPanel.querySelector(`.reservation-comment-input[data-reservation-id="${reservationId}"]`);
   return input?.value.trim() || "";
 }
 
@@ -3154,7 +3188,7 @@ function toggleReservationMovement(reservationId) {
   });
   logActivity(
     isReservationOut ? "Rentr\u00e9e" : "Sortie",
-    `${keyLabel(key)} - ${selectedSet.label}`,
+    `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`,
     [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "),
   );
   if (selectedArchiveRecord) renderCompromisesPanel();
@@ -3189,7 +3223,7 @@ function cancelReservation(reservationId) {
     reservations: (selectedSet.reservations || []).filter((item) => item.id !== reservationId),
     history: [entry, ...selectedSet.history],
   });
-  logActivity("Annulation r\u00e9servation", `${keyLabel(key)} - ${selectedSet.label}`, entry.person);
+  logActivity("Annulation r\u00e9servation", `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`, entry.person);
   if (selectedArchiveRecord) renderCompromisesPanel();
 }
 
@@ -3249,7 +3283,7 @@ async function reserveSelectedSet() {
     ],
     history: [entry, ...selectedSet.history],
   });
-  logActivity("R\u00e9serv\u00e9", `${keyLabel(key)} - ${selectedSet.label}`, [person, `Pour le ${formattedDate}`, entry.note].filter(Boolean).join(" | "));
+  logActivity("R\u00e9serv\u00e9", `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`, [person, `Pour le ${formattedDate}`, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
   movementNameInput.value = "";

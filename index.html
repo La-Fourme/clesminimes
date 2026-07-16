@@ -6,7 +6,7 @@
     <title>CENTURY 21 LES MINIMES - TABLEAUX DE GESTION DES CL&Eacute;S</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20260713" />
     <link rel="shortcut icon" href="favicon.svg?v=20260713" />
-    <link rel="stylesheet" href="styles.css?v=20260716-5" />
+    <link rel="stylesheet" href="styles.css?v=20260716-7" />
   </head>
   <body>
     <div id="saleCelebration" class="sale-celebration" aria-live="polite" hidden>
@@ -197,6 +197,7 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
               Jeu concerné
               <select id="keySetSelect"></select>
             </label>
+            <ol id="activeReservationPanel" class="history-list active-reservation-panel" aria-label="Réservations en cours" hidden></ol>
             <label>
               Sélectionner un intervenant
               <select id="contactSelect">
@@ -344,7 +345,7 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260716-5"></script>
+    <script src="app.js?v=20260716-7"></script>
   </body>
 </html>
 
