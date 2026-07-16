@@ -56,6 +56,7 @@ const propertyInput = document.querySelector("#propertyInput");
 const postalCodeInput = document.querySelector("#postalCodeInput");
 const cityInput = document.querySelector("#cityInput");
 const ownerInput = document.querySelector("#ownerInput");
+const ownerFirstNameInput = document.querySelector("#ownerFirstNameInput");
 const notesInput = document.querySelector("#notesInput");
 const keySetPhotoList = document.querySelector("#keySetPhotoList");
 const keySetSelect = document.querySelector("#keySetSelect");
@@ -569,6 +570,7 @@ function makeInitialKeys() {
       postalCode: "",
       city: "",
       owner: "",
+      ownerFirstName: "",
       notes: "",
       photo: "",
       archived: false,
@@ -586,6 +588,7 @@ function makeEmptyKey(key) {
     postalCode: "",
     city: "",
     owner: "",
+    ownerFirstName: "",
     notes: "",
     photo: "",
     archived: false,
@@ -674,10 +677,11 @@ function normalizeKey(key) {
     id: key.id,
     category: key.category,
     number: key.number,
-    property: key.property || "",
+    property: formatPropertyAddress(key.property || ""),
     postalCode: key.postalCode || "",
     city: key.city || "",
     owner: key.owner || "",
+    ownerFirstName: formatFirstName(key.ownerFirstName || ""),
     notes: key.notes || "",
     photo: "",
     archived: Boolean(key.archived),
@@ -771,6 +775,65 @@ function formatCity(value) {
   return String(value || "").replace(/(^|[\s-])(\p{L})/gu, (match, separator, letter) => {
     return `${separator}${letter.toLocaleUpperCase("fr-FR")}`;
   });
+}
+
+function formatPropertyAddress(value) {
+  const roadTypes = [
+    ["avenues?", "av."],
+    ["boulevards?", "blv."],
+    ["places?", "pl."],
+    ["routes?", "rte"],
+    ["allées?|allees?", "all."],
+    ["chemins?", "ch."],
+    ["impasses?", "imp."],
+    ["passages?", "pas."],
+    ["esplanades?", "esp."],
+  ];
+  let address = String(value || "").toLocaleLowerCase("fr-FR");
+  roadTypes.forEach(([roadType, abbreviation]) => {
+    address = address.replace(
+      new RegExp(`(^|[^\\p{L}])(?:${roadType})(?=$|[^\\p{L}])`, "giu"),
+      (match, prefix) => `${prefix}${abbreviation}`,
+    );
+  });
+  return address.replace(/(^|[\s'\-’])(\p{L})/gu, (match, separator, letter) => {
+    return `${separator}${letter.toLocaleUpperCase("fr-FR")}`;
+  });
+}
+
+async function migrateStoredPropertyAddresses() {
+  const changedStorageKeys = [];
+
+  ["location", "transaction"].forEach((registry) => {
+    const config = registryConfig[registry];
+    const savedKeys = parseStoredArray(config.keysStorageKey, []);
+    const formattedKeys = savedKeys.map((key) => ({
+      ...key,
+      property: formatPropertyAddress(key.property || ""),
+    }));
+    if (JSON.stringify(formattedKeys) !== JSON.stringify(savedKeys)) {
+      localStorage.setItem(config.keysStorageKey, JSON.stringify(formattedKeys));
+      changedStorageKeys.push(config.keysStorageKey);
+    }
+
+    const savedArchives = parseStoredArray(config.archivesStorageKey, []);
+    const formattedArchives = savedArchives.map((record) => ({
+      ...record,
+      key: record.key
+        ? { ...record.key, property: formatPropertyAddress(record.key.property || "") }
+        : record.key,
+    }));
+    if (JSON.stringify(formattedArchives) !== JSON.stringify(savedArchives)) {
+      localStorage.setItem(config.archivesStorageKey, JSON.stringify(formattedArchives));
+      changedStorageKeys.push(config.archivesStorageKey);
+    }
+  });
+
+  if (!changedStorageKeys.length) return;
+  markLocalEdit();
+  await Promise.all(changedStorageKeys.map(syncStorageKeyToCloud));
+  keys = loadKeys();
+  archives = loadArchives();
 }
 
 function formatFirstName(value) {
@@ -950,6 +1013,7 @@ function isKeyFilled(key) {
       key.postalCode?.trim() ||
       key.city?.trim() ||
       key.owner?.trim() ||
+      key.ownerFirstName?.trim() ||
       key.notes?.trim() ||
       key.sets?.some((set) => set.photo || set.holder?.trim() || set.history?.length || hasActiveReservations(set)),
   );
@@ -1028,6 +1092,7 @@ function cloneKeyContent(key) {
     postalCode: key.postalCode || "",
     city: key.city || "",
     owner: key.owner || "",
+    ownerFirstName: key.ownerFirstName || "",
     notes: key.notes || "",
     photo: key.photo || "",
     archived: false,
@@ -1042,6 +1107,7 @@ function applyKeyContent(slot, content) {
     postalCode: content.postalCode || "",
     city: content.city || "",
     owner: content.owner || "",
+    ownerFirstName: content.ownerFirstName || "",
     notes: content.notes || "",
     photo: content.photo || "",
     archived: false,
@@ -1116,12 +1182,11 @@ function render() {
 function syncSignatureHeightToActions() {
   if (form.hidden) return;
   const movementActions = form.querySelector(".movement-actions");
-  const archiveActions = form.querySelector(".archive-actions");
-  if (!movementActions || !archiveActions) return;
+  if (!movementActions || !rentedBtn) return;
 
   const movementRect = movementActions.getBoundingClientRect();
-  const archiveRect = archiveActions.getBoundingClientRect();
-  const actionsHeight = Math.round(archiveRect.bottom - movementRect.top);
+  const rentedRect = rentedBtn.getBoundingClientRect();
+  const actionsHeight = Math.round(rentedRect.bottom - movementRect.top);
   if (actionsHeight > 0) form.style.setProperty("--signature-actions-height", `${actionsHeight}px`);
 }
 
@@ -1444,6 +1509,7 @@ function keyToCsvRows(key, archive = null) {
     codePostal: key.postalCode || "",
     ville: key.city || "",
     proprietaire: key.owner || "",
+    prenomProprietaire: key.ownerFirstName || "",
     notes: key.notes || "",
     archive: archive ? archiveReasonText(archive.reason) : "",
     dateArchive: archive ? formatArchiveDate(archive.archivedAt) : "",
@@ -1491,7 +1557,8 @@ function exportKeyExcel(key, archive = null) {
     "Adresse",
     "Code postal",
     "Ville",
-    "Propriétaire",
+    "Nom du propriétaire / de la société",
+    "Prénom du propriétaire",
     "Notes",
     "Archive",
     "Date archive",
@@ -1514,6 +1581,7 @@ function exportKeyExcel(key, archive = null) {
     row.codePostal,
     row.ville,
     row.proprietaire,
+    row.prenomProprietaire,
     row.notes,
     row.archive,
     row.dateArchive,
@@ -1566,7 +1634,8 @@ function exportFilledDataCsv() {
     "Emplacement",
     "Catégorie",
     "Numéro",
-    "Propriétaire",
+    "Nom du propriétaire / de la société",
+    "Prénom du propriétaire",
     "Adresse",
     "Code postal",
     "Ville",
@@ -1594,6 +1663,7 @@ function exportFilledDataCsv() {
       key.category,
       key.number,
       key.owner || "",
+      key.ownerFirstName || "",
       key.property || "",
       key.postalCode || "",
       key.city || "",
@@ -2720,12 +2790,14 @@ function renderPanel() {
   postalCodeInput.value = key.postalCode || "";
   cityInput.value = key.city || "";
   ownerInput.value = formatOwner(key.owner);
+  ownerFirstNameInput.value = formatFirstName(key.ownerFirstName);
   notesInput.value = key.notes;
   const canMoveSelectedKey = !isArchiveView || isSelectedCompromiseEditable();
   const isSelectedSetOut = selectedSet.status === "out";
   const canCheckInSelectedKey = canMoveSelectedKey && (!isCompromiseView || isSelectedSetOut);
-  checkinBtn.textContent = selectedSet.status === "out" ? "Rentr\u00e9e" : "Entr\u00e9e";
+  checkinBtn.textContent = selectedSet.status === "out" ? "Rentr\u00e9" : "Entr\u00e9";
   reservedBtn.textContent = "R\u00e9serv\u00e9";
+  checkoutBtn.textContent = "Sorti";
   checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
   checkinBtn.disabled = !canCheckInSelectedKey;
   reservedBtn.disabled = !canMoveSelectedKey;
@@ -2736,6 +2808,7 @@ function renderPanel() {
   postalCodeInput.disabled = isArchiveView;
   cityInput.disabled = isArchiveView;
   ownerInput.disabled = isArchiveView;
+  ownerFirstNameInput.disabled = isArchiveView;
   notesInput.disabled = isArchiveView;
   contactSelect.disabled = isReadOnlyArchive;
   movementPersonInput.disabled = isReadOnlyArchive;
@@ -2868,7 +2941,7 @@ function renderPanel() {
       clearReservationSignatureBtn.disabled = isReadOnlyArchive;
       signatureCanvas.className = "reservation-signature-canvas";
       signatureCanvas.width = 320;
-      signatureCanvas.height = 268;
+      signatureCanvas.height = 212;
       signatureCanvas.dataset.reservationId = entry.reservationId;
       signatureCanvas.classList.toggle("is-readonly", isReadOnlyArchive);
       signatureCanvas.setAttribute("aria-label", "Zone de signature de la réservation");
@@ -3502,7 +3575,14 @@ function clearSignature() {
   hasSignature = false;
 }
 
-propertyInput.addEventListener("input", debounce(() => updateSelectedKey({ property: propertyInput.value })));
+propertyInput.addEventListener(
+  "input",
+  debounce(() => updateSelectedKey({ property: formatPropertyAddress(propertyInput.value) })),
+);
+propertyInput.addEventListener("blur", () => {
+  propertyInput.value = formatPropertyAddress(propertyInput.value);
+  updateSelectedKey({ property: propertyInput.value });
+});
 postalCodeInput.addEventListener("input", debounce(() => updateSelectedKey({ postalCode: postalCodeInput.value })));
 cityInput.addEventListener("input", debounce(() => updateSelectedKey({ city: formatCity(cityInput.value) })));
 cityInput.addEventListener("blur", () => {
@@ -3513,6 +3593,14 @@ ownerInput.addEventListener(
   "input",
   debounce(() => updateSelectedKey({ owner: formatOwner(ownerInput.value) })),
 );
+ownerFirstNameInput.addEventListener(
+  "input",
+  debounce(() => updateSelectedKey({ ownerFirstName: formatFirstName(ownerFirstNameInput.value) })),
+);
+ownerFirstNameInput.addEventListener("blur", () => {
+  ownerFirstNameInput.value = formatFirstName(ownerFirstNameInput.value);
+  updateSelectedKey({ ownerFirstName: ownerFirstNameInput.value });
+});
 notesInput.addEventListener("input", debounce(() => updateSelectedKey({ notes: notesInput.value })));
 keySetCountSelect.addEventListener("change", () => setKeySetCount(Number(keySetCountSelect.value)));
 keySetSelect.addEventListener("change", () => {
@@ -3834,6 +3922,7 @@ async function initializeApp() {
   migrateArchivedSlots();
   ensureDeviceName();
   await loadStorageFromCloud();
+  await migrateStoredPropertyAddresses();
   updateRegistryHeader();
   updateTileViewToggle();
   updateUndoButton();

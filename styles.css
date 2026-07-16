@@ -1857,7 +1857,7 @@ body.is-moving-key .photo-hover {
 
 #signatureCanvas {
   width: 100%;
-  height: var(--signature-actions-height, 268px);
+  height: var(--signature-actions-height, 212px);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #daddda;
@@ -2079,7 +2079,7 @@ body.is-moving-key .photo-hover {
 
 .reservation-signature-canvas {
   width: 100%;
-  height: var(--signature-actions-height, 268px);
+  height: var(--signature-actions-height, 212px);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #daddda;
@@ -2223,11 +2223,11 @@ body.is-moving-key .photo-hover {
   }
 
   #signatureCanvas {
-    height: var(--signature-actions-height, 268px);
+    height: var(--signature-actions-height, 212px);
   }
 
   .reservation-signature-canvas {
-    height: var(--signature-actions-height, 268px);
+    height: var(--signature-actions-height, 212px);
   }
 
   #contactSelect {
@@ -2485,6 +2485,6 @@ body.is-moving-key .photo-hover {
 @media (max-width: 1040px), (pointer: coarse) {
   #signatureCanvas,
   .reservation-signature-canvas {
-    height: var(--signature-actions-height, 268px);
+    height: var(--signature-actions-height, 212px);
   }
 }
