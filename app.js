@@ -71,7 +71,6 @@ const rentedBtn = document.querySelector("#rentedBtn");
 const removedBtn = document.querySelector("#removedBtn");
 const reservedBtn = document.querySelector("#reservedBtn");
 const exportKeyCsvBtn = document.querySelector("#exportKeyCsvBtn");
-const deleteSelectedKeyBtn = document.querySelector("#deleteSelectedKeyBtn");
 const signatureCanvas = document.querySelector("#signatureCanvas");
 const clearSignatureBtn = document.querySelector("#clearSignatureBtn");
 const historyList = document.querySelector("#historyList");
@@ -1110,6 +1109,19 @@ function render() {
   renderContactSelect();
   renderArchivesPanel();
   renderCompromisesPanel();
+  requestAnimationFrame(syncSignatureHeightToActions);
+}
+
+function syncSignatureHeightToActions() {
+  if (form.hidden) return;
+  const movementActions = form.querySelector(".movement-actions");
+  const archiveActions = form.querySelector(".archive-actions");
+  if (!movementActions || !archiveActions) return;
+
+  const movementRect = movementActions.getBoundingClientRect();
+  const archiveRect = archiveActions.getBoundingClientRect();
+  const actionsHeight = Math.round(archiveRect.bottom - movementRect.top);
+  if (actionsHeight > 0) form.style.setProperty("--signature-actions-height", `${actionsHeight}px`);
 }
 
 function isDetailPanelBusy() {
@@ -1406,6 +1418,23 @@ function csvEscape(value) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+function htmlEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function utf8ToBase64(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
 function keyToCsvRows(key, archive = null) {
   const rows = [];
   const base = {
@@ -1430,7 +1459,8 @@ function keyToCsvRows(key, archive = null) {
         telephone: "",
         commentaire: "",
         dateMouvement: "",
-        signature: "",
+        signe: "Non",
+        signatureManuscrite: "",
       });
       return;
     }
@@ -1445,7 +1475,8 @@ function keyToCsvRows(key, archive = null) {
         telephone: entry.phone || "",
         commentaire: entry.note || "",
         dateMouvement: entry.date || "",
-        signature: entry.signature ? "Oui" : "Non",
+        signe: entry.signature ? "Oui" : "Non",
+        signatureManuscrite: entry.signature || "",
       });
     });
   });
@@ -1453,7 +1484,7 @@ function keyToCsvRows(key, archive = null) {
   return rows;
 }
 
-function exportKeyCsv(key, archive = null) {
+function exportKeyExcel(key, archive = null) {
   const headers = [
     "Emplacement",
     "Adresse",
@@ -1470,9 +1501,13 @@ function exportKeyCsv(key, archive = null) {
     "Téléphone",
     "Commentaire",
     "Date mouvement",
-    "Signature",
+    "Signé",
+    "Signature manuscrite",
   ];
-  const rows = keyToCsvRows(key, archive).map((row) => [
+  const rows = keyToCsvRows(key, archive);
+  const imageParts = [];
+  const tableRows = rows.map((row, rowIndex) => {
+    const values = [
     row.emplacement,
     row.adresse,
     row.codePostal,
@@ -1488,15 +1523,32 @@ function exportKeyCsv(key, archive = null) {
     row.telephone,
     row.commentaire,
     row.dateMouvement,
-    row.signature,
-  ]);
-  const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(";")).join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+    row.signe,
+    ];
+    let signatureCell = "";
+    const signatureMatch = row.signatureManuscrite.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
+    if (signatureMatch) {
+      const extension = signatureMatch[1].includes("jpeg") ? "jpg" : signatureMatch[1].split("/")[1].replace("+xml", "");
+      const location = `signature-${rowIndex + 1}.${extension}`;
+      signatureCell = `<img src="${location}" width="240" height="105" alt="Signature manuscrite">`;
+      imageParts.push({ mime: signatureMatch[1], location, data: signatureMatch[2] });
+    }
+    return `<tr>${values.map((value) => `<td>${htmlEscape(value)}</td>`).join("")}<td>${signatureCell}</td></tr>`;
+  });
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:11pt}th,td{border:1px solid #999;padding:5px;vertical-align:middle}th{background:#ddd;font-weight:bold}td:last-child{width:250px;height:115px}</style></head><body><table><thead><tr>${headers.map((header) => `<th>${htmlEscape(header)}</th>`).join("")}</tr></thead><tbody>${tableRows.join("")}</tbody></table></body></html>`;
+  const boundary = `----cles-export-${Date.now()}`;
+  const parts = [
+    `MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="${boundary}"\r\n\r\n`,
+    `--${boundary}\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Transfer-Encoding: base64\r\nContent-Location: fiche.html\r\n\r\n${utf8ToBase64(html)}\r\n`,
+    ...imageParts.map((image) => `--${boundary}\r\nContent-Type: ${image.mime}\r\nContent-Transfer-Encoding: base64\r\nContent-Location: ${image.location}\r\n\r\n${image.data}\r\n`),
+    `--${boundary}--\r\n`,
+  ];
+  const blob = new Blob(parts, { type: "application/vnd.ms-excel" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   const archiveSuffix = archive ? `-${archive.reason}` : "";
   link.href = url;
-  link.download = `${key.id}${archiveSuffix}-export.csv`;
+  link.download = `${key.id}${archiveSuffix}-export.xls`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -1975,6 +2027,8 @@ function openArchivedKeyRecord(record) {
   selectedId = `archive-${record.id}`;
   selectedSetId = record.key.sets?.[0]?.id || "main";
   clearTimeout(detailCloseTimer);
+  clearTimeout(archivesCloseTimer);
+  archivesPanel.hidden = true;
   compromisesPanel.hidden = true;
   render();
 }
@@ -2043,10 +2097,10 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     actions.className = "archive-item-actions";
     exportButton.type = "button";
     exportButton.textContent = "Exporter";
-    exportButton.title = "Exporter cette archive en CSV";
+    exportButton.title = "Exporter cette archive avec les signatures";
     exportButton.addEventListener("click", (event) => {
       event.stopPropagation();
-      exportKeyCsv(key, record);
+      exportKeyExcel(key, record);
     });
     restoreButton.type = "button";
     restoreButton.textContent = "Restaurer";
@@ -2063,18 +2117,18 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     if (!options.hideExport) actions.append(exportButton);
     actions.append(restoreButton);
     item.append(details, actions);
-    if (options.showCompromiseDetails) {
-      item.classList.add("is-clickable");
-      item.title = "Cliquer pour consulter la fiche. Ctrl + clic pour modifier la date du compromis";
-      item.addEventListener("click", (event) => {
-        event.preventDefault();
-        if (event.ctrlKey) {
-          editCompromiseDate(record.id);
-          return;
-        }
-        openArchivedKeyRecord(record);
-      });
-    }
+    item.classList.add("is-clickable");
+    item.title = options.showCompromiseDetails
+      ? "Cliquer pour consulter la fiche et son historique. Ctrl + clic pour modifier la date du compromis"
+      : "Cliquer pour consulter la fiche et son historique";
+    item.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (options.showCompromiseDetails && event.ctrlKey) {
+        editCompromiseDate(record.id);
+        return;
+      }
+      openArchivedKeyRecord(record);
+    });
 
     if (options.showAuthenticatedAction) {
       const authenticatedButton = document.createElement("button");
@@ -2492,10 +2546,14 @@ async function optimizeStoredPhotos() {
   render();
 }
 
+function isSelectedCompromiseEditable() {
+  return activeRegistry === "transaction" && selectedArchiveRecord?.reason === "rented";
+}
+
 function renderKeySetPhotos(key) {
   keySetPhotoList.innerHTML = "";
   const isArchiveView = Boolean(selectedArchiveRecord);
-  const canEditPhotos = !isArchiveView || selectedArchiveRecord?.reason === "rented";
+  const canEditPhotos = !isArchiveView || isSelectedCompromiseEditable();
 
   key.sets.forEach((set) => {
     const item = document.createElement("article");
@@ -2515,7 +2573,7 @@ function renderKeySetPhotos(key) {
     preview.innerHTML = set.photo
       ? `<img src="${set.photo}" alt="Photo du jeu ${set.label} de ${keyLabel(key)}" />`
       : `<span>Aucune photo</span>`;
-    if (set.photo && canEditPhotos) {
+    if (set.photo) {
       preview.tabIndex = 0;
       preview.setAttribute("role", "button");
       preview.setAttribute("aria-label", `Afficher la photo du ${set.label}`);
@@ -2614,13 +2672,14 @@ function renderPanel() {
 
   const selectedSet = getSelectedSet(key);
   const isArchiveView = Boolean(selectedArchiveRecord);
-  const isCompromiseView = selectedArchiveRecord?.reason === "rented";
+  const isCompromiseView = isSelectedCompromiseEditable();
+  const isReadOnlyArchive = isArchiveView && !isSelectedCompromiseEditable();
   selectedSetId = selectedSet.id;
   detailPanel.hidden = false;
   form.hidden = false;
   form.classList.toggle("is-archive-view", isArchiveView);
   form.classList.toggle("is-compromise-view", isCompromiseView);
-  form.classList.toggle("can-edit-archive-photos", isCompromiseView);
+  form.classList.toggle("can-edit-archive-photos", isCompromiseView && !isReadOnlyArchive);
   selectedTitle.textContent = keyLabel(key);
   statusPill.className = "status-pill status-summary";
   statusPill.innerHTML = "";
@@ -2639,7 +2698,7 @@ function renderPanel() {
   cityInput.value = key.city || "";
   ownerInput.value = formatOwner(key.owner);
   notesInput.value = key.notes;
-  const canMoveSelectedKey = !key.archived || Boolean(selectedArchiveRecord);
+  const canMoveSelectedKey = !isArchiveView || isSelectedCompromiseEditable();
   const isSelectedSetOut = selectedSet.status === "out";
   const canCheckInSelectedKey = canMoveSelectedKey && (!isCompromiseView || isSelectedSetOut);
   checkinBtn.textContent = selectedSet.status === "out" ? "Rentr\u00e9e" : "Entr\u00e9e";
@@ -2647,15 +2706,22 @@ function renderPanel() {
   checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
   checkinBtn.disabled = !canCheckInSelectedKey;
   reservedBtn.disabled = !canMoveSelectedKey;
-  rentedBtn.disabled = key.archived || isSelectedSetOut;
-  removedBtn.disabled = key.archived || isSelectedSetOut;
-  deleteSelectedKeyBtn.disabled = key.archived;
-  keySetCountSelect.disabled = isArchiveView && !isCompromiseView;
+  rentedBtn.disabled = isArchiveView || key.archived || isSelectedSetOut;
+  removedBtn.disabled = isArchiveView || key.archived || isSelectedSetOut;
+  keySetCountSelect.disabled = isReadOnlyArchive;
   propertyInput.disabled = isArchiveView;
   postalCodeInput.disabled = isArchiveView;
   cityInput.disabled = isArchiveView;
   ownerInput.disabled = isArchiveView;
   notesInput.disabled = isArchiveView;
+  contactSelect.disabled = isReadOnlyArchive;
+  movementPersonInput.disabled = isReadOnlyArchive;
+  movementNameInput.disabled = isReadOnlyArchive;
+  movementCompanyInput.disabled = isReadOnlyArchive;
+  movementPhoneInput.disabled = isReadOnlyArchive;
+  movementNoteInput.disabled = isReadOnlyArchive;
+  clearSignatureBtn.disabled = isReadOnlyArchive;
+  signatureCanvas.classList.toggle("is-readonly", isReadOnlyArchive);
 
   historyList.innerHTML = "";
   if (!selectedSet.history.length) {
@@ -2672,7 +2738,7 @@ function renderPanel() {
     const title = document.createElement("strong");
     const date = document.createElement("small");
     item.dataset.historyId = entry.id;
-    item.title = "Ctrl + clic pour supprimer cette ligne d'historique";
+    item.title = isReadOnlyArchive ? "Historique en lecture seule" : "Ctrl + clic pour supprimer cette ligne d'historique";
     item.dataset.historyAction =
       entry.type === "out"
         ? "out"
@@ -2742,6 +2808,7 @@ function renderPanel() {
       reservationComment.rows = 2;
       reservationComment.placeholder = "Motif, rendez-vous, r\u00e9f\u00e9rence...";
       reservationComment.dataset.reservationId = entry.reservationId;
+      reservationComment.disabled = isReadOnlyArchive;
       reservationCommentField.append(reservationCommentLabel, reservationComment);
       item.append(reservationCommentField);
 
@@ -2749,13 +2816,13 @@ function renderPanel() {
       movementButton.type = "button";
       movementButton.className = `reservation-history-button ${isReservationOut ? "in" : "out"}`;
       movementButton.textContent = isReservationOut ? "Rentr\u00e9" : "Sortie";
-      movementButton.disabled = isOutForAnotherReason;
+      movementButton.disabled = isReadOnlyArchive || isOutForAnotherReason;
       movementButton.addEventListener("click", () => toggleReservationMovement(entry.reservationId));
 
       cancelButton.type = "button";
       cancelButton.className = "reservation-history-button cancel";
       cancelButton.textContent = "Annulation";
-      cancelButton.disabled = isReservationOut;
+      cancelButton.disabled = isReadOnlyArchive || isReservationOut;
       cancelButton.addEventListener("click", () => cancelReservation(entry.reservationId));
 
       actions.append(movementButton, cancelButton);
@@ -2771,16 +2838,18 @@ function renderPanel() {
       signatureLabel.innerHTML = "<span>Signature</span>";
       clearReservationSignatureBtn.type = "button";
       clearReservationSignatureBtn.textContent = "Effacer";
+      clearReservationSignatureBtn.disabled = isReadOnlyArchive;
       signatureCanvas.className = "reservation-signature-canvas";
       signatureCanvas.width = 320;
-      signatureCanvas.height = 143;
+      signatureCanvas.height = 268;
       signatureCanvas.dataset.reservationId = entry.reservationId;
+      signatureCanvas.classList.toggle("is-readonly", isReadOnlyArchive);
       signatureCanvas.setAttribute("aria-label", "Zone de signature de la réservation");
       clearReservationSignatureBtn.addEventListener("click", () => clearInlineSignature(signatureCanvas));
       signatureLabel.append(clearReservationSignatureBtn);
       signatureField.append(signatureLabel, signatureCanvas);
       item.append(signatureField);
-      setupInlineSignatureCanvas(signatureCanvas);
+      if (!isReadOnlyArchive) setupInlineSignatureCanvas(signatureCanvas);
     }
     item.append(date);
     historyList.append(item);
@@ -2788,6 +2857,7 @@ function renderPanel() {
 }
 
 function deleteHistoryEntry(historyId) {
+  if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || !historyId) return;
@@ -2880,6 +2950,7 @@ function updateSelectedKeySets(sets) {
 }
 
 function setKeySetCount(count) {
+  if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
   if (!key) return;
 
@@ -2923,6 +2994,7 @@ function setKeySetCount(count) {
 }
 
 function addMovement(type) {
+  if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
@@ -3042,6 +3114,7 @@ function setupInlineSignatureCanvas(canvas) {
 }
 
 function toggleReservationMovement(reservationId) {
+  if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
@@ -3088,6 +3161,7 @@ function toggleReservationMovement(reservationId) {
 }
 
 function cancelReservation(reservationId) {
+  if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
@@ -3120,6 +3194,7 @@ function cancelReservation(reservationId) {
 }
 
 async function reserveSelectedSet() {
+  if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
@@ -3693,12 +3768,7 @@ detailPanel.addEventListener("mouseleave", () => {
 exportKeyCsvBtn.addEventListener("click", () => {
   const key = getSelectedKey();
   if (!key) return;
-  exportKeyCsv(key, selectedArchiveRecord);
-});
-deleteSelectedKeyBtn.addEventListener("click", () => {
-  const key = getSelectedKey();
-  if (!key || key.archived) return;
-  deleteKeyWithoutArchive(key.id);
+  exportKeyExcel(key, selectedArchiveRecord);
 });
 keySetPhotoList.addEventListener("change", (event) => {
   const input = event.target;
@@ -3747,5 +3817,6 @@ window.addEventListener("pagehide", () => {
   syncCurrentRegistryToCloud();
 });
 window.addEventListener("online", retryFailedCloudSyncs);
+window.addEventListener("resize", () => requestAnimationFrame(syncSignatureHeightToActions));
 
 initializeApp();

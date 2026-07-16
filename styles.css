@@ -937,7 +937,7 @@ body.is-moving-key .photo-hover {
 .key-tile.has-details {
   grid-template-columns: minmax(0, 1fr);
   place-items: stretch;
-  padding: 8px 7px 8px 17px;
+  padding: 8px 17px;
   text-align: left;
 }
 
@@ -947,7 +947,7 @@ body.is-moving-key .photo-hover {
 
 .key-tile.photo-view {
   place-items: stretch;
-  padding: 6px 6px 22px;
+  padding: 6px 6px 20px;
 }
 
 .key-tile-shell.photo-view-shell .key-tile.photo-view {
@@ -1857,7 +1857,7 @@ body.is-moving-key .photo-hover {
 
 #signatureCanvas {
   width: 100%;
-  height: 143px;
+  height: var(--signature-actions-height, 268px);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #daddda;
@@ -2064,12 +2064,19 @@ body.is-moving-key .photo-hover {
 
 .reservation-signature-canvas {
   width: 100%;
-  height: 143px;
+  height: var(--signature-actions-height, 268px);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #daddda;
   cursor: crosshair;
   touch-action: none;
+}
+
+#signatureCanvas.is-readonly,
+.reservation-signature-canvas.is-readonly {
+  cursor: not-allowed;
+  pointer-events: none;
+  opacity: 0.45;
 }
 
 .history-phone {
@@ -2201,11 +2208,11 @@ body.is-moving-key .photo-hover {
   }
 
   #signatureCanvas {
-    height: 158px;
+    height: var(--signature-actions-height, 268px);
   }
 
   .reservation-signature-canvas {
-    height: 158px;
+    height: var(--signature-actions-height, 268px);
   }
 
   #contactSelect {
@@ -2451,11 +2458,18 @@ body.is-moving-key .photo-hover {
   }
 
   .key-grid[data-view-mode="photo"] .key-tile.photo-view {
-    padding: 4px 4px 17px;
+    padding: 4px 4px 15px;
   }
 
   .key-grid[data-view-mode="photo"] .key-photo-content {
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.36);
+  }
+}
+
+@media (max-width: 1040px), (pointer: coarse) {
+  #signatureCanvas,
+  .reservation-signature-canvas {
+    height: var(--signature-actions-height, 268px);
   }
 }
