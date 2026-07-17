@@ -920,11 +920,11 @@ function formatSentenceStart(value) {
 }
 
 function formatLastName(value) {
-  return String(value || "").trim().toLocaleUpperCase("fr-FR");
+  return String(value || "").toLocaleUpperCase("fr-FR");
 }
 
 function getMovementPersonInputName() {
-  return [formatFirstName(movementPersonInput.value).trim(), formatLastName(movementNameInput.value)].filter(Boolean).join(" ");
+  return [formatFirstName(movementPersonInput.value).trim(), formatLastName(movementNameInput.value).trim()].filter(Boolean).join(" ");
 }
 
 function getContactDisplayName(contact) {
@@ -998,7 +998,7 @@ function normalizeContact(contact) {
   return {
     id: contact.id || createContactId(),
     firstName: formatFirstName(contact.firstName).trim(),
-    name: type === "external" && !contact.companyName ? "" : formatLastName(contact.name),
+    name: type === "external" && !contact.companyName ? "" : formatLastName(contact.name).trim(),
     companyName: type === "external" ? formatCompanyName(contact.companyName || contact.name).trim() : "",
     phone: formatPhoneNumber(contact.phone),
     type,
@@ -1063,7 +1063,7 @@ function getDisplayPhoto(key) {
 }
 
 function formatOwner(owner) {
-  return (owner || "").trim().toLocaleUpperCase("fr-FR");
+  return (owner || "").toLocaleUpperCase("fr-FR");
 }
 
 function getStatus(key) {
@@ -3720,6 +3720,10 @@ ownerInput.addEventListener(
   "input",
   debounce(() => updateSelectedKey({ owner: formatOwner(ownerInput.value) })),
 );
+ownerInput.addEventListener("blur", () => {
+  ownerInput.value = formatOwner(ownerInput.value).trim();
+  updateSelectedKey({ owner: ownerInput.value });
+});
 ownerFirstNameInput.addEventListener(
   "input",
   debounce(() => updateSelectedKey({ ownerFirstName: formatFirstName(ownerFirstNameInput.value) })),
@@ -3769,8 +3773,14 @@ movementPersonInput.addEventListener("input", () => {
 movementNameInput.addEventListener("input", () => {
   movementNameInput.value = formatLastName(movementNameInput.value);
 });
+movementNameInput.addEventListener("blur", () => {
+  movementNameInput.value = formatLastName(movementNameInput.value).trim();
+});
 movementCompanyInput.addEventListener("input", () => {
   movementCompanyInput.value = formatCompanyName(movementCompanyInput.value);
+});
+movementCompanyInput.addEventListener("blur", () => {
+  movementCompanyInput.value = formatCompanyName(movementCompanyInput.value).trim();
 });
 movementPhoneInput.addEventListener("input", () => {
   movementPhoneInput.value = formatPhoneNumber(movementPhoneInput.value);
@@ -3792,8 +3802,14 @@ contactFirstNameInput.addEventListener("input", () => {
 contactNameInput.addEventListener("input", () => {
   contactNameInput.value = formatLastName(contactNameInput.value);
 });
+contactNameInput.addEventListener("blur", () => {
+  contactNameInput.value = formatLastName(contactNameInput.value).trim();
+});
 contactCompanyInput.addEventListener("input", () => {
   contactCompanyInput.value = formatCompanyName(contactCompanyInput.value);
+});
+contactCompanyInput.addEventListener("blur", () => {
+  contactCompanyInput.value = formatCompanyName(contactCompanyInput.value).trim();
 });
 contactsList.addEventListener("dragstart", (event) => {
   const item = event.target.closest("[data-contact-id]");
@@ -3895,7 +3911,7 @@ contactTabs.forEach((tab) => {
 contactForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
-  const name = formatLastName(contactNameInput.value);
+  const name = formatLastName(contactNameInput.value).trim();
   const firstName = formatFirstName(contactFirstNameInput.value).trim();
   const companyName = activeContactType === "external" ? formatCompanyName(contactCompanyInput.value).trim() : "";
   const phone = formatPhoneNumber(contactPhoneInput.value);
