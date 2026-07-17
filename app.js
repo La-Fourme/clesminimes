@@ -2891,14 +2891,27 @@ function renderPanel() {
   historyList.innerHTML = "";
   activeReservationPanel.innerHTML = "";
   activeReservationPanel.hidden = true;
-  if (!selectedSet.history.length) {
+  const displayedHistory = [...selectedSet.history];
+  if (selectedArchiveRecord?.reason === "removed" && !displayedHistory.some((entry) => entry.type === "removed")) {
+    displayedHistory.unshift({
+      id: `${selectedArchiveRecord.id}-removed`,
+      type: "removed",
+      person: "",
+      company: "",
+      phone: "",
+      note: "",
+      signature: "",
+      date: formatArchiveDate(selectedArchiveRecord.archivedAt),
+    });
+  }
+  if (!displayedHistory.length) {
     const item = document.createElement("li");
     item.textContent = "Aucun mouvement enregistré pour ce jeu.";
     historyList.append(item);
     return;
   }
 
-  [...selectedSet.history]
+  displayedHistory
     .sort(sortKeyHistoryEntries)
     .forEach((entry) => {
     const item = document.createElement("li");
@@ -2909,10 +2922,12 @@ function renderPanel() {
     item.dataset.historyAction =
       entry.type === "out"
         ? "out"
-        : entry.type === "reserved" || entry.type === "cancel-reservation"
-          ? "reserved"
-          : "in";
-    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${getHistoryPersonName(entry)}`;
+        : entry.type === "removed"
+          ? "removed"
+          : entry.type === "reserved" || entry.type === "cancel-reservation"
+            ? "reserved"
+            : "in";
+    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "removed" ? "Retir\u00e9" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${getHistoryPersonName(entry)}`;
     date.textContent =
       entry.type === "reserved"
         ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date}`
@@ -3520,13 +3535,43 @@ async function archiveSelectedKey(reason) {
   rememberUndoStep();
 
   const archivedAt = new Date().toISOString();
+  const selectedSet = getSelectedSet(key);
+  const removedEntry =
+    reason === "removed" && selectedSet
+      ? {
+          id: createHistoryId(),
+          type: "removed",
+          person: getMovementPersonInputName(),
+          company: formatCompanyName(movementCompanyInput.value).trim(),
+          phone: formatPhoneNumber(movementPhoneInput.value),
+          note: formatSentenceStart(movementNoteInput.value).trim(),
+          signature: getMainSignatureDataUrl(),
+          date: new Intl.DateTimeFormat("fr-FR", {
+            dateStyle: "short",
+            timeStyle: "short",
+          }).format(new Date()),
+        }
+      : null;
+  const archivedKey = removedEntry
+    ? {
+        ...key,
+        sets: key.sets.map((set) =>
+          set.id === selectedSet.id
+            ? {
+                ...set,
+                history: [removedEntry, ...set.history],
+              }
+            : set,
+        ),
+      }
+    : key;
   archives = [
     {
       id: `${key.id}-${archivedAt}`,
       reason,
       archivedAt,
       compromiseSignedAt,
-      key: { ...key, archived: false },
+      key: { ...archivedKey, archived: false },
     },
     ...archives,
   ];
