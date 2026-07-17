@@ -3186,7 +3186,7 @@ function addMovement(type) {
     company: forcedCompany || formatCompanyName(movementCompanyInput.value).trim(),
     phone: formatPhoneNumber(forcedPhone || movementPhoneInput.value),
     note: formatSentenceStart(movementNoteInput.value).trim(),
-    signature: hasSignature ? signatureCanvas.toDataURL("image/png") : "",
+    signature: getMainSignatureDataUrl(),
     date: new Intl.DateTimeFormat("fr-FR", {
       dateStyle: "short",
       timeStyle: "short",
@@ -3636,6 +3636,19 @@ function drawSignature(event) {
 function stopSignature(event) {
   if (event?.pointerId !== undefined) signatureCanvas.releasePointerCapture?.(event.pointerId);
   isSigning = false;
+}
+
+function signatureCanvasHasInk() {
+  const context = signatureCanvas.getContext("2d");
+  const { data } = context.getImageData(0, 0, signatureCanvas.width, signatureCanvas.height);
+  for (let index = 3; index < data.length; index += 4) {
+    if (data[index] > 0) return true;
+  }
+  return false;
+}
+
+function getMainSignatureDataUrl() {
+  return hasSignature || signatureCanvasHasInk() ? signatureCanvas.toDataURL("image/png") : "";
 }
 
 function clearSignature() {
