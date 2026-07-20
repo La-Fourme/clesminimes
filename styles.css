@@ -506,8 +506,10 @@ h3 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
-  width: min(100%, 430px);
-  margin: -34px 0 10px auto;
+  box-sizing: border-box;
+  width: min(100%, 560px);
+  max-width: 100%;
+  margin: 12px 0 10px auto;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #d8dcd8;
@@ -519,9 +521,10 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: clamp(3px, 0.7vw, 6px);
+  min-width: 0;
   min-height: 34px;
-  padding: 0 8px;
+  padding: 0 clamp(4px, 0.8vw, 10px);
   border: 0;
   border-radius: 0;
   color: var(--ink);
@@ -529,6 +532,7 @@ h3 {
   font-size: 12px;
   font-weight: 650;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .key-status-filter-button + .key-status-filter-button::before {
@@ -572,6 +576,7 @@ h3 {
   font-size: 11px;
   font-weight: 900;
   line-height: 20px;
+  flex: 0 0 auto;
 }
 
 .key-status-filter-button.is-active {
@@ -2217,6 +2222,11 @@ body.is-moving-key .photo-hover {
     font-size: 18px;
   }
 
+  .key-status-filter {
+    width: 100%;
+    margin: 12px 0 10px;
+  }
+
   .key-number,
   .has-details .key-number,
   .key-owner {
@@ -2393,6 +2403,26 @@ body.is-moving-key .photo-hover {
 
   .photo-preview {
     min-height: 86px;
+  }
+}
+
+@media (max-width: 380px) {
+  .key-status-filter-button {
+    gap: 3px;
+    padding: 0 4px;
+    font-size: 11px;
+  }
+
+  .key-status-dot {
+    flex-basis: 8px;
+    width: 8px;
+    height: 8px;
+  }
+
+  .key-status-filter-button [data-key-status-count] {
+    min-width: 20px;
+    padding: 0 4px;
+    font-size: 10px;
   }
 }
 
