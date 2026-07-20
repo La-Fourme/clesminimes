@@ -1909,8 +1909,42 @@ function renderGlobalHistoryItems(targetList = globalHistoryList) {
     actor: "Action enregistrée",
     details: entry.details || "",
     device: entry.device || "Appareil non renseigné",
+    source: "activity",
   }));
-  const entries = [...activityEntries, ...["location", "transaction"].flatMap(getRegistryHistoryEntries)]
+  const registryEntries = ["location", "transaction"].flatMap(getRegistryHistoryEntries).map((entry) => ({
+    ...entry,
+    source: "registry",
+  }));
+  const getDeduplicationKey = (entry) => {
+    const actionClass = getActionClass(entry.action);
+    const normalizedAction = actionClass === "in" && /(?:rentr|entr)/i.test(entry.action)
+      ? "entry"
+      : String(entry.action || "").trim().toLocaleLowerCase("fr-FR");
+    const normalizedTitle = String(entry.title || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("fr-FR");
+    const minute = Math.floor(entry.timestamp / 60000);
+    return `${normalizedAction}|${normalizedTitle}|${minute}`;
+  };
+  const activityEntriesByKey = new Map();
+  activityEntries.forEach((entry) => {
+    const key = getDeduplicationKey(entry);
+    const matchingEntries = activityEntriesByKey.get(key) || [];
+    matchingEntries.push(entry);
+    activityEntriesByKey.set(key, matchingEntries);
+  });
+  const deduplicatedEntries = registryEntries.map((registryEntry) => {
+    const key = getDeduplicationKey(registryEntry);
+    const matchingActivities = activityEntriesByKey.get(key) || [];
+    const activityEntry = matchingActivities.shift();
+    if (!matchingActivities.length) activityEntriesByKey.delete(key);
+    if (!activityEntry) return registryEntry;
+    return {
+      ...registryEntry,
+      action: activityEntry.action || registryEntry.action,
+      device: activityEntry.device || registryEntry.device,
+    };
+  });
+  activityEntriesByKey.forEach((remainingEntries) => deduplicatedEntries.push(...remainingEntries));
+  const entries = deduplicatedEntries
     .map((entry, index) => ({ ...entry, orderIndex: index }))
     .sort((first, second) => second.timestamp - first.timestamp || first.orderIndex - second.orderIndex);
 
