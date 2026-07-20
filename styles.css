@@ -509,7 +509,7 @@ h3 {
   box-sizing: border-box;
   width: min(100%, 560px);
   max-width: 100%;
-  margin: 12px 0 10px auto;
+  margin: -34px 0 10px auto;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #d8dcd8;
@@ -2207,6 +2207,13 @@ body.is-moving-key .photo-hover {
   100% {
     opacity: 0;
     transform: translate(-110px, 112vh) rotate(-820deg) scale(1.15);
+  }
+}
+
+@media (max-width: 1180px) {
+  .key-status-filter {
+    width: 100%;
+    margin: 12px 0 10px;
   }
 }
 
