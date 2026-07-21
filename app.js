@@ -453,6 +453,21 @@ function syncCurrentRegistryToCloud() {
   return Promise.all([...dirtyCloudKeys].map(syncStorageKeyToCloud));
 }
 
+function closeKeyPanelAfterAction() {
+  selectedId = null;
+  selectedArchiveRecord = null;
+  selectedSetId = "main";
+  render();
+}
+
+async function syncCloudAfterAction() {
+  try {
+    await syncCurrentRegistryToCloud();
+  } catch (error) {
+    console.warn("Supabase action sync failed", error.message);
+  }
+}
+
 async function loadStorageFromCloud() {
   if (!supabaseClient) return;
   if (isPhotoImporting) return;
@@ -925,6 +940,28 @@ function formatLastName(value) {
 
 function getMovementPersonInputName() {
   return [formatFirstName(movementPersonInput.value).trim(), formatLastName(movementNameInput.value).trim()].filter(Boolean).join(" ");
+}
+
+function getTypedMovementActor() {
+  return {
+    person: getMovementPersonInputName(),
+    company: formatCompanyName(movementCompanyInput.value).trim(),
+    phone: formatPhoneNumber(movementPhoneInput.value),
+  };
+}
+
+function ensureMovementActor(actionLabel, fallbackActor = {}) {
+  const typedActor = getTypedMovementActor();
+  const hasSelectedContact = Boolean(contactSelect.value);
+  const hasActor =
+    hasSelectedContact ||
+    Boolean(typedActor.person || typedActor.company || fallbackActor.person || fallbackActor.company);
+
+  if (hasActor) return true;
+
+  alert(`Renseigne ou choisis un intervenant avant de cliquer sur ${actionLabel}.`);
+  movementNameInput.focus();
+  return false;
 }
 
 function getContactDisplayName(contact) {
@@ -3226,15 +3263,16 @@ function setKeySetCount(count) {
   updateSelectedKey({ sets: nextSets });
 }
 
-function addMovement(type) {
+async function addMovement(type) {
   if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
-  if (type === "out") showCheckoutReservationWarning(selectedSet);
   const forcedPerson = type === "in" && selectedSet.status === "out" ? selectedSet.holder : "";
   const forcedPhone = type === "in" && selectedSet.status === "out" ? selectedSet.holderPhone : "";
   const forcedCompany = type === "in" && selectedSet.status === "out" ? selectedSet.holderCompany : "";
+  if (!ensureMovementActor(type === "out" ? "Sortie" : "Entr\u00e9e", { person: forcedPerson, company: forcedCompany })) return;
+  if (type === "out") showCheckoutReservationWarning(selectedSet);
 
   const entry = {
     id: createHistoryId(),
@@ -3271,14 +3309,9 @@ function addMovement(type) {
   movementNoteInput.value = "";
   contactSelect.value = "";
   clearSignature();
-  if (selectedArchiveRecord) {
-    renderCompromisesPanel();
-  } else {
-    selectedId = null;
-    selectedArchiveRecord = null;
-    selectedSetId = "main";
-    render();
-  }
+  if (selectedArchiveRecord) renderCompromisesPanel();
+  closeKeyPanelAfterAction();
+  await syncCloudAfterAction();
 }
 
 function getMovementDateText() {
@@ -3437,11 +3470,7 @@ async function reserveSelectedSet() {
   const person = getMovementPersonInputName();
   const company = contact?.type === "external" ? formatCompanyName(contact.companyName || "").trim() : formatCompanyName(movementCompanyInput.value).trim();
   const phone = formatPhoneNumber(contact?.phone || movementPhoneInput.value);
-  if (!person) {
-    alert("Renseigne le nom de l'intervenant avant de r\u00e9server.");
-    movementPersonInput.focus();
-    return;
-  }
+  if (!ensureMovementActor("R\u00e9serv\u00e9")) return;
 
   const reservationDateTime = await promptReservationDateTime();
   if (!reservationDateTime) return;
@@ -3492,6 +3521,8 @@ async function reserveSelectedSet() {
   contactSelect.value = "";
   clearSignature();
   if (selectedArchiveRecord) renderCompromisesPanel();
+  closeKeyPanelAfterAction();
+  await syncCloudAfterAction();
 }
 
 function promptReservationDateTime() {
@@ -3566,6 +3597,7 @@ async function archiveSelectedKey(reason) {
   if (!key || key.archived) return;
 
   const actionLabel = reason === "rented" ? getRegistryConfig().archiveActionLabel : "Retiré";
+  if (!ensureMovementActor(actionLabel)) return;
   let compromiseSignedAt = "";
   if (reason === "rented" && activeRegistry === "transaction") {
     compromiseSignedAt = await promptCompromiseDate();
@@ -3621,10 +3653,12 @@ async function archiveSelectedKey(reason) {
   selectedId = null;
   selectedArchiveRecord = null;
   selectedSetId = "main";
-  logActivity(actionLabel, keyLabel(key), [key.owner, key.property, compromiseSignedAt ? `Signature : ${formatDateOnly(compromiseSignedAt)}` : ""].filter(Boolean).join(" - "));
+  const movementActor = getTypedMovementActor();
+  logActivity(actionLabel, keyLabel(key), [key.owner, key.property, movementActor.person || movementActor.company, compromiseSignedAt ? `Signature : ${formatDateOnly(compromiseSignedAt)}` : ""].filter(Boolean).join(" - "));
   saveArchives();
   saveKeys();
-  render();
+  closeKeyPanelAfterAction();
+  await syncCloudAfterAction();
 }
 
 function openContactsPanel() {
