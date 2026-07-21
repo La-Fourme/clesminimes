@@ -2360,7 +2360,7 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     item.append(details, actions);
     item.classList.add("is-clickable");
     item.title = options.showCompromiseDetails
-      ? "Cliquer pour consulter la fiche et son historique. Ctrl + clic pour modifier la date du compromis"
+      ? "Appuyer sur Ctrl + clic pour modifier la date du compromis"
       : "Cliquer pour consulter la fiche et son historique";
     item.addEventListener("click", (event) => {
       event.preventDefault();
