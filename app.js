@@ -2983,12 +2983,27 @@ function renderPanel() {
       date: formatArchiveDate(selectedArchiveRecord.archivedAt),
     });
   }
+  if (selectedArchiveRecord?.reason === "rented" && !displayedHistory.some((entry) => entry.type === "rented")) {
+    displayedHistory.unshift({
+      id: `${selectedArchiveRecord.id}-rented`,
+      type: "rented",
+      actionLabel: getRegistryConfig().archiveActionLabel,
+      person: "",
+      company: "",
+      phone: "",
+      note: "",
+      signature: "",
+      date: formatArchiveDate(selectedArchiveRecord.archivedAt),
+    });
+  }
   if (!displayedHistory.length) {
     const item = document.createElement("li");
     item.textContent = "Aucun mouvement enregistré pour ce jeu.";
     historyList.append(item);
     return;
   }
+
+  const activeReservationItems = [];
 
   displayedHistory
     .sort(sortKeyHistoryEntries)
@@ -3003,10 +3018,27 @@ function renderPanel() {
         ? "out"
         : entry.type === "removed"
           ? "removed"
-          : entry.type === "reserved" || entry.type === "cancel-reservation"
-            ? "reserved"
-            : "in";
-    title.textContent = `${entry.type === "out" ? "Sortie" : entry.type === "removed" ? "Retir\u00e9" : entry.type === "reserved" ? "R\u00e9serv\u00e9" : entry.type === "cancel-reservation" ? "Annulation" : "Entr\u00e9e"} : ${getHistoryPersonName(entry)}`;
+          : entry.type === "rented"
+            ? "signed"
+            : entry.type === "reserved" || entry.type === "cancel-reservation"
+              ? "reserved"
+              : "in";
+    const actionTitle =
+      entry.type === "out"
+        ? "Sortie"
+        : entry.type === "removed"
+          ? "Retir\u00e9"
+          : entry.type === "rented"
+            ? entry.actionLabel || getRegistryConfig().archiveActionLabel
+            : entry.type === "reserved"
+              ? "R\u00e9serv\u00e9"
+              : entry.type === "cancel-reservation"
+                ? "Annulation"
+                : "Entr\u00e9e";
+    const historyPersonName = getHistoryPersonName(entry);
+    const hasHistoryPerson =
+      Boolean(String(entry.person || "").trim() || String(entry.company || "").trim() || String(entry.phone || "").trim());
+    title.textContent = hasHistoryPerson ? `${actionTitle} : ${historyPersonName}` : actionTitle;
     date.textContent =
       entry.type === "reserved"
         ? `R\u00e9serv\u00e9 le ${entry.createdAt || entry.date}`
@@ -3117,13 +3149,19 @@ function renderPanel() {
     item.append(date);
     if (historySummary) {
       historySummary.append(date.cloneNode(true));
-      activeReservationPanel.hidden = false;
-      activeReservationPanel.append(item);
+      activeReservationItems.push({
+        item,
+        timestamp: parseHistoryTimestamp(activeReservation.reservationDate || activeReservation.createdAt || entry.reservationDate || entry.date),
+      });
       historyList.append(historySummary);
     } else {
       historyList.append(item);
     }
   });
+  activeReservationItems
+    .sort((first, second) => first.timestamp - second.timestamp)
+    .forEach(({ item }) => activeReservationPanel.append(item));
+  activeReservationPanel.hidden = !activeReservationItems.length;
 }
 
 function deleteHistoryEntry(historyId) {
@@ -3610,11 +3648,12 @@ async function archiveSelectedKey(reason) {
 
   const archivedAt = new Date().toISOString();
   const selectedSet = getSelectedSet(key);
-  const removedEntry =
-    reason === "removed" && selectedSet
+  const archiveEntry =
+    selectedSet
       ? {
           id: createHistoryId(),
-          type: "removed",
+          type: reason === "removed" ? "removed" : "rented",
+          actionLabel,
           person: getMovementPersonInputName(),
           company: formatCompanyName(movementCompanyInput.value).trim(),
           phone: formatPhoneNumber(movementPhoneInput.value),
@@ -3626,14 +3665,14 @@ async function archiveSelectedKey(reason) {
           }).format(new Date()),
         }
       : null;
-  const archivedKey = removedEntry
+  const archivedKey = archiveEntry
     ? {
         ...key,
         sets: key.sets.map((set) =>
           set.id === selectedSet.id
             ? {
                 ...set,
-                history: [removedEntry, ...set.history],
+                history: [archiveEntry, ...set.history],
               }
             : set,
         ),

@@ -1964,6 +1964,11 @@ body.is-moving-key .photo-hover {
   background: #f8d19a;
 }
 
+.history-list li[data-history-action="signed"] {
+  border-color: #d8ad28;
+  background: #ffe58a;
+}
+
 .history-list li[data-history-action="removed"] {
   border-color: #6b7275;
   background: #e5e7e6;
