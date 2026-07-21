@@ -993,7 +993,7 @@ function getMovementContactName(contact) {
 }
 
 function getHistoryPersonName(entry) {
-  let person = entry.person || "Intervenant non pr\u00e9cis\u00e9";
+  let person = entry.person || entry.company || "Intervenant non pr\u00e9cis\u00e9";
   const company = String(entry.company || "").trim();
   if (company && person.startsWith(`${company} - `)) {
     person = person.slice(company.length + 3).trim();
@@ -2971,6 +2971,7 @@ function renderPanel() {
   activeReservationPanel.innerHTML = "";
   activeReservationPanel.hidden = true;
   const displayedHistory = [...selectedSet.history];
+  const latestMovementEntry = getLatestMovementEntry(displayedHistory) || {};
   if (selectedArchiveRecord?.reason === "removed" && !displayedHistory.some((entry) => entry.type === "removed")) {
     displayedHistory.unshift({
       id: `${selectedArchiveRecord.id}-removed`,
@@ -2988,9 +2989,9 @@ function renderPanel() {
       id: `${selectedArchiveRecord.id}-rented`,
       type: "rented",
       actionLabel: getRegistryConfig().archiveActionLabel,
-      person: "",
-      company: "",
-      phone: "",
+      person: latestMovementEntry.person || "",
+      company: latestMovementEntry.company || "",
+      phone: latestMovementEntry.phone || "",
       note: "",
       signature: "",
       date: formatArchiveDate(selectedArchiveRecord.archivedAt),
