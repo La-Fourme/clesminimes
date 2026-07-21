@@ -1428,6 +1428,7 @@ body.is-moving-key .photo-hover {
 }
 
 .archive-list li {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
@@ -1444,6 +1445,34 @@ body.is-moving-key .photo-hover {
 
 .archive-list li.is-clickable:hover {
   box-shadow: var(--lift-shadow);
+}
+
+.archive-list li[data-quick-tip]::after {
+  position: absolute;
+  right: 10px;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  max-width: min(320px, 80vw);
+  padding: 7px 9px;
+  border: 1px solid rgba(30, 37, 40, 0.22);
+  border-radius: 7px;
+  background: rgba(30, 37, 40, 0.94);
+  color: #fff;
+  content: attr(data-quick-tip);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(3px);
+  transition: opacity 0.08s ease, transform 0.08s ease;
+  white-space: normal;
+}
+
+.archive-list li[data-quick-tip]:hover::after {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.08s;
 }
 
 .archive-list li.has-full-action {

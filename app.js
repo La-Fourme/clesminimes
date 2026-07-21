@@ -2359,9 +2359,11 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     actions.append(restoreButton);
     item.append(details, actions);
     item.classList.add("is-clickable");
-    item.title = options.showCompromiseDetails
-      ? "Appuyer sur Ctrl + clic pour modifier la date du compromis"
-      : "Cliquer pour consulter la fiche et son historique";
+    if (options.showCompromiseDetails) {
+      item.dataset.quickTip = "Appuyer sur Ctrl + clic pour modifier la date du compromis";
+    } else {
+      item.title = "Cliquer pour consulter la fiche et son historique";
+    }
     item.addEventListener("click", (event) => {
       event.preventDefault();
       if (options.showCompromiseDetails && event.ctrlKey) {
