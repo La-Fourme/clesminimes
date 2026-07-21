@@ -1901,10 +1901,18 @@ function renderGlobalHistoryItems(targetList = globalHistoryList) {
     );
     return keyLabelEntry ? entry.title.replace(keyLabelEntry, ownerMap.get(keyLabelEntry)) : entry.title;
   };
+  const getActivityTitle = (entry) => {
+    if (String(entry.action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation fiche")) {
+      const ownerFromDetails = String(entry.details || "").split(" - ")[0]?.trim();
+      if (ownerFromDetails) return formatOwner(ownerFromDetails);
+    }
+
+    return replaceKeyLabelWithOwner(entry);
+  };
   const activityEntries = loadActivityLog().map((entry) => ({
     timestamp: parseHistoryTimestamp(entry.date),
     date: formatArchiveDate(entry.date),
-    title: `${entry.registry === "transaction" ? "Transaction" : "Location"} - ${replaceKeyLabelWithOwner(entry)}`,
+    title: `${entry.registry === "transaction" ? "Transaction" : "Location"} - ${getActivityTitle(entry)}`,
     action: entry.action,
     actor: "Action enregistrée",
     details: entry.details || "",
@@ -3127,7 +3135,7 @@ function updateSelectedKey(changes) {
   keys = keys.map((key) => (key.id === selectedId ? { ...key, ...changes } : key));
   const nextKey = getSelectedKey();
   if (nextKey && !wasFilled && isKeyFilled(nextKey)) {
-    logActivity("Création fiche", keyLabel(nextKey), [nextKey.owner, nextKey.property].filter(Boolean).join(" - "));
+    logActivity("Création fiche", nextKey.owner ? formatOwner(nextKey.owner) : keyLabel(nextKey), [nextKey.owner, nextKey.property].filter(Boolean).join(" - "));
   }
   saveKeys();
   render();
