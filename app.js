@@ -14,6 +14,8 @@ const photoMaxSize = 650;
 const photoJpegQuality = 0.45;
 const photoOptimizationStorageKey = "cles-photo-optimization-650-v1";
 const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
+const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
+const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const cloudPollIntervalMs = 60000;
 const cloudWriteDebounceMs = 2000;
 const registryConfig = {
@@ -156,18 +158,20 @@ let saleCelebrationTimer = null;
 const celebrationAudioFiles = ["Ados.mp3", "Adultes.mp3", "Langue.mp3"];
 let celebrationAudioPlayers = [];
 let photoViewer = null;
-let lastLocalEditAt = 0;
+let lastLocalEditAt = Number(localStorage.getItem(lastLocalEditStorageKey) || 0);
 let isApplyingCloudState = false;
 let pendingCloudSync = Promise.resolve();
 let failedCloudSyncKeys = new Set();
 let cloudSyncTimers = new Map();
-let dirtyCloudKeys = new Set();
+let dirtyCloudKeys = loadPendingCloudKeys();
 let cloudRowVersions = loadCloudRowVersions();
 let hasLoadedCloudState = cloudRowVersions.size > 0;
 let isCloudCheckRunning = false;
 
 function markLocalEdit() {
-  if (!isApplyingCloudState) lastLocalEditAt = Date.now();
+  if (isApplyingCloudState) return;
+  lastLocalEditAt = Date.now();
+  localStorage.setItem(lastLocalEditStorageKey, String(lastLocalEditAt));
 }
 
 function loadTileViewMode() {
@@ -392,9 +396,23 @@ function saveCloudRowVersions() {
   localStorage.setItem(cloudVersionsStorageKey, JSON.stringify(Object.fromEntries(cloudRowVersions)));
 }
 
+function loadPendingCloudKeys() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(pendingCloudKeysStorageKey) || "[]");
+    return new Set(Array.isArray(saved) ? saved : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function savePendingCloudKeys() {
+  localStorage.setItem(pendingCloudKeysStorageKey, JSON.stringify([...dirtyCloudKeys]));
+}
+
 function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
   if (!supabaseClient) return;
   dirtyCloudKeys.add(storageKey);
+  savePendingCloudKeys();
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.set(
     storageKey,
@@ -429,11 +447,13 @@ function syncStorageKeyToCloud(storageKey) {
       if (error) {
         dirtyCloudKeys.add(storageKey);
         failedCloudSyncKeys.add(storageKey);
+        savePendingCloudKeys();
         console.warn("Supabase sync failed", storageKey, error.message);
         return;
       }
       failedCloudSyncKeys.delete(storageKey);
       dirtyCloudKeys.delete(storageKey);
+      savePendingCloudKeys();
       if (value === null) cloudRowVersions.delete(storageKey);
       else cloudRowVersions.set(storageKey, updatedAt);
       saveCloudRowVersions();
@@ -577,6 +597,7 @@ function restoreStorageSnapshot(snapshot) {
     changedKeys.push(key);
   });
   changedKeys.forEach((key) => dirtyCloudKeys.add(key));
+  savePendingCloudKeys();
   Promise.all(changedKeys.map(syncStorageKeyToCloud));
 }
 
@@ -2114,6 +2135,7 @@ function importAllDataBackup(file) {
       changedKeys.push(key);
     });
     changedKeys.forEach((key) => dirtyCloudKeys.add(key));
+    savePendingCloudKeys();
     Promise.all(changedKeys.map(syncStorageKeyToCloud));
     logActivity("Import sauvegarde", "Données globales", file.name || "Fichier JSON");
 
@@ -4236,6 +4258,7 @@ keySetPhotoList.addEventListener("change", (event) => {
 async function initializeApp() {
   migrateArchivedSlots();
   ensureDeviceName();
+  if (dirtyCloudKeys.size) await syncCurrentRegistryToCloud();
   await loadStorageFromCloud();
   await migrateStoredPropertyAddresses();
   updateRegistryHeader();
@@ -4247,10 +4270,14 @@ async function initializeApp() {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") syncCurrentRegistryToCloud();
+  if (document.visibilityState === "hidden") {
+    savePendingCloudKeys();
+    syncCurrentRegistryToCloud();
+  }
   else loadStorageFromCloud();
 });
 window.addEventListener("pagehide", () => {
+  savePendingCloudKeys();
   syncCurrentRegistryToCloud();
 });
 window.addEventListener("online", () => {
