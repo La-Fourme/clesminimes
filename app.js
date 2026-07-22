@@ -1989,9 +1989,31 @@ function renderGlobalHistoryItems(targetList = globalHistoryList) {
     };
   });
   activityEntriesByKey.forEach((remainingEntries) => deduplicatedEntries.push(...remainingEntries));
+  const getGlobalHistoryPriority = (entry) => {
+    const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
+    if (action.includes("cr\u00e9ation fiche")) return 0;
+    if (action.includes("entr\u00e9e")) return 1;
+    return 2;
+  };
+  const getGlobalHistorySubject = (entry) =>
+    String(entry.title || "")
+      .trim()
+      .replace(/\s+-\s+jeu\s+\d+\s*$/i, "")
+      .replace(/\s+/g, " ")
+      .toLocaleLowerCase("fr-FR");
   const entries = deduplicatedEntries
     .map((entry, index) => ({ ...entry, orderIndex: index }))
-    .sort((first, second) => second.timestamp - first.timestamp || first.orderIndex - second.orderIndex);
+    .sort((first, second) => {
+      const firstMinute = Math.floor(first.timestamp / 60000);
+      const secondMinute = Math.floor(second.timestamp / 60000);
+      const isSameSubject = getGlobalHistorySubject(first) === getGlobalHistorySubject(second);
+      return (
+        secondMinute - firstMinute ||
+        (isSameSubject ? getGlobalHistoryPriority(first) - getGlobalHistoryPriority(second) : 0) ||
+        second.timestamp - first.timestamp ||
+        first.orderIndex - second.orderIndex
+      );
+    });
 
   targetList.innerHTML = "";
   if (!entries.length) {
