@@ -500,6 +500,10 @@ async function loadStorageFromCloud() {
   isCloudCheckRunning = true;
   await pendingCloudSync.catch(() => {});
   await retryFailedCloudSyncs();
+  if (dirtyCloudKeys.size) {
+    isCloudCheckRunning = false;
+    return;
+  }
   try {
     if (!hasLoadedCloudState) {
       const { data, error } = await supabaseClient.from("app_state").select("key,value,updated_at");
