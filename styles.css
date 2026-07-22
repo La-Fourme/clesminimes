@@ -699,6 +699,11 @@ h3 {
   border-color: #b79a6d;
 }
 
+.history-data-button .history-data-label {
+  font-size: inherit;
+  line-height: inherit;
+}
+
 .history-button-icon {
   width: 16px;
   height: 16px;
