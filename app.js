@@ -2651,6 +2651,7 @@ function renderGrid() {
           deleteButton.setAttribute("aria-label", `Supprimer ${keyLabel(key)} sans archiver`);
           deleteButton.addEventListener("click", (event) => {
             event.stopPropagation();
+            if (!event.ctrlKey) return;
             deleteKeyWithoutArchive(key.id);
           });
           tileShell.append(deleteButton);
@@ -4100,9 +4101,22 @@ closeGlobalHistoryBtn.addEventListener("click", () => {
 });
 exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
 backupDataBtn.addEventListener("click", exportAllDataBackup);
-document.addEventListener("keydown", updateImportButtonAvailability);
-document.addEventListener("keyup", updateImportButtonAvailability);
-window.addEventListener("blur", () => updateImportButtonAvailability());
+function updateCtrlMode(event = {}) {
+  document.body.classList.toggle("is-ctrl-pressed", Boolean(event.ctrlKey));
+}
+
+document.addEventListener("keydown", (event) => {
+  updateImportButtonAvailability(event);
+  updateCtrlMode(event);
+});
+document.addEventListener("keyup", (event) => {
+  updateImportButtonAvailability(event);
+  updateCtrlMode(event);
+});
+window.addEventListener("blur", () => {
+  updateImportButtonAvailability();
+  updateCtrlMode();
+});
 importDataBtn.addEventListener("click", (event) => {
   if (!event.ctrlKey || !event.shiftKey) {
     return;

@@ -880,6 +880,7 @@ textarea {
   font-weight: 900;
   line-height: 20px;
   opacity: 0;
+  pointer-events: none;
   transform: translate(50%, -50%) scale(0.92);
   transition:
     background 0.12s ease,
@@ -888,9 +889,10 @@ textarea {
     transform 0.12s ease;
 }
 
-.key-tile-shell:hover .key-delete-button,
-.key-delete-button:focus-visible {
+body.is-ctrl-pressed .key-tile-shell:hover .key-delete-button,
+body.is-ctrl-pressed .key-delete-button:focus-visible {
   opacity: 1;
+  pointer-events: auto;
   transform: translate(50%, -50%) scale(1);
 }
 
