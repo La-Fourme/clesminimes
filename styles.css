@@ -677,7 +677,7 @@ h3 {
 
 .backup-actions {
   display: grid;
-  grid-template-columns: repeat(4, auto);
+  grid-template-columns: repeat(5, auto);
   gap: 7px;
 }
 

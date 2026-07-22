@@ -116,7 +116,11 @@ const contactsList = document.querySelector("#contactsList");
 const contactTabs = [...document.querySelectorAll(".contact-tab")];
 const undoBtn = document.querySelector("#undoBtn");
 const historyDataBtn = document.querySelector("#historyDataBtn");
+const registryHistoryDataBtn = document.querySelector("#registryHistoryDataBtn");
+const registryHistoryDataLabel = document.querySelector("#registryHistoryDataLabel");
 const globalHistoryPanel = document.querySelector("#globalHistoryPanel");
+const globalHistoryEyebrow = document.querySelector("#globalHistoryEyebrow");
+const globalHistoryTitle = document.querySelector("#globalHistoryTitle");
 const closeGlobalHistoryBtn = document.querySelector("#closeGlobalHistoryBtn");
 const globalHistoryList = document.querySelector("#globalHistoryList");
 const exportFilledDataBtn = document.querySelector("#exportFilledDataBtn");
@@ -611,6 +615,9 @@ function updateRegistryHeader() {
   compromisesTabBtn.hidden = activeRegistry !== "transaction";
   rentedArchiveSection.hidden = activeRegistry === "transaction";
   authenticatedArchiveSection.hidden = activeRegistry !== "transaction";
+  if (registryHistoryDataLabel) {
+    registryHistoryDataLabel.textContent = activeRegistry === "location" ? "Historique Location" : "Historique Transaction";
+  }
   if (activeRegistry !== "transaction") compromisesPanel.hidden = true;
   registryToggleBtn.title =
     activeRegistry === "location" ? "Basculer vers le registre Transaction" : "Basculer vers le registre Location";
@@ -1876,6 +1883,7 @@ function getRegistryHistoryEntries(registry) {
             .filter(Boolean)
             .join(" | "),
           device: "",
+          registry,
         });
       });
     });
@@ -1899,6 +1907,7 @@ function getRegistryHistoryEntries(registry) {
       actor: key.owner ? formatOwner(key.owner) : "Fiche clé",
       details: [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
       device: "",
+      registry,
     });
   });
 
@@ -1915,7 +1924,7 @@ function getActionClass(action) {
   return "neutral";
 }
 
-function renderGlobalHistoryItems(targetList = globalHistoryList) {
+function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter = "") {
   const ownerMaps = Object.fromEntries(
     ["location", "transaction"].map((registry) => {
       const config = registryConfig[registry];
@@ -2001,7 +2010,10 @@ function renderGlobalHistoryItems(targetList = globalHistoryList) {
       .replace(/\s+-\s+jeu\s+\d+\s*$/i, "")
       .replace(/\s+/g, " ")
       .toLocaleLowerCase("fr-FR");
-  const entries = deduplicatedEntries
+  const filteredEntries = registryFilter
+    ? deduplicatedEntries.filter((entry) => entry.registry === registryFilter)
+    : deduplicatedEntries;
+  const entries = filteredEntries
     .map((entry, index) => ({ ...entry, orderIndex: index }))
     .sort((first, second) => {
       const firstMinute = Math.floor(first.timestamp / 60000);
@@ -2049,18 +2061,23 @@ function renderGlobalHistoryItems(targetList = globalHistoryList) {
   });
 }
 
-function renderGlobalHistoryPanel() {
-  renderGlobalHistoryItems(globalHistoryList);
+function renderGlobalHistoryPanel(registryFilter = "") {
+  const isRegistryHistory = Boolean(registryFilter);
+  const registryLabel = registryFilter === "location" ? "Location" : "Transaction";
+  globalHistoryEyebrow.textContent = isRegistryHistory ? `Tableau ${registryLabel.toLowerCase()}` : "Tableaux location et transaction";
+  globalHistoryTitle.textContent = isRegistryHistory ? `Historique ${registryLabel}` : "Historique Global";
+  globalHistoryPanel.setAttribute("aria-label", globalHistoryTitle.textContent);
+  renderGlobalHistoryItems(globalHistoryList, registryFilter);
 }
 
-function openGlobalHistoryPanel() {
+function openGlobalHistoryPanel(registryFilter = "") {
   clearTimeout(contactsCloseTimer);
   clearTimeout(archivesCloseTimer);
   contactsPanel.hidden = true;
   archivesPanel.hidden = true;
   compromisesPanel.hidden = true;
   globalHistoryPanel.hidden = false;
-  renderGlobalHistoryPanel();
+  renderGlobalHistoryPanel(registryFilter);
 }
 
 function updateImportButtonAvailability(event = {}) {
@@ -4117,7 +4134,8 @@ keyStatusFilterButtons.forEach((button) => {
 });
 statusFilter?.addEventListener("change", render);
 undoBtn.addEventListener("click", undoPreviousStep);
-historyDataBtn.addEventListener("click", openGlobalHistoryPanel);
+historyDataBtn.addEventListener("click", () => openGlobalHistoryPanel());
+registryHistoryDataBtn.addEventListener("click", () => openGlobalHistoryPanel(activeRegistry));
 closeGlobalHistoryBtn.addEventListener("click", () => {
   globalHistoryPanel.hidden = true;
 });
