@@ -20,7 +20,7 @@ const cloudPollIntervalMs = 60000;
 const cloudWriteDebounceMs = 2000;
 const registryConfig = {
   location: {
-    title: "CENTURY 21 LES MINIMES\nCL\u00c9S LOCATION",
+    title: "LOCATION",
     toggleLabel: "BASCULER VERS\nTABLEAU CL\u00c9S TRANSACTION",
     keysStorageKey: "cles-immobilieres-v1",
     archivesStorageKey: "cles-location-archives-v1",
@@ -30,7 +30,7 @@ const registryConfig = {
     rentedArchiveText: "Loué",
   },
   transaction: {
-    title: "CENTURY 21 LES MINIMES\nCL\u00c9S TRANSACTION",
+    title: "TRANSACTION",
     toggleLabel: "BASCULER VERS\nTABLEAU CL\u00c9S LOCATION",
     keysStorageKey: "cles-transaction-v1",
     archivesStorageKey: "cles-transaction-archives-v1",

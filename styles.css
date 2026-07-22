@@ -264,7 +264,7 @@ p {
 
 h1 {
   margin-bottom: 0;
-  font-size: 34px;
+  font-size: 42px;
 }
 
 .topbar h1 {
@@ -509,7 +509,7 @@ h3 {
   box-sizing: border-box;
   width: min(100%, 448px);
   max-width: 100%;
-  margin: -34px 0 10px auto;
+  margin: -16px 0 10px auto;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #d8dcd8;
@@ -2333,7 +2333,7 @@ body.is-moving-key .photo-hover {
   .topbar h1 {
     width: 100%;
     max-width: 100%;
-    font-size: 30px;
+    font-size: 36px;
   }
 
   .registry-toggle-button {
@@ -2375,7 +2375,7 @@ body.is-moving-key .photo-hover {
   }
 
   .topbar h1 {
-    font-size: 26px;
+    font-size: 32px;
   }
 
   .filter-action,
