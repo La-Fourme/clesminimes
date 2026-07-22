@@ -507,7 +507,7 @@ h3 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
   box-sizing: border-box;
-  width: min(100%, 560px);
+  width: min(100%, 448px);
   max-width: 100%;
   margin: -34px 0 10px auto;
   border: 1px solid var(--line);
