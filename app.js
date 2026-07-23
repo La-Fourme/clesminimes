@@ -891,9 +891,22 @@ function createContactId() {
 }
 
 function formatPhoneNumber(value) {
-  const digits = String(value || "").replace(/\D/g, "");
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 10);
   if (!digits) return "";
   return digits.match(/.{1,2}/g).join(" ");
+}
+
+function getPhoneDigitCount(value) {
+  return String(value || "").replace(/\D/g, "").length;
+}
+
+function ensureCompletePhoneNumber(input, label = "num\u00e9ro de t\u00e9l\u00e9phone") {
+  const digitCount = getPhoneDigitCount(input.value);
+  if (!digitCount || digitCount === 10) return true;
+
+  alert(`Le ${label} semble incomplet : il faut 10 chiffres.`);
+  input.focus();
+  return false;
 }
 
 function formatCity(value) {
@@ -3514,6 +3527,7 @@ async function addMovement(type) {
     alert("Cette sortie vient d'une r\u00e9servation : utilise la case orange de r\u00e9servation au-dessus.");
     return;
   }
+  if (!ensureCompletePhoneNumber(movementPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant")) return;
   const forcedPerson = type === "in" && selectedSet.status === "out" ? selectedSet.holder : "";
   const forcedPhone = type === "in" && selectedSet.status === "out" ? selectedSet.holderPhone : "";
   const forcedCompany = type === "in" && selectedSet.status === "out" ? selectedSet.holderCompany : "";
@@ -3787,6 +3801,7 @@ async function reserveSelectedSet() {
   const company = contact?.type === "external" ? formatCompanyName(contact.companyName || "").trim() : formatCompanyName(movementCompanyInput.value).trim();
   const phone = formatPhoneNumber(contact?.phone || movementPhoneInput.value);
   if (!ensureMovementActor("R\u00e9serv\u00e9")) return;
+  if (!contact && !ensureCompletePhoneNumber(movementPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant")) return;
 
   const reservationDateTime = await promptReservationDateTime();
   if (!reservationDateTime) return;
@@ -3914,6 +3929,7 @@ async function archiveSelectedKey(reason) {
 
   const actionLabel = reason === "rented" ? getRegistryConfig().archiveActionLabel : "Retiré";
   if (!ensureMovementActor(actionLabel)) return;
+  if (!ensureCompletePhoneNumber(movementPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant")) return;
   let compromiseSignedAt = "";
   if (reason === "rented" && activeRegistry === "transaction") {
     compromiseSignedAt = await promptCompromiseDate();
@@ -4312,6 +4328,7 @@ contactTabs.forEach((tab) => {
 });
 contactForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (!ensureCompletePhoneNumber(contactPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant")) return;
 
   const name = formatLastName(contactNameInput.value).trim();
   const firstName = formatFirstName(contactFirstNameInput.value).trim();
