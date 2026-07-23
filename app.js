@@ -7,6 +7,7 @@ const supabaseClient = globalThis.supabase?.createClient(supabaseUrl, supabaseAn
 const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const appActivityLogStorageKey = "cles-global-activity-v1";
+const hiddenGlobalHistoryStorageKey = "cles-hidden-global-history-v1";
 const deviceNameStorageKey = "cles-device-name-v1";
 const tileViewStorageKey = "cles-tile-view-mode-v1";
 const keyStatusFilterStorageKey = "cles-key-status-filter-v1";
@@ -154,6 +155,7 @@ let photoImportResetTimer = null;
 let undoSnapshot = null;
 let tileViewMode = loadTileViewMode();
 let keyStatusFilter = loadKeyStatusFilter();
+let currentGlobalHistoryFilter = "";
 let saleCelebrationTimer = null;
 const celebrationAudioFiles = ["Ados.mp3", "Adultes.mp3", "Langue.mp3"];
 let celebrationAudioPlayers = [];
@@ -273,6 +275,16 @@ function saveActivityLog(entries) {
   scheduleStorageKeySync(appActivityLogStorageKey);
 }
 
+function loadHiddenGlobalHistoryIds() {
+  return new Set(parseStoredArray(hiddenGlobalHistoryStorageKey, []));
+}
+
+function saveHiddenGlobalHistoryIds(hiddenIds) {
+  markLocalEdit();
+  localStorage.setItem(hiddenGlobalHistoryStorageKey, JSON.stringify([...hiddenIds]));
+  scheduleStorageKeySync(hiddenGlobalHistoryStorageKey);
+}
+
 function logActivity(action, title, details = "") {
   const entries = loadActivityLog();
   entries.unshift({
@@ -354,6 +366,7 @@ function getBackupStorageKeys() {
     registryStorageKey,
     sharedContactsStorageKey,
     appActivityLogStorageKey,
+    hiddenGlobalHistoryStorageKey,
     registryConfig.location.keysStorageKey,
     registryConfig.location.archivesStorageKey,
     registryConfig.transaction.keysStorageKey,
@@ -1949,6 +1962,36 @@ function getActionClass(action) {
   return "neutral";
 }
 
+function getGlobalHistoryEntryId(entry) {
+  const activityId = entry.activityId || (entry.source === "activity" ? entry.id : "");
+  if (activityId) return `activity:${activityId}`;
+
+  return `registry:${JSON.stringify([
+    entry.registry || "",
+    entry.action || "",
+    entry.title || "",
+    entry.date || "",
+    entry.actor || "",
+    entry.details || "",
+  ])}`;
+}
+
+function deleteGlobalHistoryEntry(historyId) {
+  if (!historyId) return;
+  if (!confirm("Supprimer cette ligne de l'historique ?")) return;
+
+  const hiddenIds = loadHiddenGlobalHistoryIds();
+  hiddenIds.add(historyId);
+  saveHiddenGlobalHistoryIds(hiddenIds);
+
+  if (historyId.startsWith("activity:")) {
+    const activityId = historyId.slice("activity:".length);
+    saveActivityLog(loadActivityLog().filter((entry) => entry.id !== activityId));
+  }
+
+  renderGlobalHistoryPanel(currentGlobalHistoryFilter);
+}
+
 function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter = "") {
   const ownerMaps = Object.fromEntries(
     ["location", "transaction"].map((registry) => {
@@ -1981,6 +2024,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     return replaceKeyLabelWithOwner(entry);
   };
   const activityEntries = loadActivityLog().map((entry) => ({
+    id: entry.id || "",
     timestamp: parseHistoryTimestamp(entry.date),
     date: formatArchiveDate(entry.date),
     title: `${entry.registry === "transaction" ? "Transaction" : "Location"} - ${getActivityTitle(entry)}`,
@@ -1988,6 +2032,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     actor: "Action enregistrée",
     details: entry.details || "",
     device: entry.device || "Appareil non renseigné",
+    registry: entry.registry || "location",
     source: "activity",
   }));
   const registryEntries = ["location", "transaction"].flatMap(getRegistryHistoryEntries).map((entry) => ({
@@ -2020,6 +2065,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       ...registryEntry,
       action: activityEntry.action || registryEntry.action,
       device: activityEntry.device || registryEntry.device,
+      activityId: activityEntry.id || "",
     };
   });
   activityEntriesByKey.forEach((remainingEntries) => deduplicatedEntries.push(...remainingEntries));
@@ -2038,8 +2084,10 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   const filteredEntries = registryFilter
     ? deduplicatedEntries.filter((entry) => entry.registry === registryFilter)
     : deduplicatedEntries;
+  const hiddenGlobalHistoryIds = loadHiddenGlobalHistoryIds();
   const entries = filteredEntries
     .map((entry, index) => ({ ...entry, orderIndex: index }))
+    .filter((entry) => !hiddenGlobalHistoryIds.has(getGlobalHistoryEntryId(entry)))
     .sort((first, second) => {
       const firstMinute = Math.floor(first.timestamp / 60000);
       const secondMinute = Math.floor(second.timestamp / 60000);
@@ -2067,7 +2115,9 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     const details = document.createElement("span");
     const deviceButton = document.createElement("button");
     const device = document.createElement("em");
+    item.dataset.globalHistoryId = getGlobalHistoryEntryId(entry);
     item.dataset.historyAction = getActionClass(entry.action);
+    item.title = "Ctrl + clic pour supprimer cette ligne d'historique";
     title.textContent = `${entry.action} - ${entry.title}`;
     meta.textContent = `${entry.date} - ${entry.actor}`;
     details.textContent = entry.details;
@@ -2087,6 +2137,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
 }
 
 function renderGlobalHistoryPanel(registryFilter = "") {
+  currentGlobalHistoryFilter = registryFilter;
   const isRegistryHistory = Boolean(registryFilter);
   const registryLabel = registryFilter === "location" ? "Location" : "Transaction";
   globalHistoryEyebrow.textContent = isRegistryHistory ? `Tableau ${registryLabel.toLowerCase()}` : "Tableaux location et transaction";
@@ -3937,6 +3988,15 @@ historyList.addEventListener("click", (event) => {
   if (!item) return;
   event.preventDefault();
   deleteHistoryEntry(item.dataset.historyId);
+});
+globalHistoryList.addEventListener("click", (event) => {
+  if (!event.ctrlKey) return;
+  if (event.target.closest("button")) return;
+
+  const item = event.target.closest("[data-global-history-id]");
+  if (!item) return;
+  event.preventDefault();
+  deleteGlobalHistoryEntry(item.dataset.globalHistoryId);
 });
 contactSelect.addEventListener("change", () => {
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
