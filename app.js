@@ -2016,6 +2016,12 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     return match ? `Jeu ${match[1]}` : "";
   };
   const getActivityRegistryLabel = (entry) => (entry.registry === "transaction" ? "Transaction" : "Location");
+  const getTitleKeyLabel = (title) => String(title || "").match(/^(T[1-3]|T4\+|Maison|Autre)\s+#\d+/)?.[0] || "";
+  const getHistoryTitleOwner = (title) => {
+    const parts = String(title || "").split(" - ").map((part) => part.trim()).filter(Boolean);
+    return getTitleKeyLabel(parts[0]) ? parts[2] || "" : "";
+  };
+  const getHistoryPhone = (value) => String(value || "").match(/\b\d{2}(?:\s\d{2}){4}\b/)?.[0] || "";
   const buildActivityTitle = (entry, keyLabelEntry = "", owner = "", extraTitle = "") => {
     const setLabel = getActivitySetLabel(entry);
     return [keyLabelEntry, getActivityRegistryLabel(entry), extraTitle || owner, setLabel].filter(Boolean).join(" - ");
@@ -2072,6 +2078,32 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     ...entry,
     source: "registry",
   }));
+  const completeActivityTitleFromRegistry = (activityEntry) => {
+    if (getTitleKeyLabel(activityEntry.title)) return activityEntry;
+
+    const activityMinute = Math.floor(activityEntry.timestamp / 60000);
+    const activityActionClass = getActionClass(activityEntry.action);
+    const activitySearch = `${activityEntry.title} ${activityEntry.details} ${activityEntry.actor}`.toLocaleLowerCase("fr-FR");
+    const matchingRegistryEntry = registryEntries.find((registryEntry) => {
+      if (registryEntry.registry !== activityEntry.registry) return false;
+      if (getActionClass(registryEntry.action) !== activityActionClass) return false;
+      if (Math.abs(Math.floor(registryEntry.timestamp / 60000) - activityMinute) > 1) return false;
+
+      const owner = getHistoryTitleOwner(registryEntry.title).toLocaleLowerCase("fr-FR");
+      const phone = getHistoryPhone(registryEntry.details);
+      const actor = String(registryEntry.actor || "").toLocaleLowerCase("fr-FR");
+      return Boolean(
+        (owner && activitySearch.includes(owner)) ||
+          (phone && activitySearch.includes(phone)) ||
+          (actor && activitySearch.includes(actor)),
+      );
+    });
+
+    return matchingRegistryEntry ? { ...activityEntry, title: matchingRegistryEntry.title } : activityEntry;
+  };
+  activityEntries.forEach((entry, index) => {
+    activityEntries[index] = completeActivityTitleFromRegistry(entry);
+  });
   const getDeduplicationKey = (entry) => {
     const actionClass = getActionClass(entry.action);
     const normalizedAction = actionClass === "in" && /(?:rentr|entr)/i.test(entry.action)
@@ -2110,6 +2142,14 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   };
   const getGlobalHistoryActionLabel = (action) =>
     String(action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation jeu") ? "Ajout jeu" : action;
+  const getGlobalHistoryTitleText = (entry) => {
+    const actionLabel = getGlobalHistoryActionLabel(entry.action);
+    const keyLabelEntry = getTitleKeyLabel(entry.title);
+    if (!keyLabelEntry) return `${actionLabel} - ${entry.title}`;
+
+    const rest = String(entry.title || "").slice(keyLabelEntry.length).replace(/^\s+-\s+/, "");
+    return `${keyLabelEntry} - ${actionLabel}${rest ? ` - ${rest}` : ""}`;
+  };
   const getGlobalHistorySubject = (entry) =>
     String(entry.title || "")
       .trim()
@@ -2153,7 +2193,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     item.dataset.globalHistoryId = getGlobalHistoryEntryId(entry);
     item.dataset.historyAction = getActionClass(entry.action);
     item.title = "Ctrl + clic pour supprimer cette ligne d'historique";
-    title.textContent = `${getGlobalHistoryActionLabel(entry.action)} - ${entry.title}`;
+    title.textContent = getGlobalHistoryTitleText(entry);
     meta.textContent = `${entry.date} - ${entry.actor}`;
     details.textContent = entry.details;
     deviceButton.className = "history-device-button";
