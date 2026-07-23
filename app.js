@@ -1914,7 +1914,7 @@ function getRegistryHistoryEntries(registry) {
         entries.push({
           timestamp: parseHistoryTimestamp(movement.date),
           date: movement.date || "Date non renseignée",
-          title: `${registryLabel} - ${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${set.label}`,
+          title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${set.label}`,
           action: movement.type === "out" ? "Sortie" : movement.type === "reserved" ? "Réservé" : "Entrée",
           actor: movement.person || "Intervenant non renseigné",
           details: [key.owner ? `Propriétaire : ${formatOwner(key.owner)}` : "", movement.phone ? `Téléphone : ${movement.phone}` : "", movement.note || ""]
@@ -1940,7 +1940,7 @@ function getRegistryHistoryEntries(registry) {
     entries.push({
       timestamp: parseHistoryTimestamp(record.archivedAt),
       date: formatArchiveDate(record.archivedAt),
-      title: `${registryLabel} - ${key.owner ? formatOwner(key.owner) : keyLabel(key)}`,
+      title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`,
       action,
       actor: key.owner ? formatOwner(key.owner) : "Fiche clé",
       details: [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
@@ -2008,17 +2008,50 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       ];
     }),
   );
+  const getActivitySetLabel = (entry) => {
+    const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
+    if (!action.includes("ajout jeu") && !action.includes("cr\u00e9ation jeu")) return "";
+
+    const match = String(entry.details || "").match(/(\d+)\s+jeux?\s+au total/i);
+    return match ? `Jeu ${match[1]}` : "";
+  };
+  const getActivityRegistryLabel = (entry) => (entry.registry === "transaction" ? "Transaction" : "Location");
+  const buildActivityTitle = (entry, keyLabelEntry = "", owner = "", extraTitle = "") => {
+    const setLabel = getActivitySetLabel(entry);
+    return [keyLabelEntry, getActivityRegistryLabel(entry), extraTitle || owner, setLabel].filter(Boolean).join(" - ");
+  };
   const replaceKeyLabelWithOwner = (entry) => {
     const ownerMap = ownerMaps[entry.registry] || new Map();
+    const rawTitle = String(entry.title || "").trim();
     const keyLabelEntry = [...ownerMap.keys()].find(
-      (label) => entry.title === label || entry.title.startsWith(`${label} - `),
+      (label) => rawTitle === label || rawTitle.startsWith(`${label} - `),
     );
-    return keyLabelEntry ? entry.title.replace(keyLabelEntry, ownerMap.get(keyLabelEntry)) : entry.title;
+    if (keyLabelEntry) {
+      const owner = ownerMap.get(keyLabelEntry);
+      const extraTitle = rawTitle.slice(keyLabelEntry.length).replace(/^\s+-\s+/, "");
+      return buildActivityTitle(entry, keyLabelEntry, owner, extraTitle || owner);
+    }
+
+    const ownerMatch = [...ownerMap.entries()].find(
+      ([, owner]) => rawTitle === owner || rawTitle.startsWith(`${owner} - `),
+    );
+    if (ownerMatch) {
+      const [matchedKeyLabel, owner] = ownerMatch;
+      const extraTitle = rawTitle.slice(owner.length).replace(/^\s+-\s+/, "");
+      return buildActivityTitle(entry, matchedKeyLabel, owner, extraTitle || owner);
+    }
+
+    return buildActivityTitle(entry, "", "", rawTitle);
   };
   const getActivityTitle = (entry) => {
     if (String(entry.action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation fiche")) {
       const ownerFromDetails = String(entry.details || "").split(" - ")[0]?.trim();
-      if (ownerFromDetails) return formatOwner(ownerFromDetails);
+      if (ownerFromDetails) {
+        const formattedOwner = formatOwner(ownerFromDetails);
+        const ownerMap = ownerMaps[entry.registry] || new Map();
+        const keyLabelEntry = [...ownerMap.entries()].find(([, owner]) => owner === formattedOwner)?.[0];
+        return buildActivityTitle(entry, keyLabelEntry || "", formattedOwner, formattedOwner);
+      }
     }
 
     return replaceKeyLabelWithOwner(entry);
@@ -2027,7 +2060,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     id: entry.id || "",
     timestamp: parseHistoryTimestamp(entry.date),
     date: formatArchiveDate(entry.date),
-    title: `${entry.registry === "transaction" ? "Transaction" : "Location"} - ${getActivityTitle(entry)}`,
+    title: getActivityTitle(entry),
     action: entry.action,
     actor: "Action enregistrée",
     details: entry.details || "",
@@ -2075,6 +2108,8 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     if (action.includes("entr\u00e9e")) return 1;
     return 2;
   };
+  const getGlobalHistoryActionLabel = (action) =>
+    String(action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation jeu") ? "Ajout jeu" : action;
   const getGlobalHistorySubject = (entry) =>
     String(entry.title || "")
       .trim()
@@ -2118,7 +2153,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     item.dataset.globalHistoryId = getGlobalHistoryEntryId(entry);
     item.dataset.historyAction = getActionClass(entry.action);
     item.title = "Ctrl + clic pour supprimer cette ligne d'historique";
-    title.textContent = `${entry.action} - ${entry.title}`;
+    title.textContent = `${getGlobalHistoryActionLabel(entry.action)} - ${entry.title}`;
     meta.textContent = `${entry.date} - ${entry.actor}`;
     details.textContent = entry.details;
     deviceButton.className = "history-device-button";
@@ -3061,7 +3096,9 @@ function renderPanel() {
   notesInput.value = key.notes;
   const canMoveSelectedKey = !isArchiveView || isSelectedCompromiseEditable();
   const isSelectedSetOut = selectedSet.status === "out";
-  const canCheckInSelectedKey = canMoveSelectedKey && (!isCompromiseView || isSelectedSetOut);
+  const isSelectedSetOutForReservation = isSelectedSetOut && Boolean(selectedSet.holderReservationId);
+  const isMainMovementLocked = isReadOnlyArchive || isSelectedSetOutForReservation;
+  const canCheckInSelectedKey = canMoveSelectedKey && (!isCompromiseView || isSelectedSetOut) && !isSelectedSetOutForReservation;
   checkinBtn.textContent = selectedSet.status === "out" ? "Rentr\u00e9" : "Entr\u00e9";
   reservedBtn.textContent = "R\u00e9serv\u00e9";
   checkoutBtn.textContent = "Sorti";
@@ -3083,8 +3120,8 @@ function renderPanel() {
   movementCompanyInput.disabled = isReadOnlyArchive;
   movementPhoneInput.disabled = isReadOnlyArchive;
   movementNoteInput.disabled = isReadOnlyArchive;
-  clearSignatureBtn.disabled = isReadOnlyArchive;
-  signatureCanvas.classList.toggle("is-readonly", isReadOnlyArchive);
+  clearSignatureBtn.disabled = isMainMovementLocked;
+  signatureCanvas.classList.toggle("is-readonly", isMainMovementLocked);
 
   historyList.innerHTML = "";
   activeReservationPanel.innerHTML = "";
@@ -3213,6 +3250,7 @@ function renderPanel() {
       const reservationComment = document.createElement("textarea");
       const actions = document.createElement("div");
       const movementButton = document.createElement("button");
+      const removeButton = document.createElement("button");
       const cancelButton = document.createElement("button");
       const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === entry.reservationId;
       const isOutForAnotherReason = selectedSet.status === "out" && selectedSet.holderReservationId !== entry.reservationId;
@@ -3230,18 +3268,21 @@ function renderPanel() {
       actions.className = "reservation-history-actions";
       movementButton.type = "button";
       movementButton.className = `reservation-history-button ${isReservationOut ? "in" : "out"}`;
-      movementButton.textContent = isReservationOut ? "Rentr\u00e9" : "Sortie";
+      movementButton.textContent = isReservationOut ? "Rentr\u00e9" : "Sorti";
       movementButton.disabled = isReadOnlyArchive || isOutForAnotherReason;
       movementButton.addEventListener("click", () => toggleReservationMovement(entry.reservationId));
+
+      removeButton.type = "button";
+      removeButton.className = "reservation-history-button removed";
+      removeButton.textContent = "Retiré";
+      removeButton.disabled = isReadOnlyArchive || selectedSet.status === "out";
+      removeButton.addEventListener("click", () => archiveReservationKey(entry.reservationId));
 
       cancelButton.type = "button";
       cancelButton.className = "reservation-history-button cancel";
       cancelButton.textContent = "Annulation";
       cancelButton.disabled = isReadOnlyArchive || isReservationOut;
       cancelButton.addEventListener("click", () => cancelReservation(entry.reservationId));
-
-      actions.append(movementButton, cancelButton);
-      item.append(actions);
 
       const signatureField = document.createElement("div");
       const signatureLabel = document.createElement("div");
@@ -3265,6 +3306,9 @@ function renderPanel() {
       signatureField.append(signatureLabel, signatureCanvas);
       item.append(signatureField);
       if (!isReadOnlyArchive) setupInlineSignatureCanvas(signatureCanvas);
+
+      actions.append(movementButton, removeButton, cancelButton);
+      item.append(actions);
     }
     item.append(date);
     if (historySummary) {
@@ -3399,7 +3443,7 @@ function setKeySetCount(count) {
   const nextSets = nextIds.map((id) => key.sets.find((set) => set.id === id) || makeKeySet(id));
   selectedSetId = nextSets.some((set) => set.id === selectedSetId) ? selectedSetId : nextSets[0].id;
   if (nextCount > previousCount) {
-    logActivity("Création jeu", keyLabel(key), `${nextCount} jeux au total`);
+    logActivity("Ajout jeu", keyLabel(key), `${nextCount} jeux au total`);
   } else if (nextCount < previousCount) {
     logActivity("Suppression jeu", keyLabel(key), `${removedSets.map((set) => set.label).join(", ")} supprimé(s)`);
   }
@@ -3426,6 +3470,10 @@ async function addMovement(type) {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+  if (selectedSet.status === "out" && selectedSet.holderReservationId) {
+    alert("Cette sortie vient d'une r\u00e9servation : utilise la case orange de r\u00e9servation au-dessus.");
+    return;
+  }
   const forcedPerson = type === "in" && selectedSet.status === "out" ? selectedSet.holder : "";
   const forcedPhone = type === "in" && selectedSet.status === "out" ? selectedSet.holderPhone : "";
   const forcedCompany = type === "in" && selectedSet.status === "out" ? selectedSet.holderCompany : "";
@@ -3615,6 +3663,76 @@ function cancelReservation(reservationId) {
   });
   logActivity("Annulation r\u00e9servation", `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`, entry.person);
   if (selectedArchiveRecord) renderCompromisesPanel();
+}
+
+async function archiveReservationKey(reservationId) {
+  if (selectedArchiveRecord) return;
+  const key = getSelectedKey();
+  const selectedSet = getSelectedSet(key);
+  if (!key || !selectedSet || key.archived) return;
+
+  const reservation = (selectedSet.reservations || []).find((item) => item.id === reservationId);
+  if (!reservation) return;
+  if (selectedSet.status === "out") {
+    alert("Ce jeu est sorti : fais d'abord Rentr\u00e9 avant de le retirer.");
+    return;
+  }
+
+  const confirmed = confirm(`Retirer ${keyLabel(key)} et archiver la fiche ?`);
+  if (!confirmed) return;
+  rememberUndoStep();
+
+  const archivedAt = new Date().toISOString();
+  const actionLabel = "Retir\u00e9";
+  const entry = {
+    id: createHistoryId(),
+    type: "removed",
+    actionLabel,
+    person: reservation.person || "",
+    company: reservation.company || "",
+    phone: formatPhoneNumber(reservation.phone || ""),
+    note: formatSentenceStart(getInlineReservationComment(reservationId)).trim(),
+    signature: getInlineReservationSignature(reservationId),
+    date: getMovementDateText(),
+    reservationId,
+  };
+  const archivedKey = {
+    ...key,
+    sets: key.sets.map((set) =>
+      set.id === selectedSet.id
+        ? {
+            ...set,
+            status: "available",
+            holder: "",
+            holderCompany: "",
+            holderPhone: "",
+            holderReservationId: "",
+            reservations: (set.reservations || []).filter((item) => item.id !== reservationId),
+            history: [entry, ...set.history],
+          }
+        : set,
+    ),
+  };
+
+  archives = [
+    {
+      id: `${key.id}-${archivedAt}`,
+      reason: "removed",
+      archivedAt,
+      compromiseSignedAt: "",
+      key: { ...archivedKey, archived: false },
+    },
+    ...archives,
+  ];
+  keys = keys.map((savedKey) => (savedKey.id === key.id ? makeEmptyKey(savedKey) : savedKey));
+  selectedId = null;
+  selectedArchiveRecord = null;
+  selectedSetId = "main";
+  logActivity(actionLabel, keyLabel(key), [key.owner, key.property, entry.person || entry.company, entry.phone].filter(Boolean).join(" - "));
+  saveArchives();
+  saveKeys();
+  closeKeyPanelAfterAction();
+  await syncCloudAfterAction();
 }
 
 async function reserveSelectedSet() {

@@ -2063,9 +2063,9 @@ body.is-moving-key .photo-hover {
 
 .reservation-history-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0 8px;
 }
 
 .reservation-history-button {
@@ -2073,7 +2073,7 @@ body.is-moving-key .photo-hover {
   place-items: center;
   width: 100%;
   min-height: 46px;
-  padding: 0 10px;
+  padding: 0 6px;
   border: 2px solid transparent;
   border-radius: 8px;
   color: var(--ink);
@@ -2095,6 +2095,11 @@ body.is-moving-key .photo-hover {
 }
 
 .reservation-history-button.cancel {
+  border-color: #8f9792;
+  background: #c5cbc7;
+}
+
+.reservation-history-button.removed {
   border-color: #8f9792;
   background: #c5cbc7;
 }
