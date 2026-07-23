@@ -309,6 +309,7 @@ function makeKeySet(id) {
     holderCompany: "",
     holderPhone: "",
     holderReservationId: "",
+    needsCheckIn: false,
     status: "available",
     reservations: [],
     history: [],
@@ -751,6 +752,7 @@ function normalizeSet(set, index = 0) {
     holderCompany: set.holderCompany || "",
     holderPhone: set.holderPhone || "",
     holderReservationId: set.holderReservationId || "",
+    needsCheckIn: Boolean(set.needsCheckIn),
     status,
     reservations: reservations.length ? reservations : migratedReservation,
     history: Array.isArray(set.history)
@@ -3150,12 +3152,13 @@ function renderPanel() {
   const canMoveSelectedKey = !isArchiveView || isSelectedCompromiseEditable();
   const isSelectedSetOut = selectedSet.status === "out";
   const isSelectedSetOutForReservation = isSelectedSetOut && Boolean(selectedSet.holderReservationId);
+  const needsSelectedSetCheckIn = Boolean(selectedSet.needsCheckIn);
   const isMainMovementLocked = isReadOnlyArchive || isSelectedSetOutForReservation;
-  const canCheckInSelectedKey = canMoveSelectedKey && (!isCompromiseView || isSelectedSetOut) && !isSelectedSetOutForReservation;
-  checkinBtn.textContent = selectedSet.status === "out" ? "Rentr\u00e9" : "Entr\u00e9";
+  const canCheckInSelectedKey = canMoveSelectedKey && (isSelectedSetOut || needsSelectedSetCheckIn) && !isSelectedSetOutForReservation;
+  checkinBtn.textContent = selectedSet.status === "out" || needsSelectedSetCheckIn ? "Rentr\u00e9" : "Entr\u00e9";
   reservedBtn.textContent = "R\u00e9serv\u00e9";
   checkoutBtn.textContent = "Sorti";
-  checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut;
+  checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut || needsSelectedSetCheckIn;
   checkinBtn.disabled = !canCheckInSelectedKey;
   reservedBtn.disabled = !canMoveSelectedKey;
   rentedBtn.disabled = isArchiveView || key.archived || isSelectedSetOut;
@@ -3493,9 +3496,13 @@ function setKeySetCount(count) {
     }
   }
 
-  const nextSets = nextIds.map((id) => key.sets.find((set) => set.id === id) || makeKeySet(id));
+  const nextSets = nextIds.map((id, index) => {
+    const savedSet = key.sets.find((set) => set.id === id);
+    return savedSet || { ...makeKeySet(id), needsCheckIn: index >= previousCount };
+  });
   selectedSetId = nextSets.some((set) => set.id === selectedSetId) ? selectedSetId : nextSets[0].id;
   if (nextCount > previousCount) {
+    selectedSetId = nextSets[nextCount - 1]?.id || selectedSetId;
     logActivity("Ajout jeu", keyLabel(key), `${nextCount} jeux au total`);
   } else if (nextCount < previousCount) {
     logActivity("Suppression jeu", keyLabel(key), `${removedSets.map((set) => set.label).join(", ")} supprimé(s)`);
@@ -3550,6 +3557,7 @@ async function addMovement(type) {
 
   updateSelectedSet({
     status: type === "out" ? "out" : "available",
+    needsCheckIn: false,
     holder: type === "out" ? entry.person || selectedSet.holder : "",
     holderCompany: type === "out" ? entry.company || selectedSet.holderCompany : "",
     holderPhone: type === "out" ? entry.phone || selectedSet.holderPhone : "",
