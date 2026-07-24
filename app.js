@@ -556,7 +556,7 @@ async function loadStorageFromCloud() {
       .map((row) => row.key);
     const deletedKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
     if (!changedKeys.length && !deletedKeys.length) return;
-    if (isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) return;
+    if (isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) return;
 
     let changedRows = [];
     if (changedKeys.length) {
@@ -1354,6 +1354,10 @@ function syncSignatureHeightToActions() {
 
 function isDetailPanelBusy() {
   return isPhotoImporting || Boolean(document.querySelector(".date-dialog[open]")) || form.contains(document.activeElement);
+}
+
+function isKeyPanelOpen() {
+  return Boolean((selectedId || selectedArchiveRecord) && !detailPanel.hidden && !form.hidden);
 }
 
 function isKeyFormBeingEdited() {
