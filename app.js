@@ -310,6 +310,7 @@ function makeKeySet(id) {
     holderPhone: "",
     holderReservationId: "",
     needsCheckIn: false,
+    needsCheckInReason: "",
     status: "available",
     reservations: [],
     history: [],
@@ -753,6 +754,7 @@ function normalizeSet(set, index = 0) {
     holderPhone: set.holderPhone || "",
     holderReservationId: set.holderReservationId || "",
     needsCheckIn: Boolean(set.needsCheckIn),
+    needsCheckInReason: set.needsCheckInReason || (set.needsCheckIn ? "added" : ""),
     status,
     reservations: reservations.length ? reservations : migratedReservation,
     history: Array.isArray(set.history)
@@ -1327,7 +1329,7 @@ function deleteKeyWithoutArchive(keyId) {
     selectedSetId = "main";
     clearSignature();
   }
-  logActivity("Suppression", keyLabel(key), [key.owner, key.property].filter(Boolean).join(" - "));
+  logActivity("Suppression", `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`, [key.owner, key.property].filter(Boolean).join(" - "));
   saveKeys();
   render();
 }
@@ -1640,7 +1642,7 @@ function formatDateOnly(value) {
 
 function archiveReasonText(reason) {
   if (reason === "rented") return getRegistryConfig().rentedArchiveText;
-  if (reason === "removed") return "Retiré";
+  if (reason === "removed") return "Archivé";
   if (reason === "authenticated") return "Acte authentique";
   return "";
 }
@@ -1952,7 +1954,7 @@ function getRegistryHistoryEntries(registry) {
       record.reason === "authenticated"
         ? "Acte authentique"
         : record.reason === "removed"
-          ? "Retiré"
+          ? "Archivé"
           : registry === "transaction"
             ? "Compromis"
             : "Loué";
@@ -1977,7 +1979,7 @@ function getActionClass(action) {
   if (normalized.includes("sortie")) return "out";
   if (normalized.includes("rÃ©serv") || normalized.includes("réserv")) return "reserved";
   if (normalized.includes("compromis") || normalized.includes("loué") || normalized.includes("acte authentique")) return "signed";
-  if (normalized.includes("retiré") || normalized.includes("suppression")) return "removed";
+  if (normalized.includes("retiré") || normalized.includes("archiv") || normalized.includes("suppression")) return "removed";
   return "neutral";
 }
 
@@ -2036,11 +2038,27 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   };
   const getActivityRegistryLabel = (entry) => (entry.registry === "transaction" ? "Transaction" : "Location");
   const getTitleKeyLabel = (title) => String(title || "").match(/^(T[1-3]|T4\+|Maison|Autre)\s+#\d+/)?.[0] || "";
+  const titleHasOwner = (title) => {
+    const parts = String(title || "").split(" - ").map((part) => part.trim()).filter(Boolean);
+    return Boolean(getTitleKeyLabel(parts[0]) && parts[2] && !/^jeu\s+\d+$/i.test(parts[2]));
+  };
   const getHistoryTitleOwner = (title) => {
     const parts = String(title || "").split(" - ").map((part) => part.trim()).filter(Boolean);
-    return getTitleKeyLabel(parts[0]) ? parts[2] || "" : "";
+    return titleHasOwner(title) ? parts[2] || "" : "";
   };
   const getHistoryPhone = (value) => String(value || "").match(/\b\d{2}(?:\s\d{2}){4}\b/)?.[0] || "";
+  const getActivityOwnerFromDetails = (entry) => {
+    const owner = String(entry.details || "").split(" - ")[0]?.trim();
+    return owner ? formatOwner(owner) : "";
+  };
+  const getHistorySubjectOwner = (entry) => {
+    const parts = String(entry.title || "").split(" - ").map((part) => part.trim()).filter(Boolean);
+    if (getTitleKeyLabel(parts[0]) && parts[2] && !/^jeu\s+\d+$/i.test(parts[2])) return parts[2];
+    if ((parts[0] === "Location" || parts[0] === "Transaction") && parts[1]) return parts[1];
+
+    const ownerMatch = String(entry.details || "").match(/Propriétaire\s*:\s*([^|]+)/i);
+    return ownerMatch?.[1]?.trim() || "";
+  };
   const buildActivityTitle = (entry, keyLabelEntry = "", owner = "", extraTitle = "") => {
     const setLabel = getActivitySetLabel(entry);
     return [keyLabelEntry, getActivityRegistryLabel(entry), extraTitle || owner, setLabel].filter(Boolean).join(" - ");
@@ -2052,7 +2070,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       (label) => rawTitle === label || rawTitle.startsWith(`${label} - `),
     );
     if (keyLabelEntry) {
-      const owner = ownerMap.get(keyLabelEntry);
+      const owner = getActivityOwnerFromDetails(entry) || ownerMap.get(keyLabelEntry);
       const extraTitle = rawTitle.slice(keyLabelEntry.length).replace(/^\s+-\s+/, "");
       return buildActivityTitle(entry, keyLabelEntry, owner, extraTitle || owner);
     }
@@ -2098,20 +2116,21 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     source: "registry",
   }));
   const completeActivityTitleFromRegistry = (activityEntry) => {
-    if (getTitleKeyLabel(activityEntry.title)) return activityEntry;
-
     const activityMinute = Math.floor(activityEntry.timestamp / 60000);
     const activityActionClass = getActionClass(activityEntry.action);
     const activitySearch = `${activityEntry.title} ${activityEntry.details} ${activityEntry.actor}`.toLocaleLowerCase("fr-FR");
+    const activityKeyLabel = getTitleKeyLabel(activityEntry.title);
     const matchingRegistryEntry = registryEntries.find((registryEntry) => {
       if (registryEntry.registry !== activityEntry.registry) return false;
       if (getActionClass(registryEntry.action) !== activityActionClass) return false;
       if (Math.abs(Math.floor(registryEntry.timestamp / 60000) - activityMinute) > 1) return false;
+      if (activityKeyLabel && getTitleKeyLabel(registryEntry.title) !== activityKeyLabel) return false;
 
       const owner = getHistoryTitleOwner(registryEntry.title).toLocaleLowerCase("fr-FR");
       const phone = getHistoryPhone(registryEntry.details);
       const actor = String(registryEntry.actor || "").toLocaleLowerCase("fr-FR");
       return Boolean(
+        (activityKeyLabel && !titleHasOwner(activityEntry.title) && owner) ||
         (owner && activitySearch.includes(owner)) ||
           (phone && activitySearch.includes(phone)) ||
           (actor && activitySearch.includes(actor)),
@@ -2147,6 +2166,8 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     if (!activityEntry) return registryEntry;
     return {
       ...registryEntry,
+      timestamp: activityEntry.timestamp || registryEntry.timestamp,
+      date: activityEntry.date || registryEntry.date,
       action: activityEntry.action || registryEntry.action,
       device: activityEntry.device || registryEntry.device,
       activityId: activityEntry.id || "",
@@ -2157,7 +2178,8 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
     if (action.includes("cr\u00e9ation fiche")) return 0;
     if (action.includes("entr\u00e9e")) return 1;
-    return 2;
+    if (action.includes("sortie")) return 2;
+    return 3;
   };
   const getGlobalHistoryActionLabel = (action) =>
     String(action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation jeu") ? "Ajout jeu" : action;
@@ -2169,27 +2191,44 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     const rest = String(entry.title || "").slice(keyLabelEntry.length).replace(/^\s+-\s+/, "");
     return `${keyLabelEntry} - ${actionLabel}${rest ? ` - ${rest}` : ""}`;
   };
-  const getGlobalHistorySubject = (entry) =>
-    String(entry.title || "")
+  const getGlobalHistorySubject = (entry) => {
+    const owner = getHistorySubjectOwner(entry);
+    if (owner) return `${entry.registry || ""}|${owner}`.replace(/\s+/g, " ").toLocaleLowerCase("fr-FR");
+
+    const keyLabelEntry = getTitleKeyLabel(entry.title);
+    if (keyLabelEntry) return `${entry.registry || ""}|${keyLabelEntry}`.toLocaleLowerCase("fr-FR");
+
+    return String(entry.title || "")
       .trim()
       .replace(/\s+-\s+jeu\s+\d+\s*$/i, "")
       .replace(/\s+/g, " ")
       .toLocaleLowerCase("fr-FR");
+  };
   const filteredEntries = registryFilter
     ? deduplicatedEntries.filter((entry) => entry.registry === registryFilter)
     : deduplicatedEntries;
   const hiddenGlobalHistoryIds = loadHiddenGlobalHistoryIds();
+  const creationEntryMinutesBySubject = new Set(
+    filteredEntries
+      .filter((entry) => String(entry.action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation fiche"))
+      .map((entry) => `${getGlobalHistorySubject(entry)}|${Math.floor(entry.timestamp / 60000)}`),
+  );
   const entries = filteredEntries
     .map((entry, index) => ({ ...entry, orderIndex: index }))
     .filter((entry) => !hiddenGlobalHistoryIds.has(getGlobalHistoryEntryId(entry)))
+    .filter((entry) => {
+      const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
+      if (!action.includes("entr\u00e9e")) return true;
+      return !creationEntryMinutesBySubject.has(`${getGlobalHistorySubject(entry)}|${Math.floor(entry.timestamp / 60000)}`);
+    })
     .sort((first, second) => {
       const firstMinute = Math.floor(first.timestamp / 60000);
       const secondMinute = Math.floor(second.timestamp / 60000);
       const isSameSubject = getGlobalHistorySubject(first) === getGlobalHistorySubject(second);
       return (
         secondMinute - firstMinute ||
-        (isSameSubject ? getGlobalHistoryPriority(first) - getGlobalHistoryPriority(second) : 0) ||
         second.timestamp - first.timestamp ||
+        (isSameSubject ? getGlobalHistoryPriority(first) - getGlobalHistoryPriority(second) : 0) ||
         first.orderIndex - second.orderIndex
       );
     });
@@ -2520,7 +2559,7 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     const archiveAction = options.showCompromiseDetails
       ? "Compromis"
       : record.reason === "removed"
-        ? "Retiré"
+        ? "Archivé"
         : record.reason === "authenticated"
           ? "Acte authentique"
           : getRegistryConfig().rentedArchiveText;
@@ -2602,7 +2641,7 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
 
 function renderArchivesPanel() {
   renderArchiveList(rentedList, "rented", getRegistryConfig().rentedArchiveEmpty);
-  renderArchiveList(removedList, "removed", "Aucun bien retiré.");
+  renderArchiveList(removedList, "removed", "Aucun bien archivé.");
   renderArchiveList(authenticatedList, "authenticated", "Aucun acte authentique archivé.");
 }
 
@@ -3157,9 +3196,10 @@ function renderPanel() {
   const isSelectedSetOut = selectedSet.status === "out";
   const isSelectedSetOutForReservation = isSelectedSetOut && Boolean(selectedSet.holderReservationId);
   const needsSelectedSetCheckIn = Boolean(selectedSet.needsCheckIn);
+  const needsSelectedSetCheckInReason = selectedSet.needsCheckInReason || "";
   const isMainMovementLocked = isReadOnlyArchive || isSelectedSetOutForReservation;
   const canCheckInSelectedKey = canMoveSelectedKey && (isSelectedSetOut || needsSelectedSetCheckIn) && !isSelectedSetOutForReservation;
-  checkinBtn.textContent = selectedSet.status === "out" || needsSelectedSetCheckIn ? "Rentr\u00e9" : "Entr\u00e9";
+  checkinBtn.textContent = selectedSet.status === "out" || needsSelectedSetCheckInReason === "added" ? "Rentr\u00e9" : "Entr\u00e9";
   reservedBtn.textContent = "R\u00e9serv\u00e9";
   checkoutBtn.textContent = "Sorti";
   checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut || needsSelectedSetCheckIn;
@@ -3244,7 +3284,7 @@ function renderPanel() {
       entry.type === "out"
         ? "Sortie"
         : entry.type === "removed"
-          ? "Retir\u00e9"
+          ? "Archiv\u00e9"
           : entry.type === "rented"
             ? entry.actionLabel || getRegistryConfig().archiveActionLabel
             : entry.type === "reserved"
@@ -3334,7 +3374,7 @@ function renderPanel() {
 
       removeButton.type = "button";
       removeButton.className = "reservation-history-button removed";
-      removeButton.textContent = "Retiré";
+      removeButton.textContent = "Archivé";
       removeButton.disabled = isReadOnlyArchive || selectedSet.status === "out";
       removeButton.addEventListener("click", () => archiveReservationKey(entry.reservationId));
 
@@ -3432,9 +3472,26 @@ function updateSelectedKey(changes) {
   const wasFilled = previousKey ? isKeyFilled(previousKey) : false;
   rememberUndoStep();
   keys = keys.map((key) => (key.id === selectedId ? { ...key, ...changes } : key));
-  const nextKey = getSelectedKey();
+  let nextKey = getSelectedKey();
   if (nextKey && !wasFilled && isKeyFilled(nextKey)) {
-    logActivity("Création fiche", nextKey.owner ? formatOwner(nextKey.owner) : keyLabel(nextKey), [nextKey.owner, nextKey.property].filter(Boolean).join(" - "));
+    keys = keys.map((key) =>
+      key.id === selectedId
+        ? {
+            ...key,
+            sets: key.sets.map((set, index) =>
+              set.id === selectedSetId || (!selectedSetId && index === 0)
+                ? { ...set, needsCheckIn: true, needsCheckInReason: "created" }
+                : set,
+            ),
+          }
+        : key,
+    );
+    nextKey = getSelectedKey();
+    logActivity(
+      "Création fiche",
+      `${keyLabel(nextKey)}${nextKey.owner ? ` - ${formatOwner(nextKey.owner)}` : ""}`,
+      [nextKey.owner, nextKey.property].filter(Boolean).join(" - "),
+    );
   }
   saveKeys();
   render();
@@ -3502,7 +3559,7 @@ function setKeySetCount(count) {
 
   const nextSets = nextIds.map((id, index) => {
     const savedSet = key.sets.find((set) => set.id === id);
-    return savedSet || { ...makeKeySet(id), needsCheckIn: index >= previousCount };
+    return savedSet || { ...makeKeySet(id), needsCheckIn: index >= previousCount, needsCheckInReason: "added" };
   });
   selectedSetId = nextSets.some((set) => set.id === selectedSetId) ? selectedSetId : nextSets[0].id;
   if (nextCount > previousCount) {
@@ -3562,6 +3619,7 @@ async function addMovement(type) {
   updateSelectedSet({
     status: type === "out" ? "out" : "available",
     needsCheckIn: false,
+    needsCheckInReason: "",
     holder: type === "out" ? entry.person || selectedSet.holder : "",
     holderCompany: type === "out" ? entry.company || selectedSet.holderCompany : "",
     holderPhone: type === "out" ? entry.phone || selectedSet.holderPhone : "",
@@ -3740,16 +3798,16 @@ async function archiveReservationKey(reservationId) {
   const reservation = (selectedSet.reservations || []).find((item) => item.id === reservationId);
   if (!reservation) return;
   if (selectedSet.status === "out") {
-    alert("Ce jeu est sorti : fais d'abord Rentr\u00e9 avant de le retirer.");
+    alert("Ce jeu est sorti : fais d'abord Rentr\u00e9 avant de l'archiver.");
     return;
   }
 
-  const confirmed = confirm(`Retirer ${keyLabel(key)} et archiver la fiche ?`);
+  const confirmed = confirm(`Archiver ${keyLabel(key)} et lib\u00e9rer la case ?`);
   if (!confirmed) return;
   rememberUndoStep();
 
   const archivedAt = new Date().toISOString();
-  const actionLabel = "Retir\u00e9";
+  const actionLabel = "Archiv\u00e9";
   const entry = {
     id: createHistoryId(),
     type: "removed",
@@ -3939,7 +3997,7 @@ async function archiveSelectedKey(reason) {
   const key = getSelectedKey();
   if (!key || key.archived) return;
 
-  const actionLabel = reason === "rented" ? getRegistryConfig().archiveActionLabel : "Retiré";
+  const actionLabel = reason === "rented" ? getRegistryConfig().archiveActionLabel : "Archivé";
   if (!ensureMovementActor(actionLabel)) return;
   if (!ensureCompletePhoneNumber(movementPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant")) return;
   let compromiseSignedAt = "";
