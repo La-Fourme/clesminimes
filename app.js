@@ -3636,6 +3636,18 @@ function setKeySetCount(count) {
 
   const nextCount = Math.max(1, Math.min(4, count));
   const previousCount = key.sets.length;
+  if (nextCount === previousCount) return;
+
+  const ownerName = key.owner ? formatOwner(key.owner) : "PROPRI\u00c9TAIRE NON RENSEIGN\u00c9";
+  const keyCountWord = nextCount > 1 ? "jeux" : "jeu";
+  const confirmedCount = confirm(
+    `Confirmez-vous la pr\u00e9sence de ${nextCount} ${keyCountWord} de cl\u00e9 pour le bien de monsieur "${ownerName}" ?`
+  );
+  if (!confirmedCount) {
+    keySetCountSelect.value = String(previousCount);
+    return;
+  }
+
   const nextIds = keySetOptions.slice(0, nextCount).map((option) => option.id);
   const removedSets = key.sets.filter((set) => !nextIds.includes(set.id));
   const removedHasData = removedSets.some((set) => set.status === "out" || set.holder || set.history.length || hasActiveReservations(set));
