@@ -1584,6 +1584,19 @@ body.is-moving-key .photo-hover {
   padding: 9px 10px;
 }
 
+.key-form.is-key-info-locked .key-info-lockable {
+  color: #2d3330;
+  background: #cfd4cf;
+  border-color: #aeb7af;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.key-form.is-key-info-locked .key-info-lockable:focus {
+  outline: 2px solid rgba(45, 105, 127, 0.35);
+  outline-offset: 2px;
+}
+
 .key-form textarea {
   max-height: 82px;
 }

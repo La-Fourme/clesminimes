@@ -153,6 +153,9 @@ let isDetailPanelHovered = false;
 let isPhotoImporting = false;
 let photoImportResetTimer = null;
 let undoSnapshot = null;
+let isKeyInfoEditUnlocked = false;
+
+const protectedKeyInfoInputs = [ownerInput, ownerFirstNameInput, propertyInput, postalCodeInput, cityInput, notesInput];
 let tileViewMode = loadTileViewMode();
 let keyStatusFilter = loadKeyStatusFilter();
 let currentGlobalHistoryFilter = "";
@@ -514,6 +517,7 @@ function closeKeyPanelAfterAction() {
   selectedId = null;
   selectedArchiveRecord = null;
   selectedSetId = "main";
+  resetKeyInfoEditUnlock(null);
   render();
 }
 
@@ -1201,6 +1205,37 @@ function isKeyFilled(key) {
   );
 }
 
+function hasProtectedKeyInfo(key) {
+  return Boolean(
+    key?.owner?.trim() ||
+      key?.ownerFirstName?.trim() ||
+      key?.property?.trim() ||
+      key?.postalCode?.trim() ||
+      key?.city?.trim() ||
+      key?.notes?.trim(),
+  );
+}
+
+function resetKeyInfoEditUnlock(key) {
+  isKeyInfoEditUnlocked = key ? !hasProtectedKeyInfo(key) : false;
+}
+
+function unlockKeyInfoEdit(event) {
+  const key = getSelectedKey();
+  const isArchiveView = Boolean(selectedArchiveRecord);
+  if (!key || isArchiveView || isKeyInfoEditUnlocked || !hasProtectedKeyInfo(key)) return;
+
+  const ownerName = key.owner ? formatOwner(key.owner) : "PROPRI\u00c9TAIRE NON RENSEIGN\u00c9";
+  const confirmed = confirm(
+    `Souhaitez-vous apporter des modifications sur la fiche de cl\u00e9 du bien de monsieur et/ou madame "${ownerName}" ?`,
+  );
+  if (!confirmed) return;
+
+  isKeyInfoEditUnlocked = true;
+  render();
+  event?.currentTarget?.focus?.();
+}
+
 function hasActiveReservations(set) {
   return Array.isArray(set?.reservations) && set.reservations.some(isActiveReservation);
 }
@@ -1328,6 +1363,7 @@ function moveKeyToSlot(sourceId, targetId, options = {}) {
 
   selectedId = targetId;
   selectedSetId = sourceContent.sets[0]?.id || "main";
+  resetKeyInfoEditUnlock(keys.find((key) => key.id === targetId));
   saveKeys();
   render();
 }
@@ -2074,6 +2110,7 @@ function openHistoryKey(entryData) {
   selectedArchiveRecord = null;
   selectedId = key.id;
   selectedSetId = key.sets.some((set) => set.id === setId) ? setId : key.sets[0]?.id || "main";
+  resetKeyInfoEditUnlock(key);
   render();
 }
 
@@ -2605,6 +2642,7 @@ function openArchivedKeyRecord(record) {
   selectedArchiveRecord = record;
   selectedId = `archive-${record.id}`;
   selectedSetId = record.key.sets?.[0]?.id || "main";
+  resetKeyInfoEditUnlock(record.key);
   clearTimeout(detailCloseTimer);
   clearTimeout(archivesCloseTimer);
   archivesPanel.hidden = true;
@@ -2782,6 +2820,7 @@ function restoreArchive(recordId) {
   archives = archives.filter((archive) => archive.id !== recordId);
   selectedId = targetKey.id;
   selectedSetId = record.key.sets?.[0]?.id || "main";
+  resetKeyInfoEditUnlock(restoredKey);
   logActivity("Restauration", keyLabel(restoredKey), [restoredKey.owner, restoredKey.property].filter(Boolean).join(" - "));
   saveKeys();
   saveArchives();
@@ -2921,6 +2960,7 @@ function renderGrid() {
           selectedArchiveRecord = null;
           selectedId = key.id;
           selectedSetId = key.sets[0]?.id || "main";
+          resetKeyInfoEditUnlock(key);
           render();
           if (!isTouchLayout()) scheduleDetailPanelClose();
         });
@@ -3281,6 +3321,14 @@ function renderPanel() {
   ownerInput.value = formatOwner(key.owner);
   ownerFirstNameInput.value = formatFirstName(key.ownerFirstName);
   notesInput.value = key.notes;
+  const isKeyInfoLocked = !isArchiveView && hasProtectedKeyInfo(key) && !isKeyInfoEditUnlocked;
+  form.classList.toggle("is-key-info-locked", isKeyInfoLocked);
+  protectedKeyInfoInputs.forEach((input) => {
+    input.readOnly = isKeyInfoLocked;
+    input.classList.toggle("key-info-lockable", isKeyInfoLocked);
+    input.title = isKeyInfoLocked ? "Double-cliquez pour modifier" : "";
+    input.setAttribute("aria-readonly", String(isKeyInfoLocked));
+  });
   const canMoveSelectedKey = !isArchiveView || isSelectedCompromiseEditable();
   const isSelectedSetOut = selectedSet.status === "out";
   const isSelectedSetOutForReservation = isSelectedSetOut && Boolean(selectedSet.holderReservationId);
@@ -3641,7 +3689,7 @@ function setKeySetCount(count) {
   const ownerName = key.owner ? formatOwner(key.owner) : "PROPRI\u00c9TAIRE NON RENSEIGN\u00c9";
   const keyCountWord = nextCount > 1 ? "jeux" : "jeu";
   const confirmedCount = confirm(
-    `Confirmez-vous la pr\u00e9sence de ${nextCount} ${keyCountWord} de cl\u00e9 pour le bien de monsieur "${ownerName}" ?`
+    `Confirmez-vous la pr\u00e9sence de ${nextCount} ${keyCountWord} de cl\u00e9 pour le bien de monsieur et/ou madame "${ownerName}" ?`
   );
   if (!confirmedCount) {
     keySetCountSelect.value = String(previousCount);
@@ -4315,6 +4363,9 @@ ownerFirstNameInput.addEventListener("blur", () => {
   updateSelectedKey({ ownerFirstName: ownerFirstNameInput.value });
 });
 notesInput.addEventListener("input", debounce(() => updateSelectedKey({ notes: notesInput.value })));
+protectedKeyInfoInputs.forEach((input) => {
+  input.addEventListener("dblclick", unlockKeyInfoEdit);
+});
 keySetCountSelect.addEventListener("change", () => setKeySetCount(Number(keySetCountSelect.value)));
 keySetSelect.addEventListener("change", () => {
   selectedSetId = keySetSelect.value;
@@ -4620,6 +4671,7 @@ closePanelBtn.addEventListener("click", () => {
   syncCurrentRegistryToCloud();
   selectedId = null;
   selectedArchiveRecord = null;
+  resetKeyInfoEditUnlock(null);
   render();
 });
 document.addEventListener("pointerdown", (event) => {
@@ -4632,6 +4684,7 @@ document.addEventListener("pointerdown", (event) => {
   clearTimeout(detailCloseTimer);
   selectedId = null;
   selectedArchiveRecord = null;
+  resetKeyInfoEditUnlock(null);
   clearSignature();
   render();
 });
