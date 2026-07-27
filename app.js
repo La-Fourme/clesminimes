@@ -299,6 +299,24 @@ function logActivity(action, title, details = "") {
   saveActivityLog(entries);
 }
 
+function updateCreationActivityForKey(key) {
+  if (!key || !isKeyFilled(key)) return;
+  const keyTitle = keyLabel(key);
+  const owner = key.owner ? formatOwner(key.owner) : "";
+  const nextTitle = `${keyTitle}${owner ? ` - ${owner}` : ""}`;
+  const nextDetails = [key.owner, key.property].filter(Boolean).join(" - ");
+  let changed = false;
+  const entries = loadActivityLog().map((entry) => {
+    const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
+    if (entry.registry !== activeRegistry || !action.includes("cr\u00e9ation fiche")) return entry;
+    if (!String(entry.title || "").startsWith(keyTitle)) return entry;
+    if (entry.title === nextTitle && entry.details === nextDetails) return entry;
+    changed = true;
+    return { ...entry, title: nextTitle, details: nextDetails };
+  });
+  if (changed) saveActivityLog(entries);
+}
+
 function makeKeySet(id) {
   const option = keySetOptions.find((set) => set.id === id) || keySetOptions[0];
   return {
@@ -1933,6 +1951,8 @@ function getRegistryHistoryEntries(registry) {
     key.sets.forEach((set) => {
       set.history.forEach((movement) => {
         entries.push({
+          keyId: key.id,
+          setId: set.id,
           timestamp: parseHistoryTimestamp(movement.date),
           date: movement.date || "Date non renseignée",
           title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${set.label}`,
@@ -1959,6 +1979,9 @@ function getRegistryHistoryEntries(registry) {
             ? "Compromis"
             : "Loué";
     entries.push({
+      keyId: key.id,
+      setId: key.sets?.[0]?.id || "main",
+      archiveId: record.id,
       timestamp: parseHistoryTimestamp(record.archivedAt),
       date: formatArchiveDate(record.archivedAt),
       title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`,
@@ -1995,6 +2018,63 @@ function getGlobalHistoryEntryId(entry) {
     entry.actor || "",
     entry.details || "",
   ])}`;
+}
+
+function getKeyIdFromHistoryTitle(title) {
+  const match = String(title || "").match(/^(T[1-3]|T4\+|Maison|Autre)\s+#(\d+)/);
+  if (!match) return "";
+  return `${match[1]}-${Number(match[2])}`;
+}
+
+function activateRegistry(registry) {
+  if (!registryConfig[registry]) return;
+  if (activeRegistry === registry) return;
+  activeRegistry = registry;
+  saveActiveRegistry();
+  keys = loadKeys();
+  archives = loadArchives();
+  contacts = loadContacts();
+  updateRegistryHeader();
+}
+
+function openHistoryKey(entryData) {
+  const registry = entryData.registry || activeRegistry;
+  const keyId = entryData.keyId || "";
+  const setId = entryData.setId || "main";
+  if (!keyId) {
+    alert("Impossible de retrouver la fiche correspondant \u00e0 cette ligne d'historique.");
+    return;
+  }
+
+  activateRegistry(registry);
+  globalHistoryPanel.hidden = true;
+  contactsPanel.hidden = true;
+  archivesPanel.hidden = true;
+  compromisesPanel.hidden = true;
+  clearTimeout(detailCloseTimer);
+  clearTimeout(contactsCloseTimer);
+  clearTimeout(archivesCloseTimer);
+
+  if (entryData.archiveId) {
+    const archiveRecord = archives.find((record) => record.id === entryData.archiveId);
+    if (archiveRecord) {
+      openArchivedKeyRecord(archiveRecord);
+      selectedSetId = setId;
+      render();
+      return;
+    }
+  }
+
+  const key = keys.find((savedKey) => savedKey.id === keyId);
+  if (!key || !isKeyFilled(key)) {
+    alert("Cette fiche n'est plus disponible sur le tableau. Elle a peut-\u00eatre \u00e9t\u00e9 supprim\u00e9e ou remplac\u00e9e.");
+    return;
+  }
+
+  selectedArchiveRecord = null;
+  selectedId = key.id;
+  selectedSetId = key.sets.some((set) => set.id === setId) ? setId : key.sets[0]?.id || "main";
+  render();
 }
 
 function deleteGlobalHistoryEntry(historyId) {
@@ -2036,6 +2116,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     const match = String(entry.details || "").match(/(\d+)\s+jeux?\s+au total/i);
     return match ? `Jeu ${match[1]}` : "";
   };
+  const isSetCountDetail = (value) => /^\d+\s+jeux?\s+au total$/i.test(String(value || "").trim());
   const getActivityRegistryLabel = (entry) => (entry.registry === "transaction" ? "Transaction" : "Location");
   const getTitleKeyLabel = (title) => String(title || "").match(/^(T[1-3]|T4\+|Maison|Autre)\s+#\d+/)?.[0] || "";
   const titleHasOwner = (title) => {
@@ -2049,7 +2130,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   const getHistoryPhone = (value) => String(value || "").match(/\b\d{2}(?:\s\d{2}){4}\b/)?.[0] || "";
   const getActivityOwnerFromDetails = (entry) => {
     const owner = String(entry.details || "").split(" - ")[0]?.trim();
-    return owner ? formatOwner(owner) : "";
+    return owner && !isSetCountDetail(owner) ? formatOwner(owner) : "";
   };
   const getHistorySubjectOwner = (entry) => {
     const parts = String(entry.title || "").split(" - ").map((part) => part.trim()).filter(Boolean);
@@ -2084,7 +2165,8 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       return buildActivityTitle(entry, matchedKeyLabel, owner, extraTitle || owner);
     }
 
-    return buildActivityTitle(entry, "", "", rawTitle);
+    const ownerFromDetails = getActivityOwnerFromDetails(entry);
+    return buildActivityTitle(entry, "", "", ownerFromDetails || (isSetCountDetail(rawTitle) ? "" : rawTitle));
   };
   const getActivityTitle = (entry) => {
     if (String(entry.action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation fiche")) {
@@ -2248,9 +2330,16 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     const details = document.createElement("span");
     const deviceButton = document.createElement("button");
     const device = document.createElement("em");
+    const historyKeyId = entry.keyId || getKeyIdFromHistoryTitle(entry.title);
     item.dataset.globalHistoryId = getGlobalHistoryEntryId(entry);
+    item.dataset.historyRegistry = entry.registry || "";
+    item.dataset.historyKeyId = historyKeyId;
+    item.dataset.historySetId = entry.setId || "";
+    item.dataset.historyArchiveId = entry.archiveId || "";
     item.dataset.historyAction = getActionClass(entry.action);
-    item.title = "Ctrl + clic pour supprimer cette ligne d'historique";
+    item.title = historyKeyId
+      ? "Cliquer pour ouvrir la fiche. Ctrl + clic pour supprimer cette ligne d'historique"
+      : "Ctrl + clic pour supprimer cette ligne d'historique";
     title.textContent = getGlobalHistoryTitleText(entry);
     meta.textContent = `${entry.date} - ${entry.actor}`;
     details.textContent = entry.details;
@@ -3492,6 +3581,8 @@ function updateSelectedKey(changes) {
       `${keyLabel(nextKey)}${nextKey.owner ? ` - ${formatOwner(nextKey.owner)}` : ""}`,
       [nextKey.owner, nextKey.property].filter(Boolean).join(" - "),
     );
+  } else if (nextKey && wasFilled && isKeyFilled(nextKey)) {
+    updateCreationActivityForKey(nextKey);
   }
   saveKeys();
   render();
@@ -4234,13 +4325,22 @@ historyList.addEventListener("click", (event) => {
   deleteHistoryEntry(item.dataset.historyId);
 });
 globalHistoryList.addEventListener("click", (event) => {
-  if (!event.ctrlKey) return;
   if (event.target.closest("button")) return;
 
   const item = event.target.closest("[data-global-history-id]");
   if (!item) return;
   event.preventDefault();
-  deleteGlobalHistoryEntry(item.dataset.globalHistoryId);
+  if (event.ctrlKey) {
+    deleteGlobalHistoryEntry(item.dataset.globalHistoryId);
+    return;
+  }
+
+  openHistoryKey({
+    registry: item.dataset.historyRegistry,
+    keyId: item.dataset.historyKeyId,
+    setId: item.dataset.historySetId,
+    archiveId: item.dataset.historyArchiveId,
+  });
 });
 contactSelect.addEventListener("change", () => {
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
