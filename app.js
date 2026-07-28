@@ -2321,19 +2321,24 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   const getGlobalHistoryPriority = (entry) => {
     const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
     if (action.includes("cr\u00e9ation fiche")) return 0;
-    if (action.includes("entr\u00e9e")) return 1;
-    if (action.includes("sortie")) return 2;
+    if (/\b(?:entr\u00e9e?|rentr\u00e9e?)\b/.test(action)) return 1;
+    if (/\b(?:sortie|sorti)\b/.test(action)) return 2;
     return 3;
   };
+  const normalizeMovementWord = (value) =>
+    String(value || "")
+      .replace(/\bRentr\u00e9e\b/g, "Rentr\u00e9")
+      .replace(/\bEntr\u00e9e\b/g, "Entr\u00e9")
+      .replace(/\bSortie\b/g, "Sorti");
   const getGlobalHistoryActionLabel = (action) =>
-    String(action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation jeu") ? "Ajout jeu" : action;
+    String(action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation jeu") ? "Ajout jeu" : normalizeMovementWord(action);
   const getGlobalHistoryTitleText = (entry) => {
     const actionLabel = getGlobalHistoryActionLabel(entry.action);
     const keyLabelEntry = getTitleKeyLabel(entry.title);
-    if (!keyLabelEntry) return `${actionLabel} - ${entry.title}`;
+    if (!keyLabelEntry) return normalizeMovementWord(`${actionLabel} - ${entry.title}`);
 
     const rest = String(entry.title || "").slice(keyLabelEntry.length).replace(/^\s+-\s+/, "");
-    return `${keyLabelEntry} - ${actionLabel}${rest ? ` - ${rest}` : ""}`;
+    return normalizeMovementWord(`${keyLabelEntry} - ${actionLabel}${rest ? ` - ${rest}` : ""}`);
   };
   const getGlobalHistorySubject = (entry) => {
     const owner = getHistorySubjectOwner(entry);
@@ -2362,7 +2367,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     .filter((entry) => !hiddenGlobalHistoryIds.has(getGlobalHistoryEntryId(entry)))
     .filter((entry) => {
       const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
-      if (!action.includes("entr\u00e9e")) return true;
+      if (!/\bentr\u00e9e?\b/.test(action)) return true;
       return !creationEntryMinutesBySubject.has(`${getGlobalHistorySubject(entry)}|${Math.floor(entry.timestamp / 60000)}`);
     })
     .sort((first, second) => {
