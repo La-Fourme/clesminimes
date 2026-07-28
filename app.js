@@ -1093,6 +1093,31 @@ function formatReservationHistoryDate(value) {
   return `${match[1]} \u00e0 ${match[2]}`;
 }
 
+function isReturnMovement(entry, history = []) {
+  if (entry?.type !== "in") return false;
+  if (entry.returnReason === "returned") return true;
+  if (entry.returnReason === "created") return false;
+  if (/^Rentr\u00e9e?/.test(String(entry.reservationMovement || ""))) return true;
+
+  const movements = [...history]
+    .filter((item) => item.type === "out" || item.type === "in")
+    .sort((first, second) => parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date));
+  const entryIndex = movements.findIndex((item) => item.id === entry.id);
+  if (entryIndex < 0) return false;
+
+  return movements.slice(entryIndex + 1).find((item) => item.type === "out" || item.type === "in")?.type === "out";
+}
+
+function getMovementActionLabel(entry, history = []) {
+  if (entry?.type === "out") return "Sorti";
+  if (entry?.type === "reserved") return "R\u00e9serv\u00e9";
+  if (entry?.type === "cancel-reservation") return "Annulation";
+  if (entry?.type === "removed") return "Archiv\u00e9";
+  if (entry?.type === "rented") return entry.actionLabel || getRegistryConfig().archiveActionLabel;
+  if (entry?.type === "in") return isReturnMovement(entry, history) ? "Rentr\u00e9" : "Entr\u00e9";
+  return "Entr\u00e9";
+}
+
 function sortKeyHistoryEntries(first, second) {
   return parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
 }
@@ -1298,7 +1323,7 @@ function statusText(key) {
   if (key.archived) return "Archivée";
   const outCount = key.sets.filter((set) => set.status === "out").length;
   const reservedCount = key.sets.filter(hasActiveReservations).length;
-  if (outCount) return key.sets.length === 1 ? "Sortie" : `${outCount} jeu${outCount > 1 ? "x" : ""} sorti${outCount > 1 ? "s" : ""}`;
+  if (outCount) return key.sets.length === 1 ? "Sorti" : `${outCount} jeu${outCount > 1 ? "x" : ""} sorti${outCount > 1 ? "s" : ""}`;
   if (reservedCount) return key.sets.length === 1 ? "Réservé" : `${reservedCount} jeu${reservedCount > 1 ? "x" : ""} réservé${reservedCount > 1 ? "s" : ""}`;
   return "Disponible";
 }
@@ -1742,7 +1767,7 @@ function keyToCsvRows(key, archive = null) {
       rows.push({
         ...base,
         jeu: set.label,
-        statutJeu: set.status === "out" ? "Sortie" : set.status === "reserved" ? "Réservé" : "Disponible",
+        statutJeu: set.status === "out" ? "Sorti" : set.status === "reserved" ? "Réservé" : "Disponible",
         mouvement: "",
         intervenant: set.holder || "",
         telephone: "",
@@ -1758,8 +1783,8 @@ function keyToCsvRows(key, archive = null) {
       rows.push({
         ...base,
         jeu: set.label,
-        statutJeu: set.status === "out" ? "Sortie" : set.status === "reserved" ? "Réservé" : "Disponible",
-        mouvement: entry.type === "out" ? "Sortie" : entry.type === "reserved" ? "Réservé" : "Entrée",
+        statutJeu: set.status === "out" ? "Sorti" : set.status === "reserved" ? "Réservé" : "Disponible",
+        mouvement: getMovementActionLabel(entry, set.history),
         intervenant: entry.person || "",
         telephone: entry.phone || "",
         commentaire: entry.note || "",
@@ -1992,7 +2017,7 @@ function getRegistryHistoryEntries(registry) {
           timestamp: parseHistoryTimestamp(movement.date),
           date: movement.date || "Date non renseignée",
           title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${set.label}`,
-          action: movement.type === "out" ? "Sortie" : movement.type === "reserved" ? "Réservé" : "Entrée",
+          action: getMovementActionLabel(movement, set.history),
           actor: movement.person || "Intervenant non renseigné",
           details: [key.owner ? `Propriétaire : ${formatOwner(key.owner)}` : "", movement.phone ? `Téléphone : ${movement.phone}` : "", movement.note || ""]
             .filter(Boolean)
@@ -2950,7 +2975,7 @@ function renderGrid() {
             const segment = document.createElement("span");
             const displayStatus = getSetDisplayStatus(set);
             segment.className = `key-set-segment ${displayStatus}`;
-            segment.title = `${set.label} - ${displayStatus === "out" ? "Sortie" : displayStatus === "reserved" ? "R\u00e9serv\u00e9" : "Disponible"}`;
+            segment.title = `${set.label} - ${displayStatus === "out" ? "Sorti" : displayStatus === "reserved" ? "R\u00e9serv\u00e9" : "Disponible"}`;
             strip.append(segment);
           });
           button.append(strip);
@@ -3336,7 +3361,7 @@ function renderPanel() {
   const needsSelectedSetCheckInReason = selectedSet.needsCheckInReason || "";
   const isMainMovementLocked = isReadOnlyArchive || isSelectedSetOutForReservation;
   const canCheckInSelectedKey = canMoveSelectedKey && (isSelectedSetOut || needsSelectedSetCheckIn) && !isSelectedSetOutForReservation;
-  checkinBtn.textContent = selectedSet.status === "out" || needsSelectedSetCheckInReason === "added" ? "Rentr\u00e9" : "Entr\u00e9";
+  checkinBtn.textContent = selectedSet.status === "out" ? "Rentr\u00e9" : "Entr\u00e9";
   reservedBtn.textContent = "R\u00e9serv\u00e9";
   checkoutBtn.textContent = "Sorti";
   checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut || needsSelectedSetCheckIn;
@@ -3417,18 +3442,7 @@ function renderPanel() {
             : entry.type === "reserved" || entry.type === "cancel-reservation"
               ? "reserved"
               : "in";
-    const actionTitle =
-      entry.type === "out"
-        ? "Sortie"
-        : entry.type === "removed"
-          ? "Archiv\u00e9"
-          : entry.type === "rented"
-            ? entry.actionLabel || getRegistryConfig().archiveActionLabel
-            : entry.type === "reserved"
-              ? "R\u00e9serv\u00e9"
-              : entry.type === "cancel-reservation"
-                ? "Annulation"
-                : "Entr\u00e9e";
+    const actionTitle = getMovementActionLabel(entry, displayedHistory);
     const historyPersonName = getHistoryPersonName(entry);
     const hasHistoryPerson =
       Boolean(String(entry.person || "").trim() || String(entry.company || "").trim() || String(entry.phone || "").trim());
@@ -3472,7 +3486,7 @@ function renderPanel() {
       const signature = document.createElement("img");
       signature.className = "history-signature";
       signature.src = entry.signature;
-      signature.alt = `Signature ${entry.type === "out" ? "Sortie" : "Entrée"}`;
+      signature.alt = `Signature ${entry.type === "out" ? "Sorti" : "Entr\u00e9"}`;
       item.append(signature);
     }
     const activeReservation =
@@ -3750,7 +3764,8 @@ async function addMovement(type) {
   const forcedPerson = type === "in" && selectedSet.status === "out" ? selectedSet.holder : "";
   const forcedPhone = type === "in" && selectedSet.status === "out" ? selectedSet.holderPhone : "";
   const forcedCompany = type === "in" && selectedSet.status === "out" ? selectedSet.holderCompany : "";
-  if (!ensureMovementActor(type === "out" ? "Sortie" : "Entr\u00e9e", { person: forcedPerson, company: forcedCompany })) return;
+  const isReturningAfterCheckout = type === "in" && selectedSet.status === "out";
+  if (!ensureMovementActor(type === "out" ? "Sorti" : "Entr\u00e9", { person: forcedPerson, company: forcedCompany })) return;
   if (type === "out") showCheckoutReservationWarning(selectedSet);
 
   const entry = {
@@ -3761,6 +3776,7 @@ async function addMovement(type) {
     phone: formatPhoneNumber(forcedPhone || movementPhoneInput.value),
     note: formatSentenceStart(movementNoteInput.value).trim(),
     signature: getMainSignatureDataUrl(),
+    returnReason: type === "in" && isReturningAfterCheckout ? "returned" : "created",
     date: new Intl.DateTimeFormat("fr-FR", {
       dateStyle: "short",
       timeStyle: "short",
@@ -3781,7 +3797,7 @@ async function addMovement(type) {
         : selectedSet.reservations || [],
     history: [entry, ...selectedSet.history],
   });
-  logActivity(type === "out" ? "Sortie" : "Entrée", `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
+  logActivity(getMovementActionLabel(entry), `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
   movementNameInput.value = "";
@@ -3873,8 +3889,8 @@ function toggleReservationMovement(reservationId) {
   if (!isReservationOut) showCheckoutReservationWarning(selectedSet, reservationId);
   const inlineComment = formatSentenceStart(getInlineReservationComment(reservationId)).trim();
   const reservationMovement = isReservationOut
-    ? `Rentr\u00e9e r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
-    : `Sortie r\u00e9servation du ${reservation.reservationDate || ""}`.trim();
+    ? `Rentr\u00e9 r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
+    : `Sorti r\u00e9servation du ${reservation.reservationDate || ""}`.trim();
   const entry = {
     id: createHistoryId(),
     type: isReservationOut ? "in" : "out",
@@ -3884,6 +3900,7 @@ function toggleReservationMovement(reservationId) {
     reservationMovement,
     note: inlineComment ? `Commentaire : ${inlineComment}` : "",
     signature: getInlineReservationSignature(reservationId),
+    returnReason: isReservationOut ? "returned" : "",
     date: getMovementDateText(),
     reservationId,
   };
@@ -3900,7 +3917,7 @@ function toggleReservationMovement(reservationId) {
     history: [entry, ...selectedSet.history],
   });
   logActivity(
-    isReservationOut ? "Rentr\u00e9e" : "Sortie",
+    getMovementActionLabel(entry),
     `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`,
     [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "),
   );
