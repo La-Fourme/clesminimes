@@ -2058,6 +2058,18 @@ function getRegistryHistoryEntries(registry) {
 }
 
 function getActionClass(action) {
+  const readableAction = String(action || "")
+    .toLocaleLowerCase("fr-FR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (readableAction.includes("entr") || readableAction.includes("rentr") || readableAction.includes("creation") || readableAction.includes("restauration")) return "in";
+  if (readableAction.includes("sorti") || readableAction.includes("sortie")) return "out";
+  if (readableAction.includes("reserv")) return "reserved";
+  if (readableAction.includes("compromis") || readableAction.includes("loue") || readableAction.includes("acte authentique")) return "signed";
+  if (readableAction.includes("retir") || readableAction.includes("archiv") || readableAction.includes("suppression")) return "removed";
+  if (/\b(?:entr\u00e9e?|rentr\u00e9e?)\b/i.test(String(action || ""))) return "in";
+  if (/\b(?:sortie|sorti)\b/i.test(String(action || ""))) return "out";
+  if (/r\u00e9serv/i.test(String(action || ""))) return "reserved";
   const normalized = String(action || "").toLowerCase();
   if (normalized.includes("entrée") || normalized.includes("création") || normalized.includes("restauration")) return "in";
   if (normalized.includes("sortie")) return "out";
@@ -2281,7 +2293,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       );
     });
 
-    return matchingRegistryEntry ? { ...activityEntry, title: matchingRegistryEntry.title } : activityEntry;
+    return matchingRegistryEntry ? { ...activityEntry, title: matchingRegistryEntry.title, action: matchingRegistryEntry.action } : activityEntry;
   };
   activityEntries.forEach((entry, index) => {
     activityEntries[index] = completeActivityTitleFromRegistry(entry);
@@ -2312,7 +2324,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       ...registryEntry,
       timestamp: activityEntry.timestamp || registryEntry.timestamp,
       date: activityEntry.date || registryEntry.date,
-      action: activityEntry.action || registryEntry.action,
+      action: registryEntry.action || activityEntry.action,
       device: activityEntry.device || registryEntry.device,
       activityId: activityEntry.id || "",
     };
@@ -2332,12 +2344,32 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       .replace(/\bSortie\b/g, "Sorti");
   const getGlobalHistoryActionLabel = (action) =>
     String(action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation jeu") ? "Ajout jeu" : normalizeMovementWord(action);
+  const addMissingOwnerToHistoryRest = (entry, keyLabelEntry, rest) => {
+    const owner = (ownerMaps[entry.registry] || new Map()).get(keyLabelEntry) || "";
+    if (!owner || titleHasOwner(entry.title)) return rest;
+
+    const parts = String(rest || "").split(" - ").map((part) => part.trim()).filter(Boolean);
+    if (!parts.length) return owner;
+    if (parts.some((part) => part.toLocaleLowerCase("fr-FR") === owner.toLocaleLowerCase("fr-FR"))) return rest;
+
+    const registryIndex = parts.findIndex((part) => part === "Location" || part === "Transaction");
+    if (registryIndex >= 0) {
+      parts.splice(registryIndex + 1, 0, owner);
+      return parts.join(" - ");
+    }
+
+    return [owner, ...parts].join(" - ");
+  };
   const getGlobalHistoryTitleText = (entry) => {
     const actionLabel = getGlobalHistoryActionLabel(entry.action);
     const keyLabelEntry = getTitleKeyLabel(entry.title);
     if (!keyLabelEntry) return normalizeMovementWord(`${actionLabel} - ${entry.title}`);
 
-    const rest = String(entry.title || "").slice(keyLabelEntry.length).replace(/^\s+-\s+/, "");
+    const rest = addMissingOwnerToHistoryRest(
+      entry,
+      keyLabelEntry,
+      String(entry.title || "").slice(keyLabelEntry.length).replace(/^\s+-\s+/, ""),
+    );
     return normalizeMovementWord(`${keyLabelEntry} - ${actionLabel}${rest ? ` - ${rest}` : ""}`);
   };
   const getGlobalHistorySubject = (entry) => {
