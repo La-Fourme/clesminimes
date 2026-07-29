@@ -2263,14 +2263,30 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
 
     return replaceKeyLabelWithOwner(entry);
   };
+  const isContactActivity = (entry) => /intervenant/i.test(String(entry.action || ""));
+  const cleanContactHistoryName = (entry) => {
+    const candidates = [entry.title, entry.details]
+      .flatMap((value) => String(value || "").split("|"))
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .filter((value) => !/\d/.test(value))
+      .filter((value) => !/^intervenant\s+(interne|externe)$/i.test(value));
+    return candidates[0] || String(entry.title || "").replace(/\|.*$/, "").trim() || "Intervenant";
+  };
+  const cleanContactHistoryDetails = (entry) => {
+    const text = `${entry.title || ""} ${entry.details || ""}`.toLocaleLowerCase("fr-FR");
+    if (text.includes("externe")) return "Intervenant externe";
+    if (text.includes("interne")) return "Intervenant interne";
+    return "";
+  };
   const activityEntries = loadActivityLog().map((entry) => ({
     id: entry.id || "",
     timestamp: parseHistoryTimestamp(entry.date),
     date: formatArchiveDate(entry.date),
-    title: getActivityTitle(entry),
+    title: isContactActivity(entry) ? cleanContactHistoryName(entry) : getActivityTitle(entry),
     action: entry.action,
     actor: "Action enregistrée",
-    details: entry.details || "",
+    details: isContactActivity(entry) ? cleanContactHistoryDetails(entry) : entry.details || "",
     device: entry.device || "Appareil non renseigné",
     registry: entry.registry || "location",
     source: "activity",
