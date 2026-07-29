@@ -1126,6 +1126,13 @@ function getMovementActionLabel(entry, history = []) {
   return "Entr\u00e9";
 }
 
+function normalizeMovementWords(value) {
+  return String(value || "")
+    .replace(/\bRentr\u00e9e\b/g, "Rentr\u00e9")
+    .replace(/\bEntr\u00e9e\b/g, "Entr\u00e9")
+    .replace(/\bSortie\b/g, "Sorti");
+}
+
 function sortKeyHistoryEntries(first, second) {
   return parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date);
 }
@@ -2019,6 +2026,16 @@ function getRegistryHistoryEntries(registry) {
   registryKeys.forEach((key) => {
     key.sets.forEach((set) => {
       set.history.forEach((movement) => {
+        const isReservationMovement = movement.type === "reserved";
+        const movementDetails = isReservationMovement
+          ? [
+              movement.person ? `Intervenant : ${movement.person}` : "",
+              movement.phone ? `T\u00e9l\u00e9phone : ${movement.phone}` : "",
+              movement.company ? `Soci\u00e9t\u00e9 : ${movement.company}` : "",
+              movement.reservationDate ? `Pour le ${formatReservationHistoryDate(movement.reservationDate)}` : "",
+              movement.note || "",
+            ]
+          : [movement.note || ""];
         entries.push({
           keyId: key.id,
           setId: set.id,
@@ -2027,9 +2044,8 @@ function getRegistryHistoryEntries(registry) {
           title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${set.label}`,
           action: getMovementActionLabel(movement, set.history),
           actor: movement.person || "Intervenant non renseigné",
-          details: [key.owner ? `Propriétaire : ${formatOwner(key.owner)}` : "", movement.phone ? `Téléphone : ${movement.phone}` : "", movement.note || ""]
-            .filter(Boolean)
-            .join(" | "),
+          actorPhone: movement.phone || "",
+          details: movementDetails.filter(Boolean).join(" | "),
           device: "",
           registry,
         });
@@ -2039,6 +2055,9 @@ function getRegistryHistoryEntries(registry) {
 
   registryArchives.forEach((record) => {
     const key = record.key;
+    const archiveSet = key.sets?.find((set) => set.history?.some((entry) => entry.type === "rented")) || key.sets?.[0] || {};
+    const archiveMovement = [...(archiveSet.history || [])].find((entry) => entry.type === "rented");
+    const latestMovement = archiveMovement || getLatestMovementEntry(archiveSet.history || []);
     const action =
       record.reason === "authenticated"
         ? "Acte authentique"
@@ -2055,8 +2074,9 @@ function getRegistryHistoryEntries(registry) {
       date: formatArchiveDate(record.archivedAt),
       title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`,
       action,
-      actor: key.owner ? formatOwner(key.owner) : "Fiche clé",
-      details: [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
+      actor: record.reason === "rented" && latestMovement?.person ? latestMovement.person : key.owner ? formatOwner(key.owner) : "Fiche clé",
+      actorPhone: record.reason === "rented" ? latestMovement?.phone || "" : "",
+      details: record.reason === "rented" ? "" : [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
       device: "",
       registry,
     });
@@ -2274,9 +2294,6 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     return candidates[0] || String(entry.title || "").replace(/\|.*$/, "").trim() || "Intervenant";
   };
   const cleanContactHistoryDetails = (entry) => {
-    const text = `${entry.title || ""} ${entry.details || ""}`.toLocaleLowerCase("fr-FR");
-    if (text.includes("externe")) return "Intervenant externe";
-    if (text.includes("interne")) return "Intervenant interne";
     return "";
   };
   const activityEntries = loadActivityLog().map((entry) => ({
@@ -2327,9 +2344,10 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     const normalizedAction = actionClass === "in" && /(?:rentr|entr)/i.test(entry.action)
       ? "entry"
       : String(entry.action || "").trim().toLocaleLowerCase("fr-FR");
+    const keyLabelEntry = getTitleKeyLabel(entry.title);
     const normalizedTitle = String(entry.title || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("fr-FR");
     const minute = Math.floor(entry.timestamp / 60000);
-    return `${normalizedAction}|${normalizedTitle}|${minute}`;
+    return `${normalizedAction}|${keyLabelEntry ? keyLabelEntry.toLocaleLowerCase("fr-FR") : normalizedTitle}|${minute}`;
   };
   const activityEntriesByKey = new Map();
   activityEntries.forEach((entry) => {
@@ -2362,10 +2380,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     return 3;
   };
   const normalizeMovementWord = (value) =>
-    String(value || "")
-      .replace(/\bRentr\u00e9e\b/g, "Rentr\u00e9")
-      .replace(/\bEntr\u00e9e\b/g, "Entr\u00e9")
-      .replace(/\bSortie\b/g, "Sorti");
+    normalizeMovementWords(value);
   const getGlobalHistoryActionLabel = (action) =>
     String(action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation jeu") ? "Ajout jeu" : normalizeMovementWord(action);
   const addMissingOwnerToHistoryRest = (entry, keyLabelEntry, rest) => {
@@ -2418,7 +2433,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       .filter((entry) => String(entry.action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation fiche"))
       .map((entry) => `${getGlobalHistorySubject(entry)}|${Math.floor(entry.timestamp / 60000)}`),
   );
-  const entries = filteredEntries
+  const sortedEntries = filteredEntries
     .map((entry, index) => ({ ...entry, orderIndex: index }))
     .filter((entry) => !hiddenGlobalHistoryIds.has(getGlobalHistoryEntryId(entry)))
     .filter((entry) => {
@@ -2437,6 +2452,22 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
         first.orderIndex - second.orderIndex
       );
     });
+  const seenMovementEntries = new Set();
+  const entries = sortedEntries.filter((entry) => {
+    const actionClass = getActionClass(entry.action);
+    if (!["in", "out", "reserved"].includes(actionClass)) return true;
+
+    const keyLabelEntry = getTitleKeyLabel(entry.title);
+    if (!keyLabelEntry) return true;
+
+    const setLabel = String(entry.title || "").match(/\bJeu\s+\d+\b/i)?.[0] || entry.setId || "";
+    const minute = Math.floor(entry.timestamp / 60000);
+    const movementKey = [entry.registry || "", keyLabelEntry, setLabel, actionClass, minute].join("|").toLocaleLowerCase("fr-FR");
+    if (seenMovementEntries.has(movementKey)) return false;
+
+    seenMovementEntries.add(movementKey);
+    return true;
+  });
 
   targetList.innerHTML = "";
   if (!entries.length) {
@@ -2449,6 +2480,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   entries.forEach((entry) => {
     const item = document.createElement("li");
     const title = document.createElement("strong");
+    const reservationDateLine = document.createElement("strong");
     const meta = document.createElement("small");
     const details = document.createElement("span");
     const deviceButton = document.createElement("button");
@@ -2463,9 +2495,37 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     item.title = historyKeyId
       ? "Cliquer pour ouvrir la fiche. Ctrl + clic pour supprimer cette ligne d'historique"
       : "Ctrl + clic pour supprimer cette ligne d'historique";
+    const detailParts = String(entry.details || "").split("|").map((part) => part.trim()).filter(Boolean);
+    const reservationDateDetail =
+      getActionClass(entry.action) === "reserved"
+        ? detailParts.find((part) => /^Pour le\s+/i.test(part))
+        : "";
+    const reservationPersonDetail =
+      getActionClass(entry.action) === "reserved"
+        ? detailParts.find((part) => /^Intervenant\s*:/i.test(part))
+        : "";
+    const reservationPhoneDetail =
+      getActionClass(entry.action) === "reserved"
+        ? detailParts.find((part) => /^T\u00e9l\u00e9phone\s*:/i.test(part))
+        : "";
+    const reservationPerson = reservationPersonDetail?.replace(/^Intervenant\s*:\s*/i, "").trim() || entry.actor || "";
+    const reservationPhone = reservationPhoneDetail?.replace(/^T\u00e9l\u00e9phone\s*:\s*/i, "").trim() || "";
+    const visibleDetails = reservationDateDetail
+      ? detailParts
+          .filter((part) => part !== reservationDateDetail)
+          .filter((part) => part !== reservationPersonDetail)
+          .filter((part) => part !== reservationPhoneDetail)
+          .join(" | ")
+      : entry.details;
     title.textContent = getGlobalHistoryTitleText(entry);
-    meta.textContent = `${entry.date} - ${entry.actor}`;
-    details.textContent = entry.details;
+    reservationDateLine.className = "reservation-date-line";
+    reservationDateLine.textContent = reservationDateDetail || "";
+    const actorText =
+      getActionClass(entry.action) === "reserved"
+        ? [reservationPerson, reservationPhone].filter(Boolean).join(" - ")
+        : [entry.actor, entry.actorPhone].filter(Boolean).join(" - ");
+    meta.textContent = `${entry.date}${actorText ? ` - ${actorText}` : ""}`;
+    details.textContent = visibleDetails;
     deviceButton.className = "history-device-button";
     deviceButton.type = "button";
     deviceButton.textContent = "...";
@@ -2474,8 +2534,11 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     deviceButton.addEventListener("click", () => {
       device.hidden = !device.hidden;
     });
-    item.append(title, meta, deviceButton);
-    if (entry.details) item.append(details);
+    item.append(title);
+    if (reservationDateDetail) item.append(reservationDateLine);
+    if (getActionClass(entry.action) === "reserved" && visibleDetails) item.append(details);
+    item.append(meta, deviceButton);
+    if (getActionClass(entry.action) !== "reserved" && visibleDetails) item.append(details);
     item.append(device);
     targetList.append(item);
   });
@@ -2828,6 +2891,22 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
     }
     item.addEventListener("click", (event) => {
       event.preventDefault();
+      if (event.ctrlKey && event.altKey) {
+        const confirmed = confirm(`Supprimer d\u00e9finitivement l'archive ${keyLabel(key)} ?`);
+        if (!confirmed) return;
+
+        archives = archives.filter((archive) => archive.id !== record.id);
+        if (selectedArchiveRecord?.id === record.id) {
+          selectedArchiveRecord = null;
+          selectedId = null;
+          selectedSetId = "main";
+        }
+        saveArchives();
+        renderArchivesPanel();
+        renderCompromisesPanel();
+        render();
+        return;
+      }
       if (options.showCompromiseDetails && event.ctrlKey) {
         editCompromiseDate(record.id);
         return;
@@ -3534,7 +3613,7 @@ function renderPanel() {
         : entry.note || "";
     if (reservationMovementText) {
       const reservationMovement = document.createElement("p");
-      reservationMovement.textContent = reservationMovementText;
+      reservationMovement.textContent = normalizeMovementWords(reservationMovementText);
       item.append(reservationMovement);
     }
     if (commentText && entry.type !== "cancel-reservation") {
@@ -4141,7 +4220,11 @@ async function reserveSelectedSet() {
     ],
     history: [entry, ...selectedSet.history],
   });
-  logActivity("R\u00e9serv\u00e9", `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`, [person, `Pour le ${formattedDate}`, entry.note].filter(Boolean).join(" | "));
+  logActivity(
+    "R\u00e9serv\u00e9",
+    `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`,
+    [person ? `Intervenant : ${person}` : "", phone ? `T\u00e9l\u00e9phone : ${phone}` : "", company ? `Soci\u00e9t\u00e9 : ${company}` : "", `Pour le ${formattedDate}`, entry.note].filter(Boolean).join(" | "),
+  );
 
   movementPersonInput.value = "";
   movementNameInput.value = "";
