@@ -1056,6 +1056,14 @@ function getContactDisplayName(contact) {
   return [contact.firstName, formatLastName(contact.name)].filter(Boolean).join(" ");
 }
 
+function getContactHistoryName(contact) {
+  if (contact.type === "external") {
+    return [contact.companyName, contact.firstName || formatLastName(contact.name)].filter(Boolean).join(" - ") || "Intervenant externe";
+  }
+
+  return contact.firstName || formatLastName(contact.name) || "Intervenant interne";
+}
+
 function contactTypeText(type) {
   return type === "external" ? "Intervenant externe" : "Intervenant interne";
 }
@@ -1600,8 +1608,8 @@ function renderContactsPanel() {
         saveContacts();
         logActivity(
           "Suppression intervenant",
-          getContactDisplayName(contact),
-          [contactTypeText(contact.type), contact.phone].filter(Boolean).join(" | "),
+          getContactHistoryName(contact),
+          contactTypeText(contact.type),
         );
         renderContactSelect();
         renderContactsPanel();
@@ -4641,8 +4649,8 @@ contactForm.addEventListener("submit", (event) => {
     );
     logActivity(
       "Modification intervenant",
-      getContactDisplayName(nextContact),
-      [contactTypeText(nextContact.type), phone].filter(Boolean).join(" | "),
+      getContactHistoryName(nextContact),
+      contactTypeText(nextContact.type),
     );
   } else {
     const newContact = {
@@ -4659,8 +4667,8 @@ contactForm.addEventListener("submit", (event) => {
     ];
     logActivity(
       "Ajout intervenant",
-      getContactDisplayName(newContact),
-      [contactTypeText(newContact.type), phone].filter(Boolean).join(" | "),
+      getContactHistoryName(newContact),
+      contactTypeText(newContact.type),
     );
   }
   editingContactId = null;
