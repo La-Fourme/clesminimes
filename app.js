@@ -2211,7 +2211,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       return [
         registry,
         new Map(
-          [...registryKeys, ...archivedKeys]
+          [...archivedKeys, ...registryKeys]
             .filter((key) => key.owner)
             .map((key) => [keyLabel(key), formatOwner(key.owner)]),
         ),
@@ -2303,7 +2303,33 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   const cleanContactHistoryDetails = (entry) => {
     return "";
   };
-  let activityEntries = loadActivityLog().map((entry) => ({
+  const shouldKeepStoredActivityEntry = (entry) => {
+    const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
+    if (!action.includes("ajout jeu") && !action.includes("cr\u00e9ation jeu")) return true;
+
+    const keyLabelEntry = getTitleKeyLabel(entry.title);
+    if (!keyLabelEntry) return true;
+
+    const currentOwner = (ownerMaps[entry.registry] || new Map()).get(keyLabelEntry) || "";
+    if (!currentOwner) return true;
+
+    const titleParts = String(entry.title || "").split(" - ").map((part) => part.trim()).filter(Boolean);
+    const titleOwner = titleParts
+      .filter((part) => part !== keyLabelEntry)
+      .filter((part) => part !== "Location" && part !== "Transaction")
+      .filter((part) => !/^jeu\s+\d+$/i.test(part))
+      .find((part) => part.toLocaleLowerCase("fr-FR") !== currentOwner.toLocaleLowerCase("fr-FR"));
+    const detailsOwner = getActivityOwnerFromDetails(entry);
+    const storedOwner = titleOwner || detailsOwner;
+    if (!storedOwner) return true;
+
+    return currentOwner.toLocaleLowerCase("fr-FR") === formatOwner(storedOwner).toLocaleLowerCase("fr-FR");
+  };
+  const storedActivityLog = loadActivityLog();
+  const cleanedActivityLog = storedActivityLog.filter(shouldKeepStoredActivityEntry);
+  if (cleanedActivityLog.length !== storedActivityLog.length) saveActivityLog(cleanedActivityLog);
+
+  let activityEntries = cleanedActivityLog.map((entry) => ({
     id: entry.id || "",
     timestamp: parseHistoryTimestamp(entry.date),
     date: formatArchiveDate(entry.date),
@@ -2331,6 +2357,16 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
 
     const keyLabelEntry = getTitleKeyLabel(entry.title);
     if (!keyLabelEntry) return true;
+
+    const currentOwner = (ownerMaps[entry.registry] || new Map()).get(keyLabelEntry) || "";
+    const entryOwner = getHistoryTitleOwner(entry.title) || getActivityOwnerFromDetails(entry);
+    if (
+      currentOwner &&
+      entryOwner &&
+      currentOwner.toLocaleLowerCase("fr-FR") !== entryOwner.toLocaleLowerCase("fr-FR")
+    ) {
+      return false;
+    }
 
     const mapKey = `${entry.registry || ""}|${keyLabelEntry}`.toLocaleLowerCase("fr-FR");
     const latestCreation = latestCreationByKey.get(mapKey);
@@ -2480,8 +2516,33 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
         first.orderIndex - second.orderIndex
       );
     });
+  const hasMovementForSetCountEntry = (entry) => {
+    const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
+    if (!action.includes("ajout jeu") && !action.includes("cr\u00e9ation jeu")) return false;
+
+    const keyLabelEntry = getTitleKeyLabel(entry.title);
+    if (!keyLabelEntry) return false;
+
+    const setLabel = String(entry.title || "").match(/\bJeu\s+\d+\b/i)?.[0] || getActivitySetLabel(entry);
+    const minute = Math.floor(entry.timestamp / 60000);
+    return sortedEntries.some((otherEntry) => {
+      if (otherEntry === entry) return false;
+      if (otherEntry.registry !== entry.registry) return false;
+      if (!["in", "out", "reserved"].includes(getActionClass(otherEntry.action))) return false;
+      if (getTitleKeyLabel(otherEntry.title) !== keyLabelEntry) return false;
+
+      const otherSetLabel = String(otherEntry.title || "").match(/\bJeu\s+\d+\b/i)?.[0] || otherEntry.setId || "";
+      if (setLabel && otherSetLabel && setLabel.toLocaleLowerCase("fr-FR") !== otherSetLabel.toLocaleLowerCase("fr-FR")) {
+        return false;
+      }
+
+      return Math.floor(otherEntry.timestamp / 60000) === minute;
+    });
+  };
   const seenMovementEntries = new Set();
   const entries = sortedEntries.filter((entry) => {
+    if (hasMovementForSetCountEntry(entry)) return false;
+
     const actionClass = getActionClass(entry.action);
     if (!["in", "out", "reserved"].includes(actionClass)) return true;
 
