@@ -1091,6 +1091,16 @@ function getMovementContactName(contact) {
   return getContactDisplayName(contact);
 }
 
+function getDefaultInternalContactActor() {
+  const contact = contacts.find((savedContact) => savedContact.type === "internal");
+  if (!contact) return { person: "", phone: "" };
+
+  return {
+    person: getContactDisplayName(contact),
+    phone: formatPhoneNumber(contact.phone),
+  };
+}
+
 function getHistoryPersonName(entry) {
   let person = entry.person || entry.company || "Intervenant non pr\u00e9cis\u00e9";
   const company = String(entry.company || "").trim();
@@ -2065,6 +2075,10 @@ function getRegistryHistoryEntries(registry) {
     const archiveSet = key.sets?.find((set) => set.history?.some((entry) => entry.type === "rented")) || key.sets?.[0] || {};
     const archiveMovement = [...(archiveSet.history || [])].find((entry) => entry.type === "rented");
     const latestMovement = archiveMovement || getLatestMovementEntry(archiveSet.history || []);
+    const usesMovementActor = record.reason === "rented" || record.reason === "authenticated";
+    const defaultInternalActor = usesMovementActor ? getDefaultInternalContactActor() : { person: "", phone: "" };
+    const archiveActor = latestMovement?.person || defaultInternalActor.person;
+    const archiveActorPhone = latestMovement?.phone || defaultInternalActor.phone;
     const action =
       record.reason === "authenticated"
         ? "Acte authentique"
@@ -2081,9 +2095,9 @@ function getRegistryHistoryEntries(registry) {
       date: formatArchiveDate(record.archivedAt),
       title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`,
       action,
-      actor: record.reason === "rented" && latestMovement?.person ? latestMovement.person : key.owner ? formatOwner(key.owner) : "Fiche clé",
-      actorPhone: record.reason === "rented" ? latestMovement?.phone || "" : "",
-      details: record.reason === "rented" ? "" : [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
+      actor: usesMovementActor && archiveActor ? archiveActor : key.owner ? formatOwner(key.owner) : "Fiche clé",
+      actorPhone: usesMovementActor ? archiveActorPhone || "" : "",
+      details: usesMovementActor ? "" : [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
       device: "",
       registry,
     });
@@ -2599,20 +2613,34 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
         : "";
     const reservationPerson = reservationPersonDetail?.replace(/^Intervenant\s*:\s*/i, "").trim() || entry.actor || "";
     const reservationPhone = reservationPhoneDetail?.replace(/^T\u00e9l\u00e9phone\s*:\s*/i, "").trim() || "";
-    const visibleDetails = reservationDateDetail
+    let visibleDetails = reservationDateDetail
       ? detailParts
           .filter((part) => part !== reservationDateDetail)
           .filter((part) => part !== reservationPersonDetail)
           .filter((part) => part !== reservationPhoneDetail)
           .join(" | ")
       : entry.details;
+    const actionClass = getActionClass(entry.action);
+    const isRegisteredAction = String(entry.actor || "").toLocaleLowerCase("fr-FR") === "action enregistr\u00e9e";
+    const fallbackActorParts =
+      isRegisteredAction && ["in", "out", "signed", "removed"].includes(actionClass)
+        ? detailParts.filter((part) => !/^propri\u00e9taire\s*:/i.test(part) && !/^t\u00e9l\u00e9phone\s*:/i.test(part))
+        : [];
+    const fallbackActorPhone = fallbackActorParts.find((part) => getHistoryPhone(part)) || "";
+    const fallbackActorName = fallbackActorParts
+      .find((part) => part !== fallbackActorPhone && !/\d{2}(?:\s\d{2}){3,4}/.test(part))
+      ?.replace(/\s*-\s*$/, "")
+      .trim() || "";
+    const movementActor = isRegisteredAction && fallbackActorName ? fallbackActorName : entry.actor;
+    const movementPhone = entry.actorPhone || getHistoryPhone(fallbackActorPhone);
+    if (["in", "out", "signed", "removed"].includes(actionClass)) visibleDetails = "";
     title.textContent = getGlobalHistoryTitleText(entry);
     reservationDateLine.className = "reservation-date-line";
     reservationDateLine.textContent = reservationDateDetail || "";
     const actorText =
-      getActionClass(entry.action) === "reserved"
+      actionClass === "reserved"
         ? [reservationPerson, reservationPhone].filter(Boolean).join(" - ")
-        : [entry.actor, entry.actorPhone].filter(Boolean).join(" - ");
+        : [movementActor === "Action enregistr\u00e9e" ? "" : movementActor, movementPhone].filter(Boolean).join(" - ");
     meta.textContent = `${entry.date}${actorText ? ` - ${actorText}` : ""}`;
     details.textContent = visibleDetails;
     deviceButton.className = "history-device-button";
@@ -2849,7 +2877,20 @@ function markCompromiseAsAuthenticated(recordId) {
         }
       : archive,
   );
-  logActivity("Acte authentique", keyLabel(record.key), [record.key.owner, record.key.property].filter(Boolean).join(" - "));
+  const authenticatedSet =
+    record.key.sets?.find((set) => set.history?.some((entry) => entry.type === "rented")) || record.key.sets?.[0] || {};
+  const authenticatedMovement =
+    [...(authenticatedSet.history || [])].find((entry) => entry.type === "rented") ||
+    getLatestMovementEntry(authenticatedSet.history || []);
+  const defaultInternalActor = getDefaultInternalContactActor();
+  logActivity(
+    "Acte authentique",
+    keyLabel(record.key),
+    [
+      authenticatedMovement?.person || defaultInternalActor.person,
+      authenticatedMovement?.phone || defaultInternalActor.phone,
+    ].filter(Boolean).join(" | "),
+  );
   saveArchives();
   render();
   showSaleCelebration();
@@ -3660,7 +3701,7 @@ function renderPanel() {
     const title = document.createElement("strong");
     const date = document.createElement("small");
     item.dataset.historyId = entry.id;
-    item.title = isReadOnlyArchive ? "Historique en lecture seule" : "Ctrl + clic pour supprimer cette ligne d'historique";
+    item.title = "Ctrl + clic pour supprimer cette ligne d'historique";
     item.dataset.historyAction =
       entry.type === "out"
         ? "out"
@@ -3809,7 +3850,6 @@ function renderPanel() {
 }
 
 function deleteHistoryEntry(historyId) {
-  if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || !historyId) return;
