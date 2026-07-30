@@ -308,11 +308,18 @@ function updateCreationActivityForKey(key) {
   const owner = key.owner ? formatOwner(key.owner) : "";
   const nextTitle = `${keyTitle}${owner ? ` - ${owner}` : ""}`;
   const nextDetails = [key.owner, key.property].filter(Boolean).join(" - ");
+  const savedEntries = loadActivityLog();
+  const latestCreationEntry = savedEntries
+    .filter((entry) => {
+      const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
+      return entry.registry === activeRegistry && action.includes("cr\u00e9ation fiche") && String(entry.title || "").startsWith(keyTitle);
+    })
+    .sort((first, second) => parseHistoryTimestamp(second.date) - parseHistoryTimestamp(first.date))[0];
+  if (!latestCreationEntry) return;
+
   let changed = false;
-  const entries = loadActivityLog().map((entry) => {
-    const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
-    if (entry.registry !== activeRegistry || !action.includes("cr\u00e9ation fiche")) return entry;
-    if (!String(entry.title || "").startsWith(keyTitle)) return entry;
+  const entries = savedEntries.map((entry) => {
+    if (entry.id !== latestCreationEntry.id) return entry;
     if (entry.title === nextTitle && entry.details === nextDetails) return entry;
     changed = true;
     return { ...entry, title: nextTitle, details: nextDetails };
@@ -2296,7 +2303,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   const cleanContactHistoryDetails = (entry) => {
     return "";
   };
-  const activityEntries = loadActivityLog().map((entry) => ({
+  let activityEntries = loadActivityLog().map((entry) => ({
     id: entry.id || "",
     timestamp: parseHistoryTimestamp(entry.date),
     date: formatArchiveDate(entry.date),
@@ -2308,6 +2315,27 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     registry: entry.registry || "location",
     source: "activity",
   }));
+  const latestCreationByKey = new Map();
+  activityEntries.forEach((entry) => {
+    const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
+    const keyLabelEntry = getTitleKeyLabel(entry.title);
+    if (!action.includes("cr\u00e9ation fiche") || !keyLabelEntry) return;
+
+    const mapKey = `${entry.registry || ""}|${keyLabelEntry}`.toLocaleLowerCase("fr-FR");
+    const savedEntry = latestCreationByKey.get(mapKey);
+    if (!savedEntry || entry.timestamp > savedEntry.timestamp) latestCreationByKey.set(mapKey, entry);
+  });
+  activityEntries = activityEntries.filter((entry) => {
+    const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
+    if (!action.includes("ajout jeu") && !action.includes("cr\u00e9ation jeu")) return true;
+
+    const keyLabelEntry = getTitleKeyLabel(entry.title);
+    if (!keyLabelEntry) return true;
+
+    const mapKey = `${entry.registry || ""}|${keyLabelEntry}`.toLocaleLowerCase("fr-FR");
+    const latestCreation = latestCreationByKey.get(mapKey);
+    return !latestCreation || latestCreation.timestamp <= entry.timestamp;
+  });
   const registryEntries = ["location", "transaction"].flatMap(getRegistryHistoryEntries).map((entry) => ({
     ...entry,
     source: "registry",
@@ -3869,7 +3897,7 @@ function setKeySetCount(count) {
   selectedSetId = nextSets.some((set) => set.id === selectedSetId) ? selectedSetId : nextSets[0].id;
   if (nextCount > previousCount) {
     selectedSetId = nextSets[nextCount - 1]?.id || selectedSetId;
-    logActivity("Ajout jeu", keyLabel(key), `${nextCount} jeux au total`);
+    logActivity("Ajout jeu", `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`, [key.owner, `${nextCount} jeux au total`].filter(Boolean).join(" - "));
   } else if (nextCount < previousCount) {
     logActivity("Suppression jeu", keyLabel(key), `${removedSets.map((set) => set.label).join(", ")} supprimé(s)`);
   }

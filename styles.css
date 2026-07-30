@@ -1365,6 +1365,10 @@ body.is-moving-key .photo-hover {
   background: #f8d19a;
 }
 
+.global-history-list li[data-history-action="reserved"] {
+  gap: 3px;
+}
+
 .global-history-list li[data-history-action="removed"],
 .archive-list li[data-history-action="removed"] {
   border-color: #6b7275;
@@ -1382,9 +1386,12 @@ body.is-moving-key .photo-hover {
 }
 
 .global-history-list strong {
+  display: block;
+  margin: 0;
   color: var(--ink);
   font-size: 13px;
   font-weight: 900;
+  line-height: 1.35;
 }
 
 .global-history-list small,
@@ -1392,6 +1399,14 @@ body.is-moving-key .photo-hover {
   color: var(--ink);
   font-size: 12px;
   font-weight: 500;
+}
+
+.global-history-list li[data-history-action="reserved"] small {
+  margin-top: 6px;
+}
+
+.global-history-list li[data-history-action="reserved"] span {
+  margin-top: 3px;
 }
 
 .global-history-list em {
@@ -2028,6 +2043,14 @@ body.is-moving-key .photo-hover {
   margin-bottom: 3px;
   font-size: 13px;
   font-weight: 800;
+}
+
+.global-history-list .reservation-date-line {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.35;
 }
 
 .history-list small {
