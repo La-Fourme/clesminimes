@@ -2223,6 +2223,16 @@ function deleteGlobalHistoryEntry(historyId) {
 }
 
 function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter = "") {
+  const activeKeyMaps = Object.fromEntries(
+    ["location", "transaction"].map((registry) => {
+      const config = registryConfig[registry];
+      const registryKeys = parseStoredArray(config.keysStorageKey, makeInitialKeys()).map(normalizeKey);
+      return [
+        registry,
+        new Map(registryKeys.map((key) => [keyLabel(key), key])),
+      ];
+    }),
+  );
   const ownerMaps = Object.fromEntries(
     ["location", "transaction"].map((registry) => {
       const config = registryConfig[registry];
@@ -2238,6 +2248,10 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       ];
     }),
   );
+  const isActiveSlotFilled = (entry, keyLabelEntry) => {
+    const key = (activeKeyMaps[entry.registry] || new Map()).get(keyLabelEntry);
+    return Boolean(key && isKeyFilled(key));
+  };
   const getActivitySetLabel = (entry) => {
     const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
     if (!action.includes("ajout jeu") && !action.includes("cr\u00e9ation jeu")) return "";
@@ -2325,10 +2339,15 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   };
   const shouldKeepStoredActivityEntry = (entry) => {
     const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
-    if (!action.includes("ajout jeu") && !action.includes("cr\u00e9ation jeu")) return true;
+    const isCreationAction =
+      action.includes("cr\u00e9ation fiche") ||
+      action.includes("ajout jeu") ||
+      action.includes("cr\u00e9ation jeu");
+    if (!isCreationAction) return true;
 
     const keyLabelEntry = getTitleKeyLabel(entry.title);
     if (!keyLabelEntry) return true;
+    if (!isActiveSlotFilled(entry, keyLabelEntry)) return false;
 
     const currentOwner = (ownerMaps[entry.registry] || new Map()).get(keyLabelEntry) || "";
     if (!currentOwner) return true;
