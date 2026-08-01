@@ -11,9 +11,10 @@ const hiddenGlobalHistoryStorageKey = "cles-hidden-global-history-v1";
 const deviceNameStorageKey = "cles-device-name-v1";
 const tileViewStorageKey = "cles-tile-view-mode-v1";
 const keyStatusFilterStorageKey = "cles-key-status-filter-v1";
-const photoMaxSize = 650;
-const photoJpegQuality = 0.45;
-const photoOptimizationStorageKey = "cles-photo-optimization-650-v1";
+const photoMaxSize = 560;
+const photoJpegQuality = 0.36;
+const photoMaxDataUrlLength = 260000;
+const photoOptimizationStorageKey = "cles-photo-optimization-560-v2";
 const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
@@ -893,9 +894,14 @@ function loadArchives() {
 }
 
 function saveArchives() {
-  markLocalEdit();
-  localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
-  scheduleStorageKeySync(getRegistryConfig().archivesStorageKey);
+  try {
+    markLocalEdit();
+    localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
+    scheduleStorageKeySync(getRegistryConfig().archivesStorageKey);
+  } catch (error) {
+    alert("La sauvegarde a échoué. Une photo ou une signature est probablement trop lourde.");
+    throw error;
+  }
 }
 
 function migrateArchivedSlots() {
@@ -3361,17 +3367,7 @@ function compressPhotoFile(file) {
       const image = new Image();
       image.addEventListener("error", () => reject(new Error("Photo illisible.")));
       image.addEventListener("load", () => {
-        const scale = Math.min(1, photoMaxSize / Math.max(image.width, image.height));
-        const width = Math.max(1, Math.round(image.width * scale));
-        const height = Math.max(1, Math.round(image.height * scale));
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-        canvas.width = width;
-        canvas.height = height;
-        context.fillStyle = "#ffffff";
-        context.fillRect(0, 0, width, height);
-        context.drawImage(image, 0, 0, width, height);
-        const photo = canvas.toDataURL("image/jpeg", photoJpegQuality);
+        const photo = compressLoadedImage(image);
         if (!photo.startsWith("data:image/") || photo.length < 200) {
           reject(new Error("Photo compressée invalide."));
           return;
@@ -3384,6 +3380,34 @@ function compressPhotoFile(file) {
   });
 }
 
+function compressLoadedImage(image) {
+  const variants = [
+    [photoMaxSize, photoJpegQuality],
+    [500, 0.32],
+    [440, 0.28],
+    [380, 0.24],
+  ];
+  let fallbackPhoto = "";
+
+  for (const [maxSize, quality] of variants) {
+    const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    canvas.width = width;
+    canvas.height = height;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+    const photo = canvas.toDataURL("image/jpeg", quality);
+    fallbackPhoto = photo;
+    if (photo.startsWith("data:image/") && photo.length <= photoMaxDataUrlLength) return photo;
+  }
+
+  return fallbackPhoto;
+}
+
 function compressPhotoDataUrl(photo) {
   return new Promise((resolve) => {
     if (!photo || !photo.startsWith("data:image/")) {
@@ -3394,17 +3418,7 @@ function compressPhotoDataUrl(photo) {
     const image = new Image();
     image.addEventListener("error", () => resolve(photo));
     image.addEventListener("load", () => {
-      const scale = Math.min(1, photoMaxSize / Math.max(image.width, image.height));
-      const width = Math.max(1, Math.round(image.width * scale));
-      const height = Math.max(1, Math.round(image.height * scale));
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-      canvas.width = width;
-      canvas.height = height;
-      context.fillStyle = "#ffffff";
-      context.fillRect(0, 0, width, height);
-      context.drawImage(image, 0, 0, width, height);
-      const nextPhoto = canvas.toDataURL("image/jpeg", photoJpegQuality);
+      const nextPhoto = compressLoadedImage(image);
       resolve(nextPhoto.startsWith("data:image/") && nextPhoto.length >= 200 ? nextPhoto : photo);
     });
     image.src = photo;
@@ -5025,6 +5039,7 @@ async function initializeApp() {
   if (dirtyCloudKeys.size) await syncCurrentRegistryToCloud();
   await loadStorageFromCloud();
   await migrateStoredPropertyAddresses();
+  await optimizeStoredPhotos();
   updateRegistryHeader();
   updateTileViewToggle();
   updateUndoButton();
