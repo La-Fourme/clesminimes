@@ -2392,7 +2392,8 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   });
   activityEntries = activityEntries.filter((entry) => {
     const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
-    if (!action.includes("ajout jeu") && !action.includes("cr\u00e9ation jeu")) return true;
+    const isCreationSheet = action.includes("cr\u00e9ation fiche");
+    if (!isCreationSheet && !action.includes("ajout jeu") && !action.includes("cr\u00e9ation jeu")) return true;
 
     const keyLabelEntry = getTitleKeyLabel(entry.title);
     if (!keyLabelEntry) return true;
@@ -2409,6 +2410,8 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
 
     const mapKey = `${entry.registry || ""}|${keyLabelEntry}`.toLocaleLowerCase("fr-FR");
     const latestCreation = latestCreationByKey.get(mapKey);
+    if (isCreationSheet) return !latestCreation || latestCreation.id === entry.id;
+
     return !latestCreation || latestCreation.timestamp <= entry.timestamp;
   });
   const registryEntries = ["location", "transaction"].flatMap(getRegistryHistoryEntries).map((entry) => ({
