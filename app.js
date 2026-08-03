@@ -544,10 +544,16 @@ async function loadStorageFromCloud() {
   if (hasLoadedCloudState && document.visibilityState === "hidden") return;
   isCloudCheckRunning = true;
   await pendingCloudSync.catch(() => {});
-  await retryFailedCloudSyncs();
-  if (dirtyCloudKeys.size) {
-    isCloudCheckRunning = false;
-    return;
+  if (hasLoadedCloudState) {
+    await retryFailedCloudSyncs();
+    if (dirtyCloudKeys.size) {
+      isCloudCheckRunning = false;
+      return;
+    }
+  } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
+    dirtyCloudKeys.clear();
+    failedCloudSyncKeys.clear();
+    savePendingCloudKeys();
   }
   try {
     if (!hasLoadedCloudState) {
@@ -5058,7 +5064,6 @@ keySetPhotoList.addEventListener("change", (event) => {
 async function initializeApp() {
   migrateArchivedSlots();
   ensureDeviceName();
-  if (dirtyCloudKeys.size) await syncCurrentRegistryToCloud();
   await loadStorageFromCloud();
   await migrateStoredPropertyAddresses();
   await optimizeStoredPhotos();
