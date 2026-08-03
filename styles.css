@@ -739,6 +739,10 @@ h3 {
   min-width: 190px;
 }
 
+.filled-export-button span {
+  transform: translateY(-2px);
+}
+
 .saved-backup-actions {
   display: flex;
   gap: 8px;
