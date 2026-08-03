@@ -318,6 +318,7 @@ h3 {
 .filled-export-button,
 .history-data-button,
 .backup-button,
+.saved-backups-button,
 .import-button,
 .undo-button,
 .contact-form button,
@@ -693,7 +694,7 @@ h3 {
   border: 1px solid #6f8fa0;
   font-size: 12px;
   font-family: inherit;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
 }
 
