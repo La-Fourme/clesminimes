@@ -475,9 +475,31 @@ function syncStorageKeyToCloud(storageKey) {
 
   const value = localStorage.getItem(storageKey);
   const updatedAt = new Date().toISOString();
+  const expectedUpdatedAt = cloudRowVersions.get(storageKey) || null;
   pendingCloudSync = pendingCloudSync
     .catch(() => {})
     .then(async () => {
+      const { data: remoteRow, error: versionError } = await supabaseClient
+        .from("app_state")
+        .select("key,value,updated_at")
+        .eq("key", storageKey)
+        .maybeSingle();
+      if (versionError) throw versionError;
+
+      const remoteUpdatedAt = remoteRow?.updated_at || "";
+      if (remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
+        isApplyingCloudState = true;
+        saveStorageValue(remoteRow.key, stringifyCloudValue(remoteRow.value));
+        isApplyingCloudState = false;
+        cloudRowVersions.set(remoteRow.key, remoteUpdatedAt);
+        dirtyCloudKeys.delete(storageKey);
+        failedCloudSyncKeys.delete(storageKey);
+        savePendingCloudKeys();
+        saveCloudRowVersions();
+        refreshDataFromStorage({ keepSelection: true });
+        return;
+      }
+
       const request =
         value === null
           ? supabaseClient.from("app_state").delete().eq("key", storageKey)
@@ -485,9 +507,19 @@ function syncStorageKeyToCloud(storageKey) {
               key: storageKey,
               value: parseStorageValue(value),
               updated_at: updatedAt,
+              expected_updated_at: expectedUpdatedAt,
             });
 
-      const { error } = await request;
+      let { error } = await request;
+      if (error && /expected_updated_at/i.test(error.message || "") && value !== null) {
+        const fallbackRequest = supabaseClient.from("app_state").upsert({
+          key: storageKey,
+          value: parseStorageValue(value),
+          updated_at: updatedAt,
+        });
+        const fallbackResult = await fallbackRequest;
+        error = fallbackResult.error;
+      }
       if (error) {
         dirtyCloudKeys.add(storageKey);
         failedCloudSyncKeys.add(storageKey);
