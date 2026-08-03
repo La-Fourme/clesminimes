@@ -2071,7 +2071,7 @@ function isAutomaticBackupRow(row) {
   return String(row?.key || "").startsWith(automaticBackupKeyPrefix);
 }
 
-async function loadSavedBackupRows(limit = 7) {
+async function loadSavedBackupRows(limit = 4) {
   if (!supabaseClient) return [];
   const { data, error } = await supabaseClient
     .from("app_state")
@@ -2092,7 +2092,7 @@ async function pruneOldAutomaticBackups() {
     .order("key", { ascending: false });
   if (error || !Array.isArray(data)) return;
 
-  const oldKeys = data.filter(isAutomaticBackupRow).slice(7).map((row) => row.key);
+  const oldKeys = data.filter(isAutomaticBackupRow).slice(4).map((row) => row.key);
   await Promise.all(oldKeys.map((key) => supabaseClient.from("app_state").delete().eq("key", key)));
 }
 
@@ -2914,7 +2914,7 @@ async function renderSavedBackupsPanel() {
   savedBackupsList.append(loading);
 
   try {
-    const rows = await loadSavedBackupRows(7);
+    const rows = await loadSavedBackupRows(4);
     savedBackupsList.innerHTML = "";
     if (!rows.length) {
       const empty = document.createElement("li");
@@ -2972,6 +2972,10 @@ function updateImportButtonAvailability(event = {}) {
   const isUnlocked = Boolean(event.ctrlKey && event.shiftKey);
   importDataBtn.classList.toggle("is-unlocked", isUnlocked);
   importDataBtn.setAttribute("aria-disabled", String(!isUnlocked));
+
+  const isSavedBackupsUnlocked = Boolean(event.ctrlKey && event.altKey);
+  savedBackupsBtn.classList.toggle("is-unlocked", isSavedBackupsUnlocked);
+  savedBackupsBtn.setAttribute("aria-disabled", String(!isSavedBackupsUnlocked));
 }
 
 function importAllDataBackup(file) {
@@ -5203,7 +5207,13 @@ closeGlobalHistoryBtn.addEventListener("click", () => {
 });
 exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
 backupDataBtn.addEventListener("click", exportAllDataBackup);
-savedBackupsBtn.addEventListener("click", openSavedBackupsPanel);
+savedBackupsBtn.addEventListener("click", (event) => {
+  if (!event.ctrlKey || !event.altKey) {
+    return;
+  }
+
+  openSavedBackupsPanel();
+});
 closeSavedBackupsBtn.addEventListener("click", () => {
   savedBackupsPanel.hidden = true;
 });

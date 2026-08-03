@@ -701,8 +701,19 @@ h3 {
 }
 
 .saved-backups-button {
-  background: #8f6f45;
-  border-color: #b79a6d;
+  color: var(--ink);
+  background: #d8dcd8;
+  border-color: var(--line);
+  cursor: default;
+  opacity: 0.45;
+}
+
+.saved-backups-button.is-unlocked {
+  color: #f4f7f5;
+  background: #315d73;
+  border-color: #6f8fa0;
+  cursor: pointer;
+  opacity: 1;
 }
 
 .history-data-button .history-data-label {
