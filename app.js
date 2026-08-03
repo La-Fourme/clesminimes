@@ -1998,13 +1998,16 @@ function exportFilledDataCsv() {
       photos,
     ];
   });
-  const csv = [headers, ...rows].map((row) => row.map(csvEscape).join(";")).join("\n");
-  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const tableRows = rows
+    .map((row) => `<tr>${row.map((value) => `<td>${htmlEscape(value)}</td>`).join("")}</tr>`)
+    .join("");
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif;font-size:11pt}th,td{border:1px solid #999;padding:5px;vertical-align:top}th{background:#ddd;font-weight:bold}td{mso-number-format:"\\@";}</style></head><body><table><thead><tr>${headers.map((header) => `<th>${htmlEscape(header)}</th>`).join("")}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
+  const blob = new Blob([`\uFEFF${html}`], { type: "application/vnd.ms-excel;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   const stamp = new Date().toISOString().slice(0, 10);
   link.href = url;
-  link.download = `donnees-renseignees-${activeRegistry}-${stamp}.csv`;
+  link.download = `donnees-renseignees-${activeRegistry}-${stamp}.xls`;
   link.click();
   URL.revokeObjectURL(url);
 }
