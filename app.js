@@ -18,6 +18,7 @@ const photoOptimizationStorageKey = "cles-photo-optimization-560-v2";
 const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
+const automaticBackupKeyPrefix = "cles-auto-backup-";
 const cloudPollIntervalMs = 60000;
 const cloudWriteDebounceMs = 2000;
 const registryConfig = {
@@ -129,6 +130,10 @@ const closeGlobalHistoryBtn = document.querySelector("#closeGlobalHistoryBtn");
 const globalHistoryList = document.querySelector("#globalHistoryList");
 const exportFilledDataBtn = document.querySelector("#exportFilledDataBtn");
 const backupDataBtn = document.querySelector("#backupDataBtn");
+const savedBackupsBtn = document.querySelector("#savedBackupsBtn");
+const savedBackupsPanel = document.querySelector("#savedBackupsPanel");
+const closeSavedBackupsBtn = document.querySelector("#closeSavedBackupsBtn");
+const savedBackupsList = document.querySelector("#savedBackupsList");
 const importDataBtn = document.querySelector("#importDataBtn");
 const backupFileInput = document.querySelector("#backupFileInput");
 
@@ -467,12 +472,13 @@ function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
   );
 }
 
-function syncStorageKeyToCloud(storageKey) {
+function syncStorageKeyToCloud(storageKey, options = {}) {
   if (!supabaseClient) return Promise.resolve();
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.delete(storageKey);
   failedCloudSyncKeys.delete(storageKey);
 
+  const force = Boolean(options.force);
   const value = localStorage.getItem(storageKey);
   const updatedAt = new Date().toISOString();
   const expectedUpdatedAt = cloudRowVersions.get(storageKey) || null;
@@ -487,7 +493,7 @@ function syncStorageKeyToCloud(storageKey) {
       if (versionError) throw versionError;
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
-      if (remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
+      if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
         isApplyingCloudState = true;
         saveStorageValue(remoteRow.key, stringifyCloudValue(remoteRow.value));
         isApplyingCloudState = false;
@@ -503,12 +509,20 @@ function syncStorageKeyToCloud(storageKey) {
       const request =
         value === null
           ? supabaseClient.from("app_state").delete().eq("key", storageKey)
-          : supabaseClient.from("app_state").upsert({
-              key: storageKey,
-              value: parseStorageValue(value),
-              updated_at: updatedAt,
-              expected_updated_at: expectedUpdatedAt,
-            });
+          : supabaseClient.from("app_state").upsert(
+              force
+                ? {
+                    key: storageKey,
+                    value: parseStorageValue(value),
+                    updated_at: updatedAt,
+                  }
+                : {
+                    key: storageKey,
+                    value: parseStorageValue(value),
+                    updated_at: updatedAt,
+                    expected_updated_at: expectedUpdatedAt,
+                  },
+            );
 
       let { error } = await request;
       if (error && /expected_updated_at/i.test(error.message || "") && value !== null) {
@@ -746,6 +760,7 @@ function switchRegistry() {
   compromisesPanel.hidden = true;
   archivesPanel.hidden = true;
   globalHistoryPanel.hidden = true;
+  savedBackupsPanel.hidden = true;
   clearTimeout(detailCloseTimer);
   clearTimeout(contactsCloseTimer);
   clearTimeout(archivesCloseTimer);
@@ -2012,26 +2027,131 @@ function exportFilledDataCsv() {
   URL.revokeObjectURL(url);
 }
 
-function exportAllDataBackup() {
+function createDataBackupPayload() {
   const data = {};
   getBackupStorageKeys().forEach((key) => {
     data[key] = localStorage.getItem(key);
   });
 
-  const payload = {
+  return {
     app: "century21-les-minimes-cles",
     version: 1,
     exportedAt: new Date().toISOString(),
     data,
   };
+}
+
+function downloadBackupPayload(payload, prefix = "sauvegarde-cles") {
   const stamp = new Date().toISOString().slice(0, 10);
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `sauvegarde-cles-${stamp}.json`;
+  link.download = `${prefix}-${stamp}.json`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function exportAllDataBackup() {
+  downloadBackupPayload(createDataBackupPayload());
+}
+
+function getLocalDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getAutomaticBackupKey(date = new Date()) {
+  return `${automaticBackupKeyPrefix}${getLocalDateKey(date)}`;
+}
+
+function isAutomaticBackupRow(row) {
+  return String(row?.key || "").startsWith(automaticBackupKeyPrefix);
+}
+
+async function loadSavedBackupRows(limit = 7) {
+  if (!supabaseClient) return [];
+  const { data, error } = await supabaseClient
+    .from("app_state")
+    .select("key,value,updated_at")
+    .like("key", `${automaticBackupKeyPrefix}%`)
+    .order("key", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return Array.isArray(data) ? data.filter(isAutomaticBackupRow) : [];
+}
+
+async function pruneOldAutomaticBackups() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from("app_state")
+    .select("key")
+    .like("key", `${automaticBackupKeyPrefix}%`)
+    .order("key", { ascending: false });
+  if (error || !Array.isArray(data)) return;
+
+  const oldKeys = data.filter(isAutomaticBackupRow).slice(7).map((row) => row.key);
+  await Promise.all(oldKeys.map((key) => supabaseClient.from("app_state").delete().eq("key", key)));
+}
+
+async function createAutomaticBackup({ force = false } = {}) {
+  if (!supabaseClient) return false;
+  await pendingCloudSync.catch(() => {});
+  await syncCurrentRegistryToCloud();
+
+  const backupKey = getAutomaticBackupKey();
+  if (!force) {
+    const { data: existingBackup } = await supabaseClient
+      .from("app_state")
+      .select("key")
+      .eq("key", backupKey)
+      .maybeSingle();
+    if (existingBackup) return false;
+  }
+
+  const payload = createDataBackupPayload();
+  const updatedAt = new Date().toISOString();
+  const { error } = await supabaseClient.from("app_state").upsert({
+    key: backupKey,
+    value: payload,
+    updated_at: updatedAt,
+  });
+  if (error) throw error;
+  await pruneOldAutomaticBackups();
+  return true;
+}
+
+function getNextAutomaticBackupDelay() {
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(23, 59, 0, 0);
+  if (target <= now) target.setDate(target.getDate() + 1);
+  return target.getTime() - now.getTime();
+}
+
+function scheduleAutomaticBackup() {
+  window.setTimeout(async () => {
+    try {
+      await createAutomaticBackup();
+      if (!savedBackupsPanel.hidden) renderSavedBackupsPanel();
+    } catch (error) {
+      console.warn("Automatic backup failed", error.message);
+    } finally {
+      scheduleAutomaticBackup();
+    }
+  }, getNextAutomaticBackupDelay());
+}
+
+async function ensureTodaysAutomaticBackupIfLate() {
+  const now = new Date();
+  if (now.getHours() < 23 || (now.getHours() === 23 && now.getMinutes() < 59)) return;
+  try {
+    await createAutomaticBackup();
+  } catch (error) {
+    console.warn("Automatic backup catch-up failed", error.message);
+  }
 }
 
 function refreshDataFromStorage({ keepSelection = false } = {}) {
@@ -2048,6 +2168,7 @@ function refreshDataFromStorage({ keepSelection = false } = {}) {
   if (!keepSelection) {
     contactsPanel.hidden = true;
     archivesPanel.hidden = true;
+    savedBackupsPanel.hidden = true;
     clearSignature();
   }
   updateRegistryHeader();
@@ -2220,6 +2341,7 @@ function openHistoryKey(entryData) {
   contactsPanel.hidden = true;
   archivesPanel.hidden = true;
   compromisesPanel.hidden = true;
+  savedBackupsPanel.hidden = true;
   clearTimeout(detailCloseTimer);
   clearTimeout(contactsCloseTimer);
   clearTimeout(archivesCloseTimer);
@@ -2746,8 +2868,104 @@ function openGlobalHistoryPanel(registryFilter = "") {
   contactsPanel.hidden = true;
   archivesPanel.hidden = true;
   compromisesPanel.hidden = true;
+  savedBackupsPanel.hidden = true;
   globalHistoryPanel.hidden = false;
   renderGlobalHistoryPanel(registryFilter);
+}
+
+function formatSavedBackupDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date non renseignée";
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function applyBackupPayload(payload, sourceLabel = "cette sauvegarde") {
+  if (payload?.app !== "century21-les-minimes-cles" || !payload.data || typeof payload.data !== "object") {
+    alert("Cette sauvegarde n'est pas lisible.");
+    return;
+  }
+
+  const confirmed = confirm(`Appliquer ${sourceLabel} remplacera les données actuelles du tableau. Continuer ?`);
+  if (!confirmed) return;
+
+  rememberUndoStep();
+  const changedKeys = [];
+  getBackupStorageKeys().forEach((key) => {
+    const value = payload.data[key];
+    if (localStorage.getItem(key) === value) return;
+    saveStorageValue(key, value);
+    changedKeys.push(key);
+  });
+  changedKeys.forEach((key) => dirtyCloudKeys.add(key));
+  savePendingCloudKeys();
+  Promise.all(changedKeys.map((key) => syncStorageKeyToCloud(key, { force: true })));
+  logActivity("Application sauvegarde", "Répertoire des sauvegardes", sourceLabel);
+  refreshDataFromStorage();
+  alert("Sauvegarde appliquée.");
+}
+
+async function renderSavedBackupsPanel() {
+  savedBackupsList.innerHTML = "";
+  const loading = document.createElement("li");
+  loading.textContent = "Chargement des sauvegardes...";
+  savedBackupsList.append(loading);
+
+  try {
+    const rows = await loadSavedBackupRows(7);
+    savedBackupsList.innerHTML = "";
+    if (!rows.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "Aucune sauvegarde automatique disponible.";
+      savedBackupsList.append(empty);
+      return;
+    }
+
+    rows.forEach((row, index) => {
+      const payload = row.value || {};
+      const item = document.createElement("li");
+      const title = document.createElement("strong");
+      const meta = document.createElement("small");
+      const actions = document.createElement("div");
+      const applyButton = document.createElement("button");
+      const downloadButton = document.createElement("button");
+      const createdAt = payload.exportedAt || row.updated_at;
+
+      title.textContent = `Sauvegarde ${index + 1}`;
+      meta.textContent = formatSavedBackupDate(createdAt);
+      actions.className = "saved-backup-actions";
+      applyButton.type = "button";
+      applyButton.textContent = "Appliquer";
+      downloadButton.type = "button";
+      downloadButton.textContent = "Télécharger";
+
+      applyButton.addEventListener("click", () => applyBackupPayload(payload, `la sauvegarde du ${formatSavedBackupDate(createdAt)}`));
+      downloadButton.addEventListener("click", () => downloadBackupPayload(payload, "sauvegarde-auto-cles"));
+
+      actions.append(applyButton, downloadButton);
+      item.append(title, meta, actions);
+      savedBackupsList.append(item);
+    });
+  } catch (error) {
+    savedBackupsList.innerHTML = "";
+    const item = document.createElement("li");
+    item.textContent = "Impossible de charger les sauvegardes automatiques.";
+    savedBackupsList.append(item);
+    console.warn("Saved backups load failed", error.message);
+  }
+}
+
+function openSavedBackupsPanel() {
+  clearTimeout(contactsCloseTimer);
+  clearTimeout(archivesCloseTimer);
+  contactsPanel.hidden = true;
+  archivesPanel.hidden = true;
+  compromisesPanel.hidden = true;
+  globalHistoryPanel.hidden = true;
+  savedBackupsPanel.hidden = false;
+  renderSavedBackupsPanel();
 }
 
 function updateImportButtonAvailability(event = {}) {
@@ -2767,29 +2985,8 @@ function importAllDataBackup(file) {
       return;
     }
 
-    if (parsed?.app !== "century21-les-minimes-cles" || !parsed.data || typeof parsed.data !== "object") {
-      alert("Ce fichier ne correspond pas à une sauvegarde du registre de clés.");
-      return;
-    }
-
-    const confirmed = confirm("Importer cette sauvegarde remplacera les données actuelles. Continuer ?");
-    if (!confirmed) return;
-
-    rememberUndoStep();
-    const changedKeys = [];
-    getBackupStorageKeys().forEach((key) => {
-      const value = parsed.data[key];
-      if (localStorage.getItem(key) === value) return;
-      saveStorageValue(key, value);
-      changedKeys.push(key);
-    });
-    changedKeys.forEach((key) => dirtyCloudKeys.add(key));
-    savePendingCloudKeys();
-    Promise.all(changedKeys.map(syncStorageKeyToCloud));
-    logActivity("Import sauvegarde", "Données globales", file.name || "Fichier JSON");
-
-    refreshDataFromStorage();
-    alert("Sauvegarde importée.");
+    applyBackupPayload(parsed, file.name || "ce fichier JSON");
+    return;
   });
   reader.readAsText(file);
 }
@@ -2995,6 +3192,7 @@ function openArchivedKeyRecord(record) {
   clearTimeout(archivesCloseTimer);
   archivesPanel.hidden = true;
   compromisesPanel.hidden = true;
+  savedBackupsPanel.hidden = true;
   render();
 }
 
@@ -4588,6 +4786,7 @@ function openContactsPanel() {
   compromisesPanel.hidden = true;
   archivesPanel.hidden = true;
   globalHistoryPanel.hidden = true;
+  savedBackupsPanel.hidden = true;
   contactsPanel.hidden = false;
   renderContactsPanel();
 }
@@ -4598,6 +4797,7 @@ function openCompromisesPanel() {
   contactsPanel.hidden = true;
   archivesPanel.hidden = true;
   globalHistoryPanel.hidden = true;
+  savedBackupsPanel.hidden = true;
   compromisesPanel.hidden = false;
   renderCompromisesPanel();
 }
@@ -4608,6 +4808,7 @@ function openArchivesPanel() {
   contactsPanel.hidden = true;
   compromisesPanel.hidden = true;
   globalHistoryPanel.hidden = true;
+  savedBackupsPanel.hidden = true;
   archivesPanel.hidden = false;
   renderArchivesPanel();
 }
@@ -5002,6 +5203,10 @@ closeGlobalHistoryBtn.addEventListener("click", () => {
 });
 exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
 backupDataBtn.addEventListener("click", exportAllDataBackup);
+savedBackupsBtn.addEventListener("click", openSavedBackupsPanel);
+closeSavedBackupsBtn.addEventListener("click", () => {
+  savedBackupsPanel.hidden = true;
+});
 function updateCtrlMode(event = {}) {
   document.body.classList.toggle("is-ctrl-pressed", Boolean(event.ctrlKey));
 }
@@ -5102,6 +5307,8 @@ async function initializeApp() {
   await loadStorageFromCloud();
   await migrateStoredPropertyAddresses();
   await optimizeStoredPhotos();
+  await ensureTodaysAutomaticBackupIfLate();
+  scheduleAutomaticBackup();
   updateRegistryHeader();
   updateTileViewToggle();
   updateUndoButton();

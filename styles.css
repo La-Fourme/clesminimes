@@ -677,13 +677,14 @@ h3 {
 
 .backup-actions {
   display: grid;
-  grid-template-columns: repeat(5, auto);
+  grid-template-columns: repeat(6, auto);
   gap: 7px;
 }
 
 .filled-export-button,
 .history-data-button,
-.backup-button {
+.backup-button,
+.saved-backups-button {
   min-height: 34px;
   padding: 0 10px;
   border-radius: 7px;
@@ -695,6 +696,11 @@ h3 {
 
 .history-data-button {
   color: #f4f7f5;
+  background: #8f6f45;
+  border-color: #b79a6d;
+}
+
+.saved-backups-button {
   background: #8f6f45;
   border-color: #b79a6d;
 }
@@ -716,6 +722,29 @@ h3 {
 
 .filled-export-button {
   min-width: 190px;
+}
+
+.saved-backup-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.saved-backup-actions button {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: #d8dcd8;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.saved-backup-actions button:first-child {
+  color: #f4f7f5;
+  background: #315d73;
+  border-color: #6f8fa0;
 }
 
 .import-button {
