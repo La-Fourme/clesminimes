@@ -692,6 +692,9 @@ h3 {
   background: #315d73;
   border: 1px solid #6f8fa0;
   font-size: 12px;
+  font-family: inherit;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .history-data-button {

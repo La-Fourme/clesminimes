@@ -2902,7 +2902,7 @@ function applyBackupPayload(payload, sourceLabel = "cette sauvegarde") {
   changedKeys.forEach((key) => dirtyCloudKeys.add(key));
   savePendingCloudKeys();
   Promise.all(changedKeys.map((key) => syncStorageKeyToCloud(key, { force: true })));
-  logActivity("Application sauvegarde", "Répertoire des sauvegardes", sourceLabel);
+  logActivity("Application sauvegarde", "Liste des sauvegardes", sourceLabel);
   refreshDataFromStorage();
   alert("Sauvegarde appliquée.");
 }
@@ -2973,7 +2973,7 @@ function updateImportButtonAvailability(event = {}) {
   importDataBtn.classList.toggle("is-unlocked", isUnlocked);
   importDataBtn.setAttribute("aria-disabled", String(!isUnlocked));
 
-  const isSavedBackupsUnlocked = Boolean(event.ctrlKey && event.altKey);
+  const isSavedBackupsUnlocked = Boolean(event.ctrlKey && event.shiftKey);
   savedBackupsBtn.classList.toggle("is-unlocked", isSavedBackupsUnlocked);
   savedBackupsBtn.setAttribute("aria-disabled", String(!isSavedBackupsUnlocked));
 }
@@ -5208,7 +5208,7 @@ closeGlobalHistoryBtn.addEventListener("click", () => {
 exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
 backupDataBtn.addEventListener("click", exportAllDataBackup);
 savedBackupsBtn.addEventListener("click", (event) => {
-  if (!event.ctrlKey || !event.altKey) {
+  if (!event.ctrlKey || !event.shiftKey) {
     return;
   }
 
