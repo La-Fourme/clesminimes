@@ -494,6 +494,28 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
+        if ((dirtyCloudKeys.has(storageKey) || isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) && value !== null) {
+          const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
+            key: storageKey,
+            value: parseStorageValue(value),
+            updated_at: updatedAt,
+          });
+          if (localSaveError) {
+            dirtyCloudKeys.add(storageKey);
+            failedCloudSyncKeys.add(storageKey);
+            savePendingCloudKeys();
+            console.warn("Supabase sync failed", storageKey, localSaveError.message);
+            return;
+          }
+
+          failedCloudSyncKeys.delete(storageKey);
+          dirtyCloudKeys.delete(storageKey);
+          cloudRowVersions.set(storageKey, updatedAt);
+          savePendingCloudKeys();
+          saveCloudRowVersions();
+          return;
+        }
+
         isApplyingCloudState = true;
         saveStorageValue(remoteRow.key, stringifyCloudValue(remoteRow.value));
         isApplyingCloudState = false;
@@ -1540,6 +1562,25 @@ function isKeyFormBeingEdited() {
       form.contains(activeElement) &&
       ["INPUT", "TEXTAREA", "SELECT"].includes(activeElement.tagName),
   );
+}
+
+function isProtectedKeyInfoInputActive() {
+  return protectedKeyInfoInputs.includes(document.activeElement);
+}
+
+function getKeyInfoDraftChanges() {
+  return {
+    property: formatPropertyAddress(propertyInput.value),
+    postalCode: postalCodeInput.value,
+    city: formatCity(cityInput.value),
+    owner: formatOwner(ownerInput.value),
+    ownerFirstName: formatFirstName(ownerFirstNameInput.value),
+    notes: notesInput.value,
+  };
+}
+
+function updateSelectedKeyInfoFromDraft() {
+  updateSelectedKey(getKeyInfoDraftChanges());
 }
 
 function isTouchLayout() {
@@ -3889,12 +3930,14 @@ function renderPanel() {
   keySetCountSelect.value = String(key.sets.length);
   renderKeySetSelect(key);
   renderKeySetPhotos(key);
-  propertyInput.value = key.property;
-  postalCodeInput.value = key.postalCode || "";
-  cityInput.value = key.city || "";
-  ownerInput.value = formatOwner(key.owner);
-  ownerFirstNameInput.value = formatFirstName(key.ownerFirstName);
-  notesInput.value = key.notes;
+  if (!isProtectedKeyInfoInputActive()) {
+    propertyInput.value = key.property;
+    postalCodeInput.value = key.postalCode || "";
+    cityInput.value = key.city || "";
+    ownerInput.value = formatOwner(key.owner);
+    ownerFirstNameInput.value = formatFirstName(key.ownerFirstName);
+    notesInput.value = key.notes;
+  }
   const isKeyInfoLocked = !isArchiveView && hasProtectedKeyInfo(key) && !isKeyInfoEditUnlocked;
   form.classList.toggle("is-key-info-locked", isKeyInfoLocked);
   protectedKeyInfoInputs.forEach((input) => {
@@ -4906,35 +4949,35 @@ function clearSignature() {
 
 propertyInput.addEventListener(
   "input",
-  debounce(() => updateSelectedKey({ property: formatPropertyAddress(propertyInput.value) })),
+  debounce(updateSelectedKeyInfoFromDraft),
 );
 propertyInput.addEventListener("blur", () => {
   propertyInput.value = formatPropertyAddress(propertyInput.value);
-  updateSelectedKey({ property: propertyInput.value });
+  updateSelectedKeyInfoFromDraft();
 });
-postalCodeInput.addEventListener("input", debounce(() => updateSelectedKey({ postalCode: postalCodeInput.value })));
-cityInput.addEventListener("input", debounce(() => updateSelectedKey({ city: formatCity(cityInput.value) })));
+postalCodeInput.addEventListener("input", debounce(updateSelectedKeyInfoFromDraft));
+cityInput.addEventListener("input", debounce(updateSelectedKeyInfoFromDraft));
 cityInput.addEventListener("blur", () => {
   cityInput.value = formatCity(cityInput.value);
-  updateSelectedKey({ city: cityInput.value });
+  updateSelectedKeyInfoFromDraft();
 });
 ownerInput.addEventListener(
   "input",
-  debounce(() => updateSelectedKey({ owner: formatOwner(ownerInput.value) })),
+  debounce(updateSelectedKeyInfoFromDraft),
 );
 ownerInput.addEventListener("blur", () => {
   ownerInput.value = formatOwner(ownerInput.value).trim();
-  updateSelectedKey({ owner: ownerInput.value });
+  updateSelectedKeyInfoFromDraft();
 });
 ownerFirstNameInput.addEventListener(
   "input",
-  debounce(() => updateSelectedKey({ ownerFirstName: formatFirstName(ownerFirstNameInput.value) })),
+  debounce(updateSelectedKeyInfoFromDraft),
 );
 ownerFirstNameInput.addEventListener("blur", () => {
   ownerFirstNameInput.value = formatFirstName(ownerFirstNameInput.value);
-  updateSelectedKey({ ownerFirstName: ownerFirstNameInput.value });
+  updateSelectedKeyInfoFromDraft();
 });
-notesInput.addEventListener("input", debounce(() => updateSelectedKey({ notes: notesInput.value })));
+notesInput.addEventListener("input", debounce(updateSelectedKeyInfoFromDraft));
 protectedKeyInfoInputs.forEach((input) => {
   input.addEventListener("dblclick", unlockKeyInfoEdit);
 });
