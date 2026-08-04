@@ -21,6 +21,7 @@ const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
 const cloudPollIntervalMs = 10000;
 const cloudWriteDebounceMs = 2000;
+const recentLocalEditProtectionMs = 5 * 60 * 1000;
 const registryConfig = {
   location: {
     title: "LOCATION",
@@ -178,6 +179,7 @@ let dirtyCloudKeys = loadPendingCloudKeys();
 let cloudRowVersions = loadCloudRowVersions();
 let hasLoadedCloudState = false;
 let isCloudCheckRunning = false;
+let directCloudWriteToken = 0;
 
 function markLocalEdit() {
   if (isApplyingCloudState) return;
@@ -718,10 +720,13 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
   const value = localStorage.getItem(storageKey);
   const updatedAt = new Date().toISOString();
   const expectedUpdatedAt = cloudRowVersions.get(storageKey) || null;
+  const syncToken = directCloudWriteToken;
   pendingCloudSync = pendingCloudSync
     .catch(() => {})
     .then(async () => {
+      if (!force && syncToken !== directCloudWriteToken) return;
       const remoteRow = await selectCloudRow(storageKey);
+      if (!force && syncToken !== directCloudWriteToken) return;
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
@@ -852,7 +857,10 @@ async function writeOptionalStorageKeyDirectlyToCloud(storageKey) {
 
 async function forceCurrentRegistryToCloud() {
   const config = getRegistryConfig();
-  await pendingCloudSync.catch(() => {});
+  directCloudWriteToken += 1;
+  failedCloudSyncKeys.clear();
+  dirtyCloudKeys.clear();
+  savePendingCloudKeys();
   await writeStorageKeyDirectlyToCloud(registryStorageKey);
   await writeStorageKeyDirectlyToCloud(config.keysStorageKey);
   await writeStorageKeyDirectlyToCloud(config.archivesStorageKey);
@@ -869,6 +877,14 @@ function removeAutomaticBackupsFromLocalStorage() {
     .forEach((key) => localStorage.removeItem(key));
 }
 
+function hasRecentLocalEdit() {
+  return Date.now() - lastLocalEditAt < recentLocalEditProtectionMs;
+}
+
+function hasLocalRegistryData() {
+  return parseStoredArray(getRegistryConfig().keysStorageKey, []).some(isKeyFilled);
+}
+
 function closeKeyPanelAfterAction() {
   selectedId = null;
   selectedArchiveRecord = null;
@@ -882,7 +898,6 @@ async function syncCloudAfterAction() {
     await forceCurrentRegistryToCloud();
   } catch (error) {
     console.warn("Supabase action sync failed", error.message);
-    alert("La synchronisation en ligne a échoué. Vérifie la connexion puis réessaie avant de fermer la page.");
   }
 }
 
@@ -891,7 +906,6 @@ async function syncArchiveActionToCloud() {
     await forceCurrentRegistryToCloud();
   } catch (error) {
     console.warn("Supabase archive sync failed", error.message);
-    alert("La synchronisation en ligne a échoué. Vérifie la connexion puis réessaie avant de fermer la page.");
   }
 }
 
@@ -920,6 +934,11 @@ async function loadStorageFromCloud() {
         keys: getBackupStorageKeys(),
       });
       if (!Array.isArray(data) || !data.length) {
+        hasLoadedCloudState = true;
+        return;
+      }
+      if (hasRecentLocalEdit() && hasLocalRegistryData()) {
+        await forceCurrentRegistryToCloud();
         hasLoadedCloudState = true;
         return;
       }
