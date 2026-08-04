@@ -2951,6 +2951,65 @@ function formatSavedBackupDate(value) {
   }).format(date);
 }
 
+function parseBackupStorageArray(payload, storageKey) {
+  const value = payload?.data?.[storageKey];
+  if (!value) return [];
+
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function summarizeBackupRegistry(payload, registry) {
+  const config = registryConfig[registry];
+  const backupKeys = parseBackupStorageArray(payload, config.keysStorageKey).map(normalizeKey);
+  return backupKeys.reduce(
+    (summary, key) => {
+      if (key.archived || !isKeyFilled(key)) return summary;
+
+      (key.sets || []).forEach((set) => {
+        const status = getSetDisplayStatus(set);
+        summary.total += 1;
+        if (status === "out") summary.out += 1;
+        else if (status === "reserved") summary.reserved += 1;
+        else summary.available += 1;
+        if (set.photo) summary.photos += 1;
+      });
+
+      return summary;
+    },
+    { total: 0, available: 0, reserved: 0, out: 0, photos: 0 },
+  );
+}
+
+function createSavedBackupSummaryElement(payload) {
+  const summary = document.createElement("dl");
+  summary.className = "saved-backup-summary";
+
+  [
+    ["Location", summarizeBackupRegistry(payload, "location")],
+    ["Transaction", summarizeBackupRegistry(payload, "transaction")],
+  ].forEach(([label, counts]) => {
+    const term = document.createElement("dt");
+    const detail = document.createElement("dd");
+
+    term.textContent = label;
+    detail.textContent =
+      `${counts.total} jeux au total - ` +
+      `${counts.available} disponibles - ` +
+      `${counts.reserved} réservés - ` +
+      `${counts.out} indisponibles - ` +
+      `${counts.photos} photos`;
+
+    summary.append(term, detail);
+  });
+
+  return summary;
+}
+
 function applyBackupPayload(payload, sourceLabel = "cette sauvegarde") {
   if (payload?.app !== "century21-les-minimes-cles" || !payload.data || typeof payload.data !== "object") {
     alert("Cette sauvegarde n'est pas lisible.");
@@ -2997,6 +3056,7 @@ async function renderSavedBackupsPanel() {
       const item = document.createElement("li");
       const title = document.createElement("strong");
       const meta = document.createElement("small");
+      const summary = createSavedBackupSummaryElement(payload);
       const actions = document.createElement("div");
       const applyButton = document.createElement("button");
       const downloadButton = document.createElement("button");
@@ -3014,7 +3074,7 @@ async function renderSavedBackupsPanel() {
       downloadButton.addEventListener("click", () => downloadBackupPayload(payload, "sauvegarde-auto-cles"));
 
       actions.append(applyButton, downloadButton);
-      item.append(title, meta, actions);
+      item.append(title, meta, summary, actions);
       savedBackupsList.append(item);
     });
   } catch (error) {

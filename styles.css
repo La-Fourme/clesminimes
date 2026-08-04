@@ -743,6 +743,24 @@ h3 {
   transform: translateY(-2px);
 }
 
+.saved-backup-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  margin: 9px 0 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.saved-backup-summary dt {
+  font-weight: 900;
+}
+
+.saved-backup-summary dd {
+  margin: 0;
+}
+
 .saved-backup-actions {
   display: flex;
   gap: 8px;
