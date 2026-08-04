@@ -493,10 +493,15 @@ async function deleteCloudRow(key) {
 }
 
 function saveStorageValue(storageKey, value) {
-  if (typeof value === "string") {
-    localStorage.setItem(storageKey, value);
-  } else {
-    localStorage.removeItem(storageKey);
+  try {
+    if (typeof value === "string") {
+      localStorage.setItem(storageKey, value);
+    } else {
+      localStorage.removeItem(storageKey);
+    }
+  } catch (error) {
+    console.warn("Local storage save failed", storageKey, error.message);
+    throw error;
   }
 }
 
@@ -836,11 +841,6 @@ async function loadStorageFromCloud() {
   if (hasLoadedCloudState && document.visibilityState === "hidden") return;
   isCloudCheckRunning = true;
   await pendingCloudSync.catch(() => {});
-  if (!hasLoadedCloudState && (dirtyCloudKeys.size || failedCloudSyncKeys.size)) {
-    dirtyCloudKeys.clear();
-    failedCloudSyncKeys.clear();
-    savePendingCloudKeys();
-  }
   try {
     if (!hasLoadedCloudState) {
       const data = await requestCloudRows({
@@ -854,7 +854,17 @@ async function loadStorageFromCloud() {
       }
 
       isApplyingCloudState = true;
+      const keysToResync = [];
       data.forEach((row) => {
+        if (dirtyCloudKeys.has(row.key) && canMergeCloudStorageKey(row.key)) {
+          const mergedValue = mergeCloudConflictValue(row.key, localStorage.getItem(row.key), row.value);
+          saveStorageValue(row.key, stringifyCloudValue(mergedValue));
+          cloudRowVersions.set(row.key, row.updated_at || "");
+          keysToResync.push(row.key);
+          return;
+        }
+
+        if (dirtyCloudKeys.has(row.key)) return;
         saveStorageValue(row.key, stringifyCloudValue(row.value));
         cloudRowVersions.set(row.key, row.updated_at || "");
       });
@@ -862,6 +872,10 @@ async function loadStorageFromCloud() {
       hasLoadedCloudState = true;
       saveCloudRowVersions();
       refreshDataFromStorage({ keepSelection: true });
+      keysToResync.forEach((key) => scheduleStorageKeySync(key, 0));
+      if (!keysToResync.length && dirtyCloudKeys.size) {
+        retryPendingCloudSyncs();
+      }
       return;
     }
 
@@ -876,8 +890,14 @@ async function loadStorageFromCloud() {
       .filter((row) => cloudRowVersions.get(row.key) !== (row.updated_at || "") || localStorage.getItem(row.key) === null)
       .map((row) => row.key);
     const deletedKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
-    if (!changedKeys.length && !deletedKeys.length) return;
-    if (isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) return;
+    if (!changedKeys.length && !deletedKeys.length) {
+      if (dirtyCloudKeys.size) retryPendingCloudSyncs();
+      return;
+    }
+    if (isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) {
+      if (dirtyCloudKeys.size) retryPendingCloudSyncs();
+      return;
+    }
 
     let changedRows = [];
     if (changedKeys.length) {
