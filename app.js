@@ -663,25 +663,22 @@ function subscribeToCloudChanges() {
       { event: "*", schema: "public", table: "app_state" },
       (payload) => {
         const storageKey = payload.new?.key || payload.old?.key || "";
-        if (getBackupStorageKeys().includes(storageKey)) loadStorageFromCloud();
+        if (getBackupStorageKeys().includes(storageKey)) loadStorageFromCloud({ force: true });
       },
     )
     .subscribe();
 }
 
-async function loadStorageFromCloud() {
+async function loadStorageFromCloud(options = {}) {
+  const force = Boolean(options.force);
   if (!supabaseClient) return;
   if (isPhotoImporting) return;
   if (isCloudCheckRunning) return;
-  if (hasLoadedCloudState && document.visibilityState === "hidden") return;
+  if (!force && hasLoadedCloudState && document.visibilityState === "hidden") return;
   isCloudCheckRunning = true;
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
     await retryFailedCloudSyncs();
-    if (dirtyCloudKeys.size) {
-      isCloudCheckRunning = false;
-      return;
-    }
   } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
     dirtyCloudKeys.clear();
     failedCloudSyncKeys.clear();
@@ -729,7 +726,7 @@ async function loadStorageFromCloud() {
       .map((row) => row.key);
     const deletedKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
     if (!changedKeys.length && !deletedKeys.length) return;
-    if (isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) return;
+    if (isKeyPanelOpen() || isKeyFormBeingEdited()) return;
 
     let changedRows = [];
     if (changedKeys.length) {
