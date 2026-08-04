@@ -20,7 +20,7 @@ const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
 const cloudPollIntervalMs = 60000;
-const cloudWriteDebounceMs = 2000;
+const cloudWriteDebounceMs = 700;
 const registryConfig = {
   location: {
     title: "LOCATION",
@@ -494,7 +494,10 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
-        if ((dirtyCloudKeys.has(storageKey) || isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) && value !== null) {
+        const remoteUpdatedAtTime = Date.parse(remoteUpdatedAt) || 0;
+        const hasRecentLocalChange = dirtyCloudKeys.has(storageKey) || Date.now() - lastLocalEditAt < 20000;
+        const localChangeLooksNewer = !remoteUpdatedAtTime || lastLocalEditAt >= remoteUpdatedAtTime - 5000;
+        if (hasRecentLocalChange && localChangeLooksNewer && value !== null) {
           const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
             key: storageKey,
             value: parseStorageValue(value),
@@ -581,6 +584,11 @@ function retryFailedCloudSyncs() {
   return Promise.all(keys.map(syncStorageKeyToCloud));
 }
 
+async function retryPendingCloudSyncs() {
+  await syncCurrentRegistryToCloud();
+  await retryFailedCloudSyncs();
+}
+
 function syncAllStorageToCloud() {
   return Promise.all(getBackupStorageKeys().map(syncStorageKeyToCloud));
 }
@@ -613,7 +621,7 @@ async function loadStorageFromCloud() {
   isCloudCheckRunning = true;
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
-    await retryFailedCloudSyncs();
+    await retryPendingCloudSyncs();
     if (dirtyCloudKeys.size) {
       isCloudCheckRunning = false;
       return;
@@ -5476,7 +5484,7 @@ async function initializeApp() {
   updateUndoButton();
   render();
   setInterval(loadStorageFromCloud, cloudPollIntervalMs);
-  setInterval(retryFailedCloudSyncs, 30000);
+  setInterval(retryPendingCloudSyncs, 30000);
 }
 
 document.addEventListener("visibilitychange", () => {
@@ -5491,7 +5499,7 @@ window.addEventListener("pagehide", () => {
   syncCurrentRegistryToCloud();
 });
 window.addEventListener("online", () => {
-  retryFailedCloudSyncs();
+  retryPendingCloudSyncs();
   loadStorageFromCloud();
 });
 window.addEventListener("resize", () => requestAnimationFrame(syncSignatureHeightToActions));
