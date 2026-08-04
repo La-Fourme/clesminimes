@@ -458,6 +458,107 @@ function savePendingCloudKeys() {
   localStorage.setItem(pendingCloudKeysStorageKey, JSON.stringify([...dirtyCloudKeys]));
 }
 
+function getRegistryByKeysStorageKey(storageKey) {
+  return Object.entries(registryConfig).find(([, config]) => config.keysStorageKey === storageKey)?.[0] || "";
+}
+
+function hasUsefulSetData(set) {
+  return Boolean(
+    set?.photo ||
+      set?.holder?.trim() ||
+      set?.holderCompany?.trim() ||
+      set?.holderPhone?.trim() ||
+      set?.holderReservationId ||
+      set?.needsCheckIn ||
+      set?.history?.length ||
+      hasActiveReservations(set),
+  );
+}
+
+function mergeById(localItems = [], remoteItems = []) {
+  const merged = new Map();
+  remoteItems.forEach((item) => {
+    if (item?.id) merged.set(item.id, item);
+  });
+  localItems.forEach((item) => {
+    if (!item?.id) return;
+    if (!merged.has(item.id)) merged.set(item.id, item);
+  });
+  return [...merged.values()];
+}
+
+function mergeKeySet(localSet, remoteSet) {
+  const local = normalizeSet(localSet || {});
+  const remote = normalizeSet(remoteSet || {});
+  const localHasData = hasUsefulSetData(local);
+  const remoteHasData = hasUsefulSetData(remote);
+
+  if (localHasData && !remoteHasData) return local;
+  if (remoteHasData && !localHasData) return remote;
+
+  const history = mergeById(local.history || [], remote.history || []);
+  const reservations = mergeById(local.reservations || [], remote.reservations || []).filter(isActiveReservation);
+
+  return repairSetMovementState({
+    ...remote,
+    photo: local.photo || remote.photo || "",
+    holder: local.holder || remote.holder || "",
+    holderCompany: local.holderCompany || remote.holderCompany || "",
+    holderPhone: local.holderPhone || remote.holderPhone || "",
+    holderReservationId: local.holderReservationId || remote.holderReservationId || "",
+    needsCheckIn: Boolean(local.needsCheckIn || remote.needsCheckIn),
+    needsCheckInReason: local.needsCheckInReason || remote.needsCheckInReason || "",
+    status: local.status === "out" || remote.status === "out" ? "out" : "available",
+    reservations,
+    history,
+  });
+}
+
+function mergeKeyRecord(localKey, remoteKey) {
+  const local = normalizeKey(localKey || {});
+  const remote = normalizeKey(remoteKey || {});
+  const localFilled = isKeyFilled(local);
+  const remoteFilled = isKeyFilled(remote);
+
+  if (localFilled && !remoteFilled) return local;
+  if (remoteFilled && !localFilled) return remote;
+
+  const maxSetCount = Math.max(local.sets?.length || 1, remote.sets?.length || 1, 1);
+  const sets = Array.from({ length: maxSetCount }, (_, index) => {
+    const fallback = makeKeySet(keySetOptions[index]?.id || "main");
+    return mergeKeySet(local.sets?.[index] || fallback, remote.sets?.[index] || fallback);
+  });
+
+  return normalizeKey({
+    ...remote,
+    property: local.property || remote.property || "",
+    postalCode: local.postalCode || remote.postalCode || "",
+    city: local.city || remote.city || "",
+    owner: local.owner || remote.owner || "",
+    ownerFirstName: local.ownerFirstName || remote.ownerFirstName || "",
+    notes: local.notes || remote.notes || "",
+    archived: Boolean(local.archived || remote.archived),
+    sets,
+  });
+}
+
+function mergeKeyCollections(localValue, remoteValue) {
+  const localKeys = Array.isArray(localValue) ? localValue.map(normalizeKey) : [];
+  const remoteKeys = Array.isArray(remoteValue) ? remoteValue.map(normalizeKey) : [];
+  const localMap = new Map(localKeys.map((key) => [key.id, key]));
+
+  return remoteKeys.map((remoteKey) => {
+    const localKey = localMap.get(remoteKey.id);
+    localMap.delete(remoteKey.id);
+    return localKey ? mergeKeyRecord(localKey, remoteKey) : remoteKey;
+  }).concat([...localMap.values()]);
+}
+
+function mergeCloudConflictValue(storageKey, localRawValue, remoteRawValue) {
+  if (!getRegistryByKeysStorageKey(storageKey)) return parseStorageValue(localRawValue);
+  return mergeKeyCollections(parseStorageValue(localRawValue), remoteRawValue);
+}
+
 function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
   if (!supabaseClient) return;
   dirtyCloudKeys.add(storageKey);
@@ -498,9 +599,10 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
         const hasRecentLocalChange = dirtyCloudKeys.has(storageKey) || Date.now() - lastLocalEditAt < 20000;
         const localChangeLooksNewer = !remoteUpdatedAtTime || lastLocalEditAt >= remoteUpdatedAtTime - 5000;
         if (hasRecentLocalChange && localChangeLooksNewer && value !== null) {
+          const mergedValue = mergeCloudConflictValue(storageKey, value, remoteRow.value);
           const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
             key: storageKey,
-            value: parseStorageValue(value),
+            value: mergedValue,
             updated_at: updatedAt,
           });
           if (localSaveError) {
@@ -513,6 +615,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
 
           failedCloudSyncKeys.delete(storageKey);
           dirtyCloudKeys.delete(storageKey);
+          saveStorageValue(storageKey, stringifyCloudValue(mergedValue));
           cloudRowVersions.set(storageKey, updatedAt);
           savePendingCloudKeys();
           saveCloudRowVersions();
