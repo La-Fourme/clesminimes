@@ -2951,6 +2951,14 @@ function formatSavedBackupDate(value) {
   }).format(date);
 }
 
+function formatSavedBackupTitleDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "date non renseignée";
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "full",
+  }).format(date);
+}
+
 function parseBackupStorageArray(payload, storageKey) {
   const value = payload?.data?.[storageKey];
   if (!value) return [];
@@ -3062,7 +3070,7 @@ async function renderSavedBackupsPanel() {
       const downloadButton = document.createElement("button");
       const createdAt = payload.exportedAt || row.updated_at;
 
-      title.textContent = `Sauvegarde ${index + 1}`;
+      title.textContent = `Sauvegarde du ${formatSavedBackupTitleDate(createdAt)}`;
       meta.textContent = formatSavedBackupDate(createdAt);
       actions.className = "saved-backup-actions";
       applyButton.type = "button";
