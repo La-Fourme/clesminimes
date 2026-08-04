@@ -176,7 +176,7 @@ let failedCloudSyncKeys = new Set();
 let cloudSyncTimers = new Map();
 let dirtyCloudKeys = loadPendingCloudKeys();
 let cloudRowVersions = loadCloudRowVersions();
-let hasLoadedCloudState = cloudRowVersions.size > 0;
+let hasLoadedCloudState = false;
 let isCloudCheckRunning = false;
 
 function markLocalEdit() {
@@ -814,6 +814,18 @@ function syncCurrentRegistryToCloud() {
   return Promise.all([...dirtyCloudKeys].map(syncStorageKeyToCloud));
 }
 
+async function forceCurrentRegistryToCloud() {
+  const config = getRegistryConfig();
+  await Promise.all([
+    syncStorageKeyToCloud(registryStorageKey, { force: true }),
+    syncStorageKeyToCloud(config.keysStorageKey, { force: true }),
+    syncStorageKeyToCloud(config.archivesStorageKey, { force: true }),
+    syncStorageKeyToCloud(sharedContactsStorageKey, { force: true }),
+    syncStorageKeyToCloud(appActivityLogStorageKey, { force: true }),
+    syncStorageKeyToCloud(hiddenGlobalHistoryStorageKey, { force: true }),
+  ]);
+}
+
 function removeAutomaticBackupsFromLocalStorage() {
   Object.keys(localStorage)
     .filter((key) => key.startsWith(automaticBackupKeyPrefix))
@@ -830,9 +842,11 @@ function closeKeyPanelAfterAction() {
 
 async function syncCloudAfterAction() {
   try {
-    await syncCurrentRegistryToCloud();
+    await forceCurrentRegistryToCloud();
+    await loadStorageFromCloud();
   } catch (error) {
     console.warn("Supabase action sync failed", error.message);
+    alert("La synchronisation en ligne a échoué. Vérifie la connexion puis réessaie avant de fermer la page.");
   }
 }
 
@@ -874,11 +888,6 @@ async function loadStorageFromCloud() {
         keys: getBackupStorageKeys(),
       });
       if (!Array.isArray(data) || !data.length) {
-        localStorage.setItem(registryStorageKey, activeRegistry);
-        localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
-        localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
-        localStorage.setItem(sharedContactsStorageKey, JSON.stringify(contacts));
-        await syncAllStorageToCloud();
         hasLoadedCloudState = true;
         return;
       }
