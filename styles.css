@@ -745,20 +745,34 @@ h3 {
 
 .saved-backup-summary {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 4px 10px;
-  margin: 9px 0 0;
+  gap: 7px;
+  margin: 10px 0 0;
   color: var(--ink);
   font-size: 12px;
   line-height: 1.25;
 }
 
-.saved-backup-summary dt {
+.saved-backup-summary-row {
+  display: grid;
+  gap: 5px;
+}
+
+.saved-backup-summary-row > strong {
   font-weight: 900;
 }
 
-.saved-backup-summary dd {
-  margin: 0;
+.saved-backup-summary-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.saved-backup-summary-stats span {
+  padding: 3px 7px;
+  border: 1px solid rgba(44, 58, 61, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+  font-weight: 700;
 }
 
 .saved-backup-actions {

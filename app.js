@@ -2994,25 +2994,34 @@ function summarizeBackupRegistry(payload, registry) {
 }
 
 function createSavedBackupSummaryElement(payload) {
-  const summary = document.createElement("dl");
+  const summary = document.createElement("div");
   summary.className = "saved-backup-summary";
 
   [
     ["Location", summarizeBackupRegistry(payload, "location")],
     ["Transaction", summarizeBackupRegistry(payload, "transaction")],
   ].forEach(([label, counts]) => {
-    const term = document.createElement("dt");
-    const detail = document.createElement("dd");
+    const row = document.createElement("div");
+    const title = document.createElement("strong");
+    const stats = document.createElement("div");
 
-    term.textContent = label;
-    detail.textContent =
-      `${counts.total} jeux au total - ` +
-      `${counts.available} disponibles - ` +
-      `${counts.reserved} réservés - ` +
-      `${counts.out} indisponibles - ` +
-      `${counts.photos} photos`;
+    row.className = "saved-backup-summary-row";
+    title.textContent = label;
+    stats.className = "saved-backup-summary-stats";
+    [
+      ["Total", counts.total],
+      ["Dispo.", counts.available],
+      ["Réservés", counts.reserved],
+      ["Indispo.", counts.out],
+      ["Photos", counts.photos],
+    ].forEach(([statLabel, value]) => {
+      const stat = document.createElement("span");
+      stat.textContent = `${statLabel} ${value}`;
+      stats.append(stat);
+    });
 
-    summary.append(term, detail);
+    row.append(title, stats);
+    summary.append(row);
   });
 
   return summary;
@@ -3063,7 +3072,6 @@ async function renderSavedBackupsPanel() {
       const payload = row.value || {};
       const item = document.createElement("li");
       const title = document.createElement("strong");
-      const meta = document.createElement("small");
       const summary = createSavedBackupSummaryElement(payload);
       const actions = document.createElement("div");
       const applyButton = document.createElement("button");
@@ -3071,7 +3079,6 @@ async function renderSavedBackupsPanel() {
       const createdAt = payload.exportedAt || row.updated_at;
 
       title.textContent = `Sauvegarde du ${formatSavedBackupTitleDate(createdAt)}`;
-      meta.textContent = formatSavedBackupDate(createdAt);
       actions.className = "saved-backup-actions";
       applyButton.type = "button";
       applyButton.textContent = "Appliquer";
@@ -3082,7 +3089,7 @@ async function renderSavedBackupsPanel() {
       downloadButton.addEventListener("click", () => downloadBackupPayload(payload, "sauvegarde-auto-cles"));
 
       actions.append(applyButton, downloadButton);
-      item.append(title, meta, summary, actions);
+      item.append(title, summary, actions);
       savedBackupsList.append(item);
     });
   } catch (error) {
