@@ -839,16 +839,27 @@ async function writeStorageKeyDirectlyToCloud(storageKey) {
   saveCloudRowVersions();
 }
 
+async function writeOptionalStorageKeyDirectlyToCloud(storageKey) {
+  try {
+    await writeStorageKeyDirectlyToCloud(storageKey);
+  } catch (error) {
+    dirtyCloudKeys.add(storageKey);
+    failedCloudSyncKeys.add(storageKey);
+    savePendingCloudKeys();
+    console.warn("Supabase optional sync failed", storageKey, error.message);
+  }
+}
+
 async function forceCurrentRegistryToCloud() {
   const config = getRegistryConfig();
   await pendingCloudSync.catch(() => {});
-  await Promise.all([
-    writeStorageKeyDirectlyToCloud(registryStorageKey),
-    writeStorageKeyDirectlyToCloud(config.keysStorageKey),
-    writeStorageKeyDirectlyToCloud(config.archivesStorageKey),
-    writeStorageKeyDirectlyToCloud(sharedContactsStorageKey),
-    writeStorageKeyDirectlyToCloud(appActivityLogStorageKey),
-    writeStorageKeyDirectlyToCloud(hiddenGlobalHistoryStorageKey),
+  await writeStorageKeyDirectlyToCloud(registryStorageKey);
+  await writeStorageKeyDirectlyToCloud(config.keysStorageKey);
+  await writeStorageKeyDirectlyToCloud(config.archivesStorageKey);
+  await Promise.allSettled([
+    writeOptionalStorageKeyDirectlyToCloud(sharedContactsStorageKey),
+    writeOptionalStorageKeyDirectlyToCloud(appActivityLogStorageKey),
+    writeOptionalStorageKeyDirectlyToCloud(hiddenGlobalHistoryStorageKey),
   ]);
 }
 
