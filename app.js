@@ -21,7 +21,7 @@ const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
 const cloudPollIntervalMs = 5000;
 const cloudWriteDebounceMs = 2000;
-const recentLocalEditProtectionMs = 5 * 60 * 1000;
+const recentLocalEditProtectionMs = 20 * 1000;
 const registryConfig = {
   location: {
     title: "LOCATION",
@@ -952,7 +952,7 @@ async function loadStorageFromCloud(options = {}) {
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
     await retryFailedCloudSyncs();
-    if (dirtyCloudKeys.size) {
+    if (dirtyCloudKeys.size && hasRecentLocalEdit()) {
       isCloudCheckRunning = false;
       return;
     }
