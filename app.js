@@ -1745,7 +1745,7 @@ function applyKeyContent(slot, content) {
   };
 }
 
-function moveKeyToSlot(sourceId, targetId, options = {}) {
+async function moveKeyToSlot(sourceId, targetId, options = {}) {
   if (!sourceId || !targetId || sourceId === targetId) return;
 
   const sourceKey = keys.find((key) => key.id === sourceId);
@@ -1779,6 +1779,7 @@ function moveKeyToSlot(sourceId, targetId, options = {}) {
   resetKeyInfoEditUnlock(keys.find((key) => key.id === targetId));
   saveKeys();
   render();
+  await syncCloudAfterAction();
 }
 
 function deleteKeyWithoutArchive(keyId) {
@@ -3992,7 +3993,7 @@ function renderGrid() {
         button.addEventListener("drop", (event) => {
           event.preventDefault();
           button.classList.remove("is-drop-target");
-          moveKeyToSlot(event.dataTransfer.getData("text/plain") || draggedKeyId, key.id, {
+          void moveKeyToSlot(event.dataTransfer.getData("text/plain") || draggedKeyId, key.id, {
             copy: event.ctrlKey,
           });
         });
