@@ -790,7 +790,13 @@ function syncCurrentRegistryToCloud() {
 }
 
 function shouldTrackCloudRowKey(key) {
-  return getBackupStorageKeys().includes(key) || String(key || "").startsWith(automaticBackupKeyPrefix);
+  return getBackupStorageKeys().includes(key);
+}
+
+function removeAutomaticBackupsFromLocalStorage() {
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith(automaticBackupKeyPrefix))
+    .forEach((key) => localStorage.removeItem(key));
 }
 
 function subscribeToCloudChanges() {
@@ -837,7 +843,10 @@ async function loadStorageFromCloud() {
   }
   try {
     if (!hasLoadedCloudState) {
-      const data = await requestCloudRows({ select: "key,value,updated_at" });
+      const data = await requestCloudRows({
+        select: "key,value,updated_at",
+        keys: getBackupStorageKeys(),
+      });
       if (!Array.isArray(data) || !data.length) {
         hasLoadedCloudState = true;
         saveCloudRowVersions();
@@ -856,7 +865,10 @@ async function loadStorageFromCloud() {
       return;
     }
 
-    const metadata = await requestCloudRows({ select: "key,updated_at" });
+    const metadata = await requestCloudRows({
+      select: "key,updated_at",
+      keys: getBackupStorageKeys(),
+    });
     if (!Array.isArray(metadata)) return;
 
     const remoteVersions = new Map(metadata.map((row) => [row.key, row.updated_at || ""]));
@@ -5716,6 +5728,7 @@ keySetPhotoList.addEventListener("change", (event) => {
 });
 
 async function initializeApp() {
+  removeAutomaticBackupsFromLocalStorage();
   ensureDeviceName();
   await loadStorageFromCloud();
   await ensureCloudTablesAreVisible();
