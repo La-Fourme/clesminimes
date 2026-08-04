@@ -176,7 +176,7 @@ let failedCloudSyncKeys = new Set();
 let cloudSyncTimers = new Map();
 let dirtyCloudKeys = loadPendingCloudKeys();
 let cloudRowVersions = loadCloudRowVersions();
-let hasLoadedCloudState = cloudRowVersions.size > 0;
+let hasLoadedCloudState = false;
 let isCloudCheckRunning = false;
 let cloudRealtimeChannel = null;
 
@@ -1649,6 +1649,45 @@ function getKeyStatusCounts() {
     },
     { all: 0, available: 0, reserved: 0, out: 0 },
   );
+}
+
+function countFilledKeys(value) {
+  return (Array.isArray(value) ? value.map(normalizeKey) : []).filter(isKeyFilled).length;
+}
+
+async function ensureCloudTablesAreVisible() {
+  if (!hasCloudAccess()) return;
+
+  try {
+    const tableRows = await requestCloudRows({
+      select: "key,value,updated_at",
+      keys: [registryConfig.location.keysStorageKey, registryConfig.transaction.keysStorageKey],
+    });
+    let changed = false;
+
+    tableRows.forEach((row) => {
+      const localFilledCount = countFilledKeys(parseStorageValue(localStorage.getItem(row.key)));
+      const remoteFilledCount = countFilledKeys(row.value);
+      if (!remoteFilledCount || localFilledCount >= remoteFilledCount) return;
+
+      isApplyingCloudState = true;
+      saveStorageValue(row.key, stringifyCloudValue(row.value));
+      isApplyingCloudState = false;
+      cloudRowVersions.set(row.key, row.updated_at || "");
+      dirtyCloudKeys.delete(row.key);
+      failedCloudSyncKeys.delete(row.key);
+      changed = true;
+    });
+
+    if (!changed) return;
+    savePendingCloudKeys();
+    saveCloudRowVersions();
+    refreshDataFromStorage({ keepSelection: true });
+  } catch (error) {
+    console.warn("Supabase visibility recovery failed", error.message);
+  } finally {
+    isApplyingCloudState = false;
+  }
 }
 
 function getCompromiseMovementStatus(record) {
@@ -4069,7 +4108,6 @@ async function compressKeyPhotos(key) {
 async function optimizeStoredPhotos() {
   if (localStorage.getItem(photoOptimizationStorageKey) === "done") return;
 
-  markLocalEdit();
   const registries = ["location", "transaction"];
   for (const registry of registries) {
     const config = registryConfig[registry];
@@ -4092,6 +4130,7 @@ async function optimizeStoredPhotos() {
     }
 
     if (changed) {
+      markLocalEdit();
       localStorage.setItem(config.keysStorageKey, JSON.stringify(nextKeys));
       localStorage.setItem(config.archivesStorageKey, JSON.stringify(nextArchives));
       syncStorageKeyToCloud(config.keysStorageKey);
@@ -5677,9 +5716,10 @@ keySetPhotoList.addEventListener("change", (event) => {
 });
 
 async function initializeApp() {
-  migrateArchivedSlots();
   ensureDeviceName();
   await loadStorageFromCloud();
+  await ensureCloudTablesAreVisible();
+  migrateArchivedSlots();
   subscribeToCloudChanges();
   await migrateStoredPropertyAddresses();
   await optimizeStoredPhotos();
