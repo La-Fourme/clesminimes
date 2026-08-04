@@ -425,6 +425,73 @@ function stringifyCloudValue(value) {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
+function hasCloudAccess() {
+  return Boolean(globalThis.fetch);
+}
+
+function getCloudRequestHeaders(extraHeaders = {}) {
+  return {
+    apikey: supabaseAnonKey,
+    Authorization: `Bearer ${supabaseAnonKey}`,
+    ...extraHeaders,
+  };
+}
+
+async function requestCloudRows({
+  select = "key,value,updated_at",
+  key = "",
+  keys = [],
+  automaticBackupsOnly = false,
+  orderKeyDescending = false,
+  limit = 0,
+} = {}) {
+  if (!hasCloudAccess()) return [];
+
+  const params = new URLSearchParams({ select });
+  if (key) params.set("key", `eq.${key}`);
+  if (keys.length) params.set("key", `in.(${keys.join(",")})`);
+  if (automaticBackupsOnly) params.set("key", `like.${automaticBackupKeyPrefix}%`);
+  if (orderKeyDescending) params.set("order", "key.desc");
+  if (limit) params.set("limit", String(limit));
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/app_state?${params.toString()}`, {
+    headers: getCloudRequestHeaders({ Accept: "application/json" }),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  const data = await response.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function requestCloudRow(key) {
+  const rows = await requestCloudRows({ key, limit: 1 });
+  return rows[0] || null;
+}
+
+async function upsertCloudRow(row) {
+  if (!hasCloudAccess()) throw new Error("Connexion Supabase indisponible.");
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/app_state`, {
+    method: "POST",
+    headers: getCloudRequestHeaders({
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    }),
+    body: JSON.stringify(row),
+  });
+  if (!response.ok) throw new Error(await response.text());
+}
+
+async function deleteCloudRow(key) {
+  if (!hasCloudAccess()) throw new Error("Connexion Supabase indisponible.");
+
+  const params = new URLSearchParams({ key: `eq.${key}` });
+  const response = await fetch(`${supabaseUrl}/rest/v1/app_state?${params.toString()}`, {
+    method: "DELETE",
+    headers: getCloudRequestHeaders({ Prefer: "return=minimal" }),
+  });
+  if (!response.ok) throw new Error(await response.text());
+}
+
 function saveStorageValue(storageKey, value) {
   if (typeof value === "string") {
     localStorage.setItem(storageKey, value);
@@ -607,7 +674,7 @@ function mergeCloudConflictValue(storageKey, localRawValue, remoteRawValue) {
 }
 
 function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
-  if (!supabaseClient) return;
+  if (!hasCloudAccess()) return;
   dirtyCloudKeys.add(storageKey);
   savePendingCloudKeys();
   clearTimeout(cloudSyncTimers.get(storageKey));
@@ -621,7 +688,7 @@ function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
 }
 
 function syncStorageKeyToCloud(storageKey, options = {}) {
-  if (!supabaseClient) return Promise.resolve();
+  if (!hasCloudAccess()) return Promise.resolve();
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.delete(storageKey);
   failedCloudSyncKeys.delete(storageKey);
@@ -633,24 +700,20 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
   pendingCloudSync = pendingCloudSync
     .catch(() => {})
     .then(async () => {
-      const { data: remoteRow, error: versionError } = await supabaseClient
-        .from("app_state")
-        .select("key,value,updated_at")
-        .eq("key", storageKey)
-        .maybeSingle();
-      if (versionError) throw versionError;
+      const remoteRow = await requestCloudRow(storageKey);
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
         const hasRecentLocalChange = dirtyCloudKeys.has(storageKey) || Date.now() - lastLocalEditAt < 20000;
         if (hasRecentLocalChange && value !== null && canMergeCloudStorageKey(storageKey)) {
           const mergedValue = mergeCloudConflictValue(storageKey, value, remoteRow.value);
-          const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
+          try {
+            await upsertCloudRow({
             key: storageKey,
             value: mergedValue,
             updated_at: updatedAt,
-          });
-          if (localSaveError) {
+            });
+          } catch (localSaveError) {
             dirtyCloudKeys.add(storageKey);
             failedCloudSyncKeys.add(storageKey);
             savePendingCloudKeys();
@@ -679,17 +742,16 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
         return;
       }
 
-      const request =
-        value === null
-          ? supabaseClient.from("app_state").delete().eq("key", storageKey)
-          : supabaseClient.from("app_state").upsert({
-              key: storageKey,
-              value: parseStorageValue(value),
-              updated_at: updatedAt,
-            });
-
-      let { error } = await request;
-      if (error) {
+      try {
+        if (value === null) await deleteCloudRow(storageKey);
+        else {
+          await upsertCloudRow({
+            key: storageKey,
+            value: parseStorageValue(value),
+            updated_at: updatedAt,
+          });
+        }
+      } catch (error) {
         dirtyCloudKeys.add(storageKey);
         failedCloudSyncKeys.add(storageKey);
         savePendingCloudKeys();
@@ -762,7 +824,7 @@ async function syncCloudAfterAction() {
 }
 
 async function loadStorageFromCloud() {
-  if (!supabaseClient) return;
+  if (!hasCloudAccess()) return;
   if (isPhotoImporting) return;
   if (isCloudCheckRunning) return;
   if (hasLoadedCloudState && document.visibilityState === "hidden") return;
@@ -775,8 +837,7 @@ async function loadStorageFromCloud() {
   }
   try {
     if (!hasLoadedCloudState) {
-      const { data, error } = await supabaseClient.from("app_state").select("key,value,updated_at");
-      if (error) throw error;
+      const data = await requestCloudRows({ select: "key,value,updated_at" });
       if (!Array.isArray(data) || !data.length) {
         hasLoadedCloudState = true;
         saveCloudRowVersions();
@@ -795,10 +856,7 @@ async function loadStorageFromCloud() {
       return;
     }
 
-    const { data: metadata, error: metadataError } = await supabaseClient
-      .from("app_state")
-      .select("key,updated_at");
-    if (metadataError) throw metadataError;
+    const metadata = await requestCloudRows({ select: "key,updated_at" });
     if (!Array.isArray(metadata)) return;
 
     const remoteVersions = new Map(metadata.map((row) => [row.key, row.updated_at || ""]));
@@ -811,11 +869,10 @@ async function loadStorageFromCloud() {
 
     let changedRows = [];
     if (changedKeys.length) {
-      const { data, error } = await supabaseClient
-        .from("app_state")
-        .select("key,value,updated_at")
-        .in("key", changedKeys);
-      if (error) throw error;
+      const data = await requestCloudRows({
+        select: "key,value,updated_at",
+        keys: changedKeys,
+      });
       changedRows = Array.isArray(data) ? data : [];
     }
 
@@ -2283,28 +2340,27 @@ function isAutomaticBackupRow(row) {
 }
 
 async function loadSavedBackupRows(limit = 4) {
-  if (!supabaseClient) return [];
-  const { data, error } = await supabaseClient
-    .from("app_state")
-    .select("key,value,updated_at")
-    .like("key", `${automaticBackupKeyPrefix}%`)
-    .order("key", { ascending: false })
-    .limit(limit);
-  if (error) throw error;
+  if (!hasCloudAccess()) return [];
+  const data = await requestCloudRows({
+    select: "key,value,updated_at",
+    automaticBackupsOnly: true,
+    orderKeyDescending: true,
+    limit,
+  });
   return Array.isArray(data) ? data.filter(isAutomaticBackupRow) : [];
 }
 
 async function pruneOldAutomaticBackups() {
-  if (!supabaseClient) return;
-  const { data, error } = await supabaseClient
-    .from("app_state")
-    .select("key")
-    .like("key", `${automaticBackupKeyPrefix}%`)
-    .order("key", { ascending: false });
-  if (error || !Array.isArray(data)) return;
+  if (!hasCloudAccess()) return;
+  const data = await requestCloudRows({
+    select: "key",
+    automaticBackupsOnly: true,
+    orderKeyDescending: true,
+  });
+  if (!Array.isArray(data)) return;
 
   const oldKeys = data.filter(isAutomaticBackupRow).slice(4).map((row) => row.key);
-  await Promise.all(oldKeys.map((key) => supabaseClient.from("app_state").delete().eq("key", key)));
+  await Promise.all(oldKeys.map(deleteCloudRow));
 }
 
 function getPreviousLocalDate(date = new Date()) {
@@ -2314,39 +2370,28 @@ function getPreviousLocalDate(date = new Date()) {
 }
 
 async function hasAutomaticBackupForDate(date) {
-  if (!supabaseClient) return false;
-  const { data, error } = await supabaseClient
-    .from("app_state")
-    .select("key")
-    .eq("key", getAutomaticBackupKey(date))
-    .maybeSingle();
-  if (error) throw error;
-  return Boolean(data);
+  if (!hasCloudAccess()) return false;
+  return Boolean(await requestCloudRow(getAutomaticBackupKey(date)));
 }
 
 async function createAutomaticBackup({ force = false, date = new Date() } = {}) {
-  if (!supabaseClient) return false;
+  if (!hasCloudAccess()) return false;
   await pendingCloudSync.catch(() => {});
   await syncCurrentRegistryToCloud();
 
   const backupKey = getAutomaticBackupKey(date);
   if (!force) {
-    const { data: existingBackup } = await supabaseClient
-      .from("app_state")
-      .select("key")
-      .eq("key", backupKey)
-      .maybeSingle();
+    const existingBackup = await requestCloudRow(backupKey);
     if (existingBackup) return false;
   }
 
   const payload = createDataBackupPayload({ backupDate: getLocalDateKey(date) });
   const updatedAt = new Date().toISOString();
-  const { error } = await supabaseClient.from("app_state").upsert({
+  await upsertCloudRow({
     key: backupKey,
     value: payload,
     updated_at: updatedAt,
   });
-  if (error) throw error;
   await pruneOldAutomaticBackups();
   return true;
 }
