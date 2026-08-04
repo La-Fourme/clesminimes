@@ -3002,18 +3002,21 @@ function createSavedBackupSummaryElement(payload) {
     ["Transaction", summarizeBackupRegistry(payload, "transaction")],
   ].forEach(([label, counts]) => {
     const row = document.createElement("div");
+    const header = document.createElement("div");
     const title = document.createElement("strong");
+    const photos = document.createElement("span");
     const stats = document.createElement("div");
 
     row.className = "saved-backup-summary-row";
+    header.className = "saved-backup-summary-header";
     title.textContent = label;
+    photos.textContent = `${counts.photos} photo${counts.photos > 1 ? "s" : ""}`;
     stats.className = "saved-backup-summary-stats";
     [
       ["total", "Total", counts.total],
-      ["available", "Dispo.", counts.available],
+      ["available", "Disponibles", counts.available],
       ["reserved", "Réservés", counts.reserved],
-      ["out", "Indispo.", counts.out],
-      ["photos", "Photos", counts.photos],
+      ["out", "Indisponibles", counts.out],
     ].forEach(([status, statLabel, value]) => {
       const stat = document.createElement("span");
       stat.dataset.backupStat = status;
@@ -3021,7 +3024,8 @@ function createSavedBackupSummaryElement(payload) {
       stats.append(stat);
     });
 
-    row.append(title, stats);
+    header.append(title, photos);
+    row.append(header, stats);
     summary.append(row);
   });
 
