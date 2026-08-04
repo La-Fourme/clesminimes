@@ -642,10 +642,8 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
-        const remoteUpdatedAtTime = Date.parse(remoteUpdatedAt) || 0;
         const hasRecentLocalChange = dirtyCloudKeys.has(storageKey) || Date.now() - lastLocalEditAt < 20000;
-        const localChangeLooksNewer = !remoteUpdatedAtTime || lastLocalEditAt >= remoteUpdatedAtTime - 5000;
-        if (hasRecentLocalChange && localChangeLooksNewer && value !== null) {
+        if (hasRecentLocalChange && value !== null && canMergeCloudStorageKey(storageKey)) {
           const mergedValue = mergeCloudConflictValue(storageKey, value, remoteRow.value);
           const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
             key: storageKey,
@@ -684,31 +682,13 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       const request =
         value === null
           ? supabaseClient.from("app_state").delete().eq("key", storageKey)
-          : supabaseClient.from("app_state").upsert(
-              force
-                ? {
-                    key: storageKey,
-                    value: parseStorageValue(value),
-                    updated_at: updatedAt,
-                  }
-                : {
-                    key: storageKey,
-                    value: parseStorageValue(value),
-                    updated_at: updatedAt,
-                    expected_updated_at: expectedUpdatedAt,
-                  },
-            );
+          : supabaseClient.from("app_state").upsert({
+              key: storageKey,
+              value: parseStorageValue(value),
+              updated_at: updatedAt,
+            });
 
       let { error } = await request;
-      if (error && /expected_updated_at/i.test(error.message || "") && value !== null) {
-        const fallbackRequest = supabaseClient.from("app_state").upsert({
-          key: storageKey,
-          value: parseStorageValue(value),
-          updated_at: updatedAt,
-        });
-        const fallbackResult = await fallbackRequest;
-        error = fallbackResult.error;
-      }
       if (error) {
         dirtyCloudKeys.add(storageKey);
         failedCloudSyncKeys.add(storageKey);
@@ -788,9 +768,7 @@ async function loadStorageFromCloud() {
   if (hasLoadedCloudState && document.visibilityState === "hidden") return;
   isCloudCheckRunning = true;
   await pendingCloudSync.catch(() => {});
-  if (hasLoadedCloudState) {
-    await retryPendingCloudSyncs();
-  } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
+  if (!hasLoadedCloudState && (dirtyCloudKeys.size || failedCloudSyncKeys.size)) {
     dirtyCloudKeys.clear();
     failedCloudSyncKeys.clear();
     savePendingCloudKeys();
@@ -800,12 +778,8 @@ async function loadStorageFromCloud() {
       const { data, error } = await supabaseClient.from("app_state").select("key,value,updated_at");
       if (error) throw error;
       if (!Array.isArray(data) || !data.length) {
-        localStorage.setItem(registryStorageKey, activeRegistry);
-        localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
-        localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
-        localStorage.setItem(sharedContactsStorageKey, JSON.stringify(contacts));
-        await syncAllStorageToCloud();
         hasLoadedCloudState = true;
+        saveCloudRowVersions();
         return;
       }
 
@@ -872,6 +846,9 @@ async function loadStorageFromCloud() {
     saveCloudRowVersions();
     refreshDataFromStorage({ keepSelection: true });
     keysToResync.forEach((key) => scheduleStorageKeySync(key, 0));
+    if (!keysToResync.length && dirtyCloudKeys.size) {
+      retryPendingCloudSyncs();
+    }
   } catch (error) {
     console.warn("Supabase load failed", error.message);
   } finally {
