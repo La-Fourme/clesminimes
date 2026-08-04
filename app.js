@@ -2068,7 +2068,7 @@ function exportFilledDataCsv() {
   URL.revokeObjectURL(url);
 }
 
-function createDataBackupPayload() {
+function createDataBackupPayload(options = {}) {
   const data = {};
   getBackupStorageKeys().forEach((key) => {
     data[key] = localStorage.getItem(key);
@@ -2078,6 +2078,7 @@ function createDataBackupPayload() {
     app: "century21-les-minimes-cles",
     version: 1,
     exportedAt: new Date().toISOString(),
+    backupDate: options.backupDate || getLocalDateKey(),
     data,
   };
 }
@@ -2137,12 +2138,29 @@ async function pruneOldAutomaticBackups() {
   await Promise.all(oldKeys.map((key) => supabaseClient.from("app_state").delete().eq("key", key)));
 }
 
-async function createAutomaticBackup({ force = false } = {}) {
+function getPreviousLocalDate(date = new Date()) {
+  const previousDate = new Date(date);
+  previousDate.setDate(previousDate.getDate() - 1);
+  return previousDate;
+}
+
+async function hasAutomaticBackupForDate(date) {
+  if (!supabaseClient) return false;
+  const { data, error } = await supabaseClient
+    .from("app_state")
+    .select("key")
+    .eq("key", getAutomaticBackupKey(date))
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+async function createAutomaticBackup({ force = false, date = new Date() } = {}) {
   if (!supabaseClient) return false;
   await pendingCloudSync.catch(() => {});
   await syncCurrentRegistryToCloud();
 
-  const backupKey = getAutomaticBackupKey();
+  const backupKey = getAutomaticBackupKey(date);
   if (!force) {
     const { data: existingBackup } = await supabaseClient
       .from("app_state")
@@ -2152,7 +2170,7 @@ async function createAutomaticBackup({ force = false } = {}) {
     if (existingBackup) return false;
   }
 
-  const payload = createDataBackupPayload();
+  const payload = createDataBackupPayload({ backupDate: getLocalDateKey(date) });
   const updatedAt = new Date().toISOString();
   const { error } = await supabaseClient.from("app_state").upsert({
     key: backupKey,
@@ -2190,6 +2208,16 @@ async function ensureTodaysAutomaticBackupIfLate() {
   if (now.getHours() < 23 || (now.getHours() === 23 && now.getMinutes() < 59)) return;
   try {
     await createAutomaticBackup();
+  } catch (error) {
+    console.warn("Automatic backup catch-up failed", error.message);
+  }
+}
+
+async function ensureMissedAutomaticBackupOnOpen() {
+  const previousDate = getPreviousLocalDate();
+  try {
+    if (await hasAutomaticBackupForDate(previousDate)) return;
+    await createAutomaticBackup({ date: previousDate });
   } catch (error) {
     console.warn("Automatic backup catch-up failed", error.message);
   }
@@ -5360,6 +5388,7 @@ async function initializeApp() {
   await loadStorageFromCloud();
   await migrateStoredPropertyAddresses();
   await optimizeStoredPhotos();
+  await ensureMissedAutomaticBackupOnOpen();
   await ensureTodaysAutomaticBackupIfLate();
   scheduleAutomaticBackup();
   updateRegistryHeader();
