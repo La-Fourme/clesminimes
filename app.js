@@ -21,7 +21,6 @@ const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
 const cloudPollIntervalMs = 5000;
 const cloudWriteDebounceMs = 2000;
-const recentLocalEditProtectionMs = 20 * 1000;
 const registryConfig = {
   location: {
     title: "LOCATION",
@@ -882,14 +881,6 @@ function removeAutomaticBackupsFromLocalStorage() {
     .forEach((key) => localStorage.removeItem(key));
 }
 
-function hasRecentLocalEdit() {
-  return Date.now() - lastLocalEditAt < recentLocalEditProtectionMs;
-}
-
-function hasLocalRegistryData() {
-  return parseStoredArray(getRegistryConfig().keysStorageKey, []).some(isKeyFilled);
-}
-
 function closeKeyPanelAfterAction() {
   selectedId = null;
   selectedArchiveRecord = null;
@@ -952,10 +943,6 @@ async function loadStorageFromCloud(options = {}) {
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
     await retryFailedCloudSyncs();
-    if (dirtyCloudKeys.size && hasRecentLocalEdit()) {
-      isCloudCheckRunning = false;
-      return;
-    }
   }
   try {
     if (!hasLoadedCloudState) {
@@ -967,12 +954,6 @@ async function loadStorageFromCloud(options = {}) {
         hasLoadedCloudState = true;
         return;
       }
-      if ((dirtyCloudKeys.size || failedCloudSyncKeys.size) && hasRecentLocalEdit() && hasLocalRegistryData()) {
-        await forceCurrentRegistryToCloud();
-        hasLoadedCloudState = true;
-        return;
-      }
-
       isApplyingCloudState = true;
       data.forEach((row) => {
         saveStorageValue(row.key, stringifyCloudValue(row.value));
