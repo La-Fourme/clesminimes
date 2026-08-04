@@ -425,6 +425,17 @@ function stringifyCloudValue(value) {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function hasCloudAccess() {
   return Boolean(globalThis.fetch);
 }
@@ -826,11 +837,41 @@ function closeKeyPanelAfterAction() {
   render();
 }
 
-async function syncCloudAfterAction() {
+function getActionSyncKeys({ includeArchives = false } = {}) {
+  const config = getRegistryConfig();
+  return [
+    config.keysStorageKey,
+    includeArchives ? config.archivesStorageKey : "",
+    appActivityLogStorageKey,
+  ].filter(Boolean);
+}
+
+async function verifyCloudStorageKey(storageKey) {
+  const localValue = parseStorageValue(localStorage.getItem(storageKey));
+  const remoteRow = await requestCloudRow(storageKey);
+  if (localValue === null) return !remoteRow;
+  return Boolean(remoteRow) && stableStringify(remoteRow.value) === stableStringify(localValue);
+}
+
+async function syncCloudAfterAction(storageKeys = getActionSyncKeys()) {
+  const keysToSync = [...new Set(storageKeys.filter(Boolean))];
   try {
-    await syncCurrentRegistryToCloud();
+    keysToSync.forEach((key) => dirtyCloudKeys.add(key));
+    savePendingCloudKeys();
+    await Promise.all(keysToSync.map(syncStorageKeyToCloud));
     if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
       await retryPendingCloudSyncs();
+    }
+    const unsyncedKeys = [];
+    for (const key of keysToSync) {
+      if (!(await verifyCloudStorageKey(key))) unsyncedKeys.push(key);
+    }
+    if (unsyncedKeys.length) {
+      unsyncedKeys.forEach((key) => {
+        dirtyCloudKeys.add(key);
+        failedCloudSyncKeys.add(key);
+      });
+      savePendingCloudKeys();
     }
     if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
       alert("La synchronisation en ligne n'est pas encore confirm\u00e9e. Garde cette fiche ouverte et v\u00e9rifie la connexion avant de quitter.");
@@ -5025,7 +5066,7 @@ async function archiveReservationKey(reservationId) {
   saveArchives();
   saveKeys();
   closeKeyPanelAfterAction();
-  await syncCloudAfterAction();
+  await syncCloudAfterAction(getActionSyncKeys({ includeArchives: true }));
 }
 
 async function reserveSelectedSet() {
@@ -5235,7 +5276,7 @@ async function archiveSelectedKey(reason) {
   logActivity(actionLabel, keyLabel(key), [key.owner, key.property, movementActor.person || movementActor.company, compromiseSignedAt ? `Signature : ${formatDateOnly(compromiseSignedAt)}` : ""].filter(Boolean).join(" - "));
   saveArchives();
   saveKeys();
-  const synced = await syncCloudAfterAction();
+  const synced = await syncCloudAfterAction(getActionSyncKeys({ includeArchives: true }));
   if (synced) closeKeyPanelAfterAction();
 }
 
