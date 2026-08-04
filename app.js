@@ -19,7 +19,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
-const cloudPollIntervalMs = 60000;
+const cloudPollIntervalMs = 10000;
 const cloudWriteDebounceMs = 700;
 const registryConfig = {
   location: {
@@ -178,6 +178,7 @@ let dirtyCloudKeys = loadPendingCloudKeys();
 let cloudRowVersions = loadCloudRowVersions();
 let hasLoadedCloudState = cloudRowVersions.size > 0;
 let isCloudCheckRunning = false;
+let cloudRealtimeChannel = null;
 
 function markLocalEdit() {
   if (isApplyingCloudState) return;
@@ -462,6 +463,10 @@ function getRegistryByKeysStorageKey(storageKey) {
   return Object.entries(registryConfig).find(([, config]) => config.keysStorageKey === storageKey)?.[0] || "";
 }
 
+function getRegistryByArchivesStorageKey(storageKey) {
+  return Object.entries(registryConfig).find(([, config]) => config.archivesStorageKey === storageKey)?.[0] || "";
+}
+
 function hasUsefulSetData(set) {
   return Boolean(
     set?.photo ||
@@ -554,9 +559,51 @@ function mergeKeyCollections(localValue, remoteValue) {
   }).concat([...localMap.values()]);
 }
 
+function mergeArchiveCollections(localValue, remoteValue) {
+  const localArchives = Array.isArray(localValue) ? localValue.map(normalizeArchive) : [];
+  const remoteArchives = Array.isArray(remoteValue) ? remoteValue.map(normalizeArchive) : [];
+  return mergeById(localArchives, remoteArchives).sort((first, second) =>
+    String(second.archivedAt || "").localeCompare(String(first.archivedAt || "")),
+  );
+}
+
+function mergeActivityLogCollections(localValue, remoteValue) {
+  const localEntries = Array.isArray(localValue) ? localValue : [];
+  const remoteEntries = Array.isArray(remoteValue) ? remoteValue : [];
+  return mergeById(localEntries, remoteEntries)
+    .sort((first, second) => String(second.timestamp || "").localeCompare(String(first.timestamp || "")))
+    .slice(0, 600);
+}
+
+function mergeHiddenHistoryCollections(localValue, remoteValue) {
+  const localIds = Array.isArray(localValue) ? localValue : [];
+  const remoteIds = Array.isArray(remoteValue) ? remoteValue : [];
+  return [...new Set([...remoteIds, ...localIds].filter(Boolean))];
+}
+
+function canMergeCloudStorageKey(storageKey) {
+  return Boolean(
+    getRegistryByKeysStorageKey(storageKey) ||
+      getRegistryByArchivesStorageKey(storageKey) ||
+      storageKey === appActivityLogStorageKey ||
+      storageKey === hiddenGlobalHistoryStorageKey,
+  );
+}
+
 function mergeCloudConflictValue(storageKey, localRawValue, remoteRawValue) {
-  if (!getRegistryByKeysStorageKey(storageKey)) return parseStorageValue(localRawValue);
-  return mergeKeyCollections(parseStorageValue(localRawValue), remoteRawValue);
+  if (getRegistryByKeysStorageKey(storageKey)) {
+    return mergeKeyCollections(parseStorageValue(localRawValue), remoteRawValue);
+  }
+  if (getRegistryByArchivesStorageKey(storageKey)) {
+    return mergeArchiveCollections(parseStorageValue(localRawValue), remoteRawValue);
+  }
+  if (storageKey === appActivityLogStorageKey) {
+    return mergeActivityLogCollections(parseStorageValue(localRawValue), remoteRawValue);
+  }
+  if (storageKey === hiddenGlobalHistoryStorageKey) {
+    return mergeHiddenHistoryCollections(parseStorageValue(localRawValue), remoteRawValue);
+  }
+  return parseStorageValue(localRawValue);
 }
 
 function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
@@ -700,6 +747,24 @@ function syncCurrentRegistryToCloud() {
   return Promise.all([...dirtyCloudKeys].map(syncStorageKeyToCloud));
 }
 
+function shouldTrackCloudRowKey(key) {
+  return getBackupStorageKeys().includes(key) || String(key || "").startsWith(automaticBackupKeyPrefix);
+}
+
+function subscribeToCloudChanges() {
+  if (!supabaseClient || !supabaseClient.channel || cloudRealtimeChannel) return;
+
+  cloudRealtimeChannel = supabaseClient
+    .channel("cles-app-state-sync")
+    .on("postgres_changes", { event: "*", schema: "public", table: "app_state" }, (payload) => {
+      const changedKey = payload?.new?.key || payload?.old?.key || "";
+      if (!shouldTrackCloudRowKey(changedKey)) return;
+      if (isPhotoImporting || isKeyPanelOpen() || isKeyFormBeingEdited()) return;
+      loadStorageFromCloud();
+    })
+    .subscribe();
+}
+
 function closeKeyPanelAfterAction() {
   selectedId = null;
   selectedArchiveRecord = null;
@@ -725,10 +790,6 @@ async function loadStorageFromCloud() {
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
     await retryPendingCloudSyncs();
-    if (dirtyCloudKeys.size) {
-      isCloudCheckRunning = false;
-      return;
-    }
   } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
     dirtyCloudKeys.clear();
     failedCloudSyncKeys.clear();
@@ -785,12 +846,32 @@ async function loadStorageFromCloud() {
     }
 
     isApplyingCloudState = true;
-    changedRows.forEach((row) => saveStorageValue(row.key, stringifyCloudValue(row.value)));
-    deletedKeys.forEach((key) => localStorage.removeItem(key));
+    const keysToResync = [];
+    changedRows.forEach((row) => {
+      if (dirtyCloudKeys.has(row.key) && canMergeCloudStorageKey(row.key)) {
+        const mergedValue = mergeCloudConflictValue(row.key, localStorage.getItem(row.key), row.value);
+        saveStorageValue(row.key, stringifyCloudValue(mergedValue));
+        cloudRowVersions.set(row.key, row.updated_at || "");
+        keysToResync.push(row.key);
+        return;
+      }
+
+      if (dirtyCloudKeys.has(row.key)) return;
+      saveStorageValue(row.key, stringifyCloudValue(row.value));
+      cloudRowVersions.set(row.key, row.updated_at || "");
+    });
+    deletedKeys.forEach((key) => {
+      if (dirtyCloudKeys.has(key)) return;
+      localStorage.removeItem(key);
+      cloudRowVersions.delete(key);
+    });
     isApplyingCloudState = false;
-    cloudRowVersions = remoteVersions;
+    metadata.forEach((row) => {
+      if (!dirtyCloudKeys.has(row.key)) cloudRowVersions.set(row.key, row.updated_at || "");
+    });
     saveCloudRowVersions();
     refreshDataFromStorage({ keepSelection: true });
+    keysToResync.forEach((key) => scheduleStorageKeySync(key, 0));
   } catch (error) {
     console.warn("Supabase load failed", error.message);
   } finally {
@@ -5577,6 +5658,7 @@ async function initializeApp() {
   migrateArchivedSlots();
   ensureDeviceName();
   await loadStorageFromCloud();
+  subscribeToCloudChanges();
   await migrateStoredPropertyAddresses();
   await optimizeStoredPhotos();
   await ensureMissedAutomaticBackupOnOpen();
@@ -5602,6 +5684,10 @@ window.addEventListener("pagehide", () => {
   syncCurrentRegistryToCloud();
 });
 window.addEventListener("online", () => {
+  retryPendingCloudSyncs();
+  loadStorageFromCloud();
+});
+window.addEventListener("focus", () => {
   retryPendingCloudSyncs();
   loadStorageFromCloud();
 });
