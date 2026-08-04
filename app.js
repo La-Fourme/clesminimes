@@ -19,7 +19,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
-const cloudPollIntervalMs = 10000;
+const cloudPollIntervalMs = 5000;
 const cloudWriteDebounceMs = 2000;
 const recentLocalEditProtectionMs = 5 * 60 * 1000;
 const registryConfig = {
@@ -826,16 +826,23 @@ async function writeStorageKeyDirectlyToCloud(storageKey) {
 
   const value = localStorage.getItem(storageKey);
   const updatedAt = new Date().toISOString();
-  if (value === null) {
-    await deleteCloudRow(storageKey);
-    cloudRowVersions.delete(storageKey);
-  } else {
-    await upsertCloudRow({
-      key: storageKey,
-      value: parseStorageValue(value),
-      updated_at: updatedAt,
-    });
-    cloudRowVersions.set(storageKey, updatedAt);
+  try {
+    if (value === null) {
+      await deleteCloudRow(storageKey);
+      cloudRowVersions.delete(storageKey);
+    } else {
+      await upsertCloudRow({
+        key: storageKey,
+        value: parseStorageValue(value),
+        updated_at: updatedAt,
+      });
+      cloudRowVersions.set(storageKey, updatedAt);
+    }
+  } catch (error) {
+    dirtyCloudKeys.add(storageKey);
+    failedCloudSyncKeys.add(storageKey);
+    savePendingCloudKeys();
+    throw error;
   }
 
   dirtyCloudKeys.delete(storageKey);
@@ -858,9 +865,6 @@ async function writeOptionalStorageKeyDirectlyToCloud(storageKey) {
 async function forceCurrentRegistryToCloud() {
   const config = getRegistryConfig();
   directCloudWriteToken += 1;
-  failedCloudSyncKeys.clear();
-  dirtyCloudKeys.clear();
-  savePendingCloudKeys();
   await writeStorageKeyDirectlyToCloud(registryStorageKey);
   await writeStorageKeyDirectlyToCloud(config.keysStorageKey);
   await writeStorageKeyDirectlyToCloud(config.archivesStorageKey);
@@ -922,10 +926,6 @@ async function loadStorageFromCloud() {
       isCloudCheckRunning = false;
       return;
     }
-  } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
-    dirtyCloudKeys.clear();
-    failedCloudSyncKeys.clear();
-    savePendingCloudKeys();
   }
   try {
     if (!hasLoadedCloudState) {
@@ -937,7 +937,7 @@ async function loadStorageFromCloud() {
         hasLoadedCloudState = true;
         return;
       }
-      if (hasRecentLocalEdit() && hasLocalRegistryData()) {
+      if ((dirtyCloudKeys.size || failedCloudSyncKeys.size) && hasRecentLocalEdit() && hasLocalRegistryData()) {
         await forceCurrentRegistryToCloud();
         hasLoadedCloudState = true;
         return;
