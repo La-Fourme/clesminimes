@@ -814,15 +814,41 @@ function syncCurrentRegistryToCloud() {
   return Promise.all([...dirtyCloudKeys].map(syncStorageKeyToCloud));
 }
 
+async function writeStorageKeyDirectlyToCloud(storageKey) {
+  if (!hasCloudAccess()) return;
+  clearTimeout(cloudSyncTimers.get(storageKey));
+  cloudSyncTimers.delete(storageKey);
+
+  const value = localStorage.getItem(storageKey);
+  const updatedAt = new Date().toISOString();
+  if (value === null) {
+    await deleteCloudRow(storageKey);
+    cloudRowVersions.delete(storageKey);
+  } else {
+    await upsertCloudRow({
+      key: storageKey,
+      value: parseStorageValue(value),
+      updated_at: updatedAt,
+    });
+    cloudRowVersions.set(storageKey, updatedAt);
+  }
+
+  dirtyCloudKeys.delete(storageKey);
+  failedCloudSyncKeys.delete(storageKey);
+  savePendingCloudKeys();
+  saveCloudRowVersions();
+}
+
 async function forceCurrentRegistryToCloud() {
   const config = getRegistryConfig();
+  await pendingCloudSync.catch(() => {});
   await Promise.all([
-    syncStorageKeyToCloud(registryStorageKey, { force: true }),
-    syncStorageKeyToCloud(config.keysStorageKey, { force: true }),
-    syncStorageKeyToCloud(config.archivesStorageKey, { force: true }),
-    syncStorageKeyToCloud(sharedContactsStorageKey, { force: true }),
-    syncStorageKeyToCloud(appActivityLogStorageKey, { force: true }),
-    syncStorageKeyToCloud(hiddenGlobalHistoryStorageKey, { force: true }),
+    writeStorageKeyDirectlyToCloud(registryStorageKey),
+    writeStorageKeyDirectlyToCloud(config.keysStorageKey),
+    writeStorageKeyDirectlyToCloud(config.archivesStorageKey),
+    writeStorageKeyDirectlyToCloud(sharedContactsStorageKey),
+    writeStorageKeyDirectlyToCloud(appActivityLogStorageKey),
+    writeStorageKeyDirectlyToCloud(hiddenGlobalHistoryStorageKey),
   ]);
 }
 
@@ -843,7 +869,6 @@ function closeKeyPanelAfterAction() {
 async function syncCloudAfterAction() {
   try {
     await forceCurrentRegistryToCloud();
-    await loadStorageFromCloud();
   } catch (error) {
     console.warn("Supabase action sync failed", error.message);
     alert("La synchronisation en ligne a échoué. Vérifie la connexion puis réessaie avant de fermer la page.");
@@ -851,15 +876,11 @@ async function syncCloudAfterAction() {
 }
 
 async function syncArchiveActionToCloud() {
-  const config = getRegistryConfig();
   try {
-    await Promise.all([
-      syncStorageKeyToCloud(config.keysStorageKey, { force: true }),
-      syncStorageKeyToCloud(config.archivesStorageKey, { force: true }),
-      syncStorageKeyToCloud(appActivityLogStorageKey),
-    ]);
+    await forceCurrentRegistryToCloud();
   } catch (error) {
     console.warn("Supabase archive sync failed", error.message);
+    alert("La synchronisation en ligne a échoué. Vérifie la connexion puis réessaie avant de fermer la page.");
   }
 }
 
