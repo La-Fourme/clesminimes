@@ -180,6 +180,7 @@ let cloudRowVersions = loadCloudRowVersions();
 let hasLoadedCloudState = false;
 let isCloudCheckRunning = false;
 let directCloudWriteToken = 0;
+let cloudRealtimeRefreshTimer = null;
 
 function markLocalEdit() {
   if (isApplyingCloudState) return;
@@ -913,11 +914,40 @@ async function syncArchiveActionToCloud() {
   }
 }
 
-async function loadStorageFromCloud() {
+function scheduleRealtimeCloudRefresh() {
+  clearTimeout(cloudRealtimeRefreshTimer);
+  cloudRealtimeRefreshTimer = setTimeout(() => {
+    cloudRealtimeRefreshTimer = null;
+    loadStorageFromCloud({ force: true });
+  }, 400);
+}
+
+function subscribeToCloudChanges() {
+  if (!supabaseClient?.channel) return;
+  supabaseClient
+    .channel("cles-app-state-sync")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "app_state",
+      },
+      (payload) => {
+        const storageKey = payload.new?.key || payload.old?.key || "";
+        if (!getBackupStorageKeys().includes(storageKey)) return;
+        scheduleRealtimeCloudRefresh();
+      },
+    )
+    .subscribe();
+}
+
+async function loadStorageFromCloud(options = {}) {
+  const force = Boolean(options.force);
   if (!hasCloudAccess()) return;
   if (isPhotoImporting) return;
   if (isCloudCheckRunning) return;
-  if (hasLoadedCloudState && document.visibilityState === "hidden") return;
+  if (!force && hasLoadedCloudState && document.visibilityState === "hidden") return;
   isCloudCheckRunning = true;
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
@@ -967,7 +997,7 @@ async function loadStorageFromCloud() {
       .map((row) => row.key);
     const deletedKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
     if (!changedKeys.length && !deletedKeys.length) return;
-    if (isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) return;
+    if (!force && (isKeyPanelOpen() || isKeyFormBeingEdited())) return;
 
     let changedRows = [];
     if (changedKeys.length) {
@@ -5761,6 +5791,7 @@ async function initializeApp() {
   migrateArchivedSlots();
   ensureDeviceName();
   await loadStorageFromCloud();
+  subscribeToCloudChanges();
   await migrateStoredPropertyAddresses();
   await optimizeStoredPhotos();
   await ensureMissedAutomaticBackupOnOpen();
