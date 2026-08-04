@@ -3009,13 +3009,14 @@ function createSavedBackupSummaryElement(payload) {
     title.textContent = label;
     stats.className = "saved-backup-summary-stats";
     [
-      ["Total", counts.total],
-      ["Dispo.", counts.available],
-      ["Réservés", counts.reserved],
-      ["Indispo.", counts.out],
-      ["Photos", counts.photos],
-    ].forEach(([statLabel, value]) => {
+      ["total", "Total", counts.total],
+      ["available", "Dispo.", counts.available],
+      ["reserved", "Réservés", counts.reserved],
+      ["out", "Indispo.", counts.out],
+      ["photos", "Photos", counts.photos],
+    ].forEach(([status, statLabel, value]) => {
       const stat = document.createElement("span");
+      stat.dataset.backupStat = status;
       stat.textContent = `${statLabel} ${value}`;
       stats.append(stat);
     });

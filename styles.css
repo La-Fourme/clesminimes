@@ -775,6 +775,36 @@ h3 {
   font-weight: 700;
 }
 
+.saved-backup-summary-stats span::before {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 999px;
+  background: var(--blue);
+  content: "";
+}
+
+.saved-backup-summary-stats span[data-backup-stat="total"]::before {
+  background: var(--blue);
+}
+
+.saved-backup-summary-stats span[data-backup-stat="available"]::before {
+  background: #3d8f5e;
+}
+
+.saved-backup-summary-stats span[data-backup-stat="reserved"]::before {
+  background: #d18427;
+}
+
+.saved-backup-summary-stats span[data-backup-stat="out"]::before {
+  background: #d34a3e;
+}
+
+.saved-backup-summary-stats span[data-backup-stat="photos"]::before {
+  background: #646d69;
+}
+
 .saved-backup-actions {
   display: flex;
   gap: 8px;
