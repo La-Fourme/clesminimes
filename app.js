@@ -829,8 +829,19 @@ function closeKeyPanelAfterAction() {
 async function syncCloudAfterAction() {
   try {
     await syncCurrentRegistryToCloud();
+    if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
+      await retryPendingCloudSyncs();
+    }
+    if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
+      alert("La synchronisation en ligne n'est pas encore confirm\u00e9e. Garde cette fiche ouverte et v\u00e9rifie la connexion avant de quitter.");
+      return false;
+    }
+    await loadStorageFromCloud();
+    return true;
   } catch (error) {
     console.warn("Supabase action sync failed", error.message);
+    alert("La synchronisation en ligne a \u00e9chou\u00e9. Garde cette fiche ouverte et r\u00e9essaie dans quelques secondes.");
+    return false;
   }
 }
 
@@ -1878,6 +1889,11 @@ function getKeyInfoDraftChanges() {
 
 function updateSelectedKeyInfoFromDraft() {
   updateSelectedKey(getKeyInfoDraftChanges());
+}
+
+function flushSelectedKeyInfoDraft() {
+  if (!selectedId || selectedArchiveRecord || form.hidden) return;
+  updateSelectedKeyInfoFromDraft();
 }
 
 function isTouchLayout() {
@@ -4737,6 +4753,7 @@ function setKeySetCount(count) {
 
 async function addMovement(type) {
   if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
+  flushSelectedKeyInfoDraft();
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
@@ -4791,8 +4808,8 @@ async function addMovement(type) {
   contactSelect.value = "";
   clearSignature();
   if (selectedArchiveRecord) renderCompromisesPanel();
-  closeKeyPanelAfterAction();
-  await syncCloudAfterAction();
+  const synced = await syncCloudAfterAction();
+  if (synced) closeKeyPanelAfterAction();
 }
 
 function getMovementDateText() {
@@ -5013,6 +5030,7 @@ async function archiveReservationKey(reservationId) {
 
 async function reserveSelectedSet() {
   if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
+  flushSelectedKeyInfoDraft();
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
@@ -5078,8 +5096,8 @@ async function reserveSelectedSet() {
   contactSelect.value = "";
   clearSignature();
   if (selectedArchiveRecord) renderCompromisesPanel();
-  closeKeyPanelAfterAction();
-  await syncCloudAfterAction();
+  const synced = await syncCloudAfterAction();
+  if (synced) closeKeyPanelAfterAction();
 }
 
 function promptReservationDateTime() {
@@ -5150,6 +5168,7 @@ function promptCompromiseDate(defaultValue = new Date().toISOString().slice(0, 1
 }
 
 async function archiveSelectedKey(reason) {
+  flushSelectedKeyInfoDraft();
   const key = getSelectedKey();
   if (!key || key.archived) return;
 
@@ -5216,8 +5235,8 @@ async function archiveSelectedKey(reason) {
   logActivity(actionLabel, keyLabel(key), [key.owner, key.property, movementActor.person || movementActor.company, compromiseSignedAt ? `Signature : ${formatDateOnly(compromiseSignedAt)}` : ""].filter(Boolean).join(" - "));
   saveArchives();
   saveKeys();
-  closeKeyPanelAfterAction();
-  await syncCloudAfterAction();
+  const synced = await syncCloudAfterAction();
+  if (synced) closeKeyPanelAfterAction();
 }
 
 function openContactsPanel() {
