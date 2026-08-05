@@ -684,13 +684,23 @@ async function loadStorageFromCloud(options = {}) {
   if (hasLoadedCloudState) {
     await retryFailedCloudSyncs();
     if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
-      flushSelectedKeyInfoToLocal();
-      await syncCurrentRegistryToCloud();
+      try {
+        flushSelectedKeyInfoToLocal();
+        await syncCurrentRegistryToCloud();
+      } catch (error) {
+        console.warn("Supabase local-first sync failed", error.message);
+      } finally {
+        isCloudCheckRunning = false;
+      }
       return;
     }
   } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
     const keysToSaveFirst = [...new Set([...dirtyCloudKeys, ...failedCloudSyncKeys])];
-    await Promise.all(keysToSaveFirst.map((storageKey) => syncStorageKeyToCloud(storageKey, { force: true })));
+    try {
+      await Promise.all(keysToSaveFirst.map((storageKey) => syncStorageKeyToCloud(storageKey, { force: true })));
+    } catch (error) {
+      console.warn("Supabase startup sync failed", error.message);
+    }
   }
   try {
     if (!hasLoadedCloudState) {
@@ -734,7 +744,7 @@ async function loadStorageFromCloud(options = {}) {
       .map((row) => row.key);
     const deletedKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
     if (!changedKeys.length && !deletedKeys.length) return;
-    if (isKeyPanelOpen() || isKeyFormBeingEdited()) return;
+    if (isKeyFormBeingEdited()) return;
 
     let changedRows = [];
     if (changedKeys.length) {
