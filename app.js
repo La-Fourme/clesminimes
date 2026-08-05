@@ -160,6 +160,7 @@ let isPhotoImporting = false;
 let photoImportResetTimer = null;
 let undoSnapshot = null;
 let isKeyInfoEditUnlocked = false;
+const recentlyClearedKeySlots = new Map();
 
 const protectedKeyInfoInputs = [ownerInput, ownerFirstNameInput, propertyInput, postalCodeInput, cityInput, notesInput];
 let tileViewMode = loadTileViewMode();
@@ -488,11 +489,41 @@ function preserveActiveKeyInfoDraft(storageKey, value) {
   return typeof value === "string" ? JSON.stringify(nextValue) : nextValue;
 }
 
+function rememberClearedKeySlot(keyId) {
+  if (!keyId) return;
+  recentlyClearedKeySlots.set(keyId, Date.now());
+}
+
+function forgetFilledClearedKeySlots(nextKeys) {
+  nextKeys.forEach((key) => {
+    if (recentlyClearedKeySlots.has(key.id) && isKeyFilled(key)) recentlyClearedKeySlots.delete(key.id);
+  });
+}
+
+function preserveRecentlyClearedKeySlots(storageKey, value) {
+  if (!recentlyClearedKeySlots.size || storageKey !== getRegistryConfig().keysStorageKey) return value;
+  const keyInfo = typeof value === "string" ? parseStorageValue(value) : value;
+  if (!Array.isArray(keyInfo)) return value;
+
+  const now = Date.now();
+  [...recentlyClearedKeySlots].forEach(([keyId, clearedAt]) => {
+    if (now - clearedAt > 120000) recentlyClearedKeySlots.delete(keyId);
+  });
+  if (!recentlyClearedKeySlots.size) return value;
+
+  const nextValue = keyInfo.map((key) => (recentlyClearedKeySlots.has(key.id) ? makeEmptyKey(key) : key));
+  return typeof value === "string" ? JSON.stringify(nextValue) : nextValue;
+}
+
+function protectLocalKeyEdits(storageKey, value) {
+  return preserveActiveKeyInfoDraft(storageKey, preserveRecentlyClearedKeySlots(storageKey, value));
+}
+
 function saveStorageValue(storageKey, value) {
   if (typeof value === "string") {
     const nextValue =
       isKeysStorageKey(storageKey)
-        ? preserveActiveKeyInfoDraft(
+        ? protectLocalKeyEdits(
             storageKey,
             JSON.stringify(mergeKeyCollections(value, localStorage.getItem(storageKey))),
           )
@@ -566,7 +597,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (!force && value !== null && remoteRow && isKeysStorageKey(storageKey)) {
         value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value));
-        value = preserveActiveKeyInfoDraft(storageKey, value);
+        value = protectLocalKeyEdits(storageKey, value);
         localStorage.setItem(storageKey, value);
       }
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
@@ -673,7 +704,7 @@ async function writeStorageKeyToCloudNow(storageKey) {
   let value = localStorage.getItem(storageKey);
   const updatedAt = new Date().toISOString();
   if (value !== null && isKeysStorageKey(storageKey)) {
-    value = preserveActiveKeyInfoDraft(storageKey, value);
+    value = protectLocalKeyEdits(storageKey, value);
     localStorage.setItem(storageKey, value);
   }
   const { error } =
@@ -1623,7 +1654,7 @@ async function moveKeyToSlot(sourceId, targetId, options = {}) {
   const targetKey = keys.find((key) => key.id === targetId);
   if (!sourceKey || !targetKey || !isKeyFilled(sourceKey)) return;
 
-  const shouldCopy = Boolean(options.copy);
+  const shouldCopy = false;
   const sourceContent = cloneKeyContent(sourceKey);
   const targetContent = cloneKeyContent(targetKey);
   const targetIsFilled = isKeyFilled(targetKey);
@@ -1644,6 +1675,8 @@ async function moveKeyToSlot(sourceId, targetId, options = {}) {
     if (key.id === sourceId) return targetIsFilled ? applyKeyContent(key, targetContent) : makeEmptyKey(key);
     return key;
   });
+  if (!targetIsFilled) rememberClearedKeySlot(sourceId);
+  forgetFilledClearedKeySlots(keys);
 
   selectedId = targetId;
   selectedSetId = sourceContent.sets[0]?.id || "main";
@@ -1662,6 +1695,8 @@ async function deleteKeyWithoutArchive(keyId) {
   rememberUndoStep();
 
   keys = keys.map((savedKey) => (savedKey.id === keyId ? makeEmptyKey(savedKey) : savedKey));
+  rememberClearedKeySlot(keyId);
+  forgetFilledClearedKeySlots(keys);
   if (selectedId === keyId) {
     selectedId = null;
     selectedArchiveRecord = null;
@@ -3905,7 +3940,7 @@ function renderGrid() {
           draggedKeyId = key.id;
           document.body.classList.add("is-moving-key");
           button.classList.add("is-dragging");
-          event.dataTransfer.effectAllowed = "copyMove";
+          event.dataTransfer.effectAllowed = "move";
           event.dataTransfer.setData("text/plain", key.id);
 
           const dragImage = document.createElement("span");
@@ -3929,7 +3964,7 @@ function renderGrid() {
         button.addEventListener("dragover", (event) => {
           if (!draggedKeyId || draggedKeyId === key.id) return;
           event.preventDefault();
-          event.dataTransfer.dropEffect = event.ctrlKey ? "copy" : "move";
+          event.dataTransfer.dropEffect = "move";
           button.classList.add("is-drop-target");
         });
         button.addEventListener("dragleave", () => {

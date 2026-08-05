@@ -101,13 +101,6 @@ returns trigger
 language plpgsql
 as $$
 begin
-  if tg_op = 'UPDATE'
-    and new.key in ('cles-immobilieres-v1', 'cles-transaction-v1')
-    and old.value is not null
-    and new.value is not null then
-    new.value := public.merge_key_state_without_losing_fields(new.value::jsonb, old.value::jsonb);
-  end if;
-
   return new;
 end;
 $$;
