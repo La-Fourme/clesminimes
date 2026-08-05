@@ -683,7 +683,7 @@ async function loadStorageFromCloud(options = {}) {
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
     await retryFailedCloudSyncs();
-    if (dirtyCloudKeys.size || failedCloudSyncKeys.size || hasRecentLocalEdit()) {
+    if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
       flushSelectedKeyInfoToLocal();
       await syncCurrentRegistryToCloud();
       return;
