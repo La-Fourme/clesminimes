@@ -19,6 +19,10 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
+const automaticBackupRetentionCount = 2;
+const automaticBackupWeekday = 5;
+const automaticBackupHour = 12;
+const automaticBackupMinute = 0;
 const cloudPollIntervalMs = 5000;
 const cloudWriteDebounceMs = 300;
 const registryConfig = {
@@ -2338,7 +2342,7 @@ function isAutomaticBackupRow(row) {
   return String(row?.key || "").startsWith(automaticBackupKeyPrefix);
 }
 
-async function loadSavedBackupRows(limit = 4) {
+async function loadSavedBackupRows(limit = automaticBackupRetentionCount) {
   if (!supabaseClient) return [];
   const { data, error } = await supabaseClient
     .from("app_state")
@@ -2364,14 +2368,26 @@ async function pruneOldAutomaticBackups() {
     .order("key", { ascending: false });
   if (error || !Array.isArray(data)) return;
 
-  const oldKeys = data.filter(isAutomaticBackupRow).slice(4).map((row) => row.key);
+  const oldKeys = data.filter(isAutomaticBackupRow).slice(automaticBackupRetentionCount).map((row) => row.key);
   await Promise.all(oldKeys.map((key) => supabaseClient.from("app_state").delete().eq("key", key)));
 }
 
-function getPreviousLocalDate(date = new Date()) {
-  const previousDate = new Date(date);
-  previousDate.setDate(previousDate.getDate() - 1);
-  return previousDate;
+function getAutomaticBackupTargetDate(date = new Date()) {
+  const target = new Date(date);
+  target.setHours(automaticBackupHour, automaticBackupMinute, 0, 0);
+  const daysUntilBackup = (automaticBackupWeekday - target.getDay() + 7) % 7;
+  target.setDate(target.getDate() + daysUntilBackup);
+  if (target <= date) target.setDate(target.getDate() + 7);
+  return target;
+}
+
+function getLatestAutomaticBackupDate(date = new Date()) {
+  const latest = new Date(date);
+  latest.setHours(automaticBackupHour, automaticBackupMinute, 0, 0);
+  const daysSinceBackup = (latest.getDay() - automaticBackupWeekday + 7) % 7;
+  latest.setDate(latest.getDate() - daysSinceBackup);
+  if (latest > date) latest.setDate(latest.getDate() - 7);
+  return latest;
 }
 
 async function hasAutomaticBackupForDate(date) {
@@ -2414,9 +2430,7 @@ async function createAutomaticBackup({ force = false, date = new Date() } = {}) 
 
 function getNextAutomaticBackupDelay() {
   const now = new Date();
-  const target = new Date(now);
-  target.setHours(23, 59, 0, 0);
-  if (target <= now) target.setDate(target.getDate() + 1);
+  const target = getAutomaticBackupTargetDate(now);
   return target.getTime() - now.getTime();
 }
 
@@ -2435,7 +2449,8 @@ function scheduleAutomaticBackup() {
 
 async function ensureTodaysAutomaticBackupIfLate() {
   const now = new Date();
-  if (now.getHours() < 23 || (now.getHours() === 23 && now.getMinutes() < 59)) return;
+  if (now.getDay() !== automaticBackupWeekday) return;
+  if (now.getHours() < automaticBackupHour || (now.getHours() === automaticBackupHour && now.getMinutes() < automaticBackupMinute)) return;
   try {
     await createAutomaticBackup();
   } catch (error) {
@@ -2444,7 +2459,7 @@ async function ensureTodaysAutomaticBackupIfLate() {
 }
 
 async function ensureMissedAutomaticBackupOnOpen() {
-  const previousDate = getPreviousLocalDate();
+  const previousDate = getLatestAutomaticBackupDate();
   try {
     if (await hasAutomaticBackupForDate(previousDate)) return;
     await createAutomaticBackup({ date: previousDate });
@@ -3306,7 +3321,7 @@ async function renderSavedBackupsPanel() {
   savedBackupsList.append(loading);
 
   try {
-    const rows = await loadSavedBackupRows(4);
+    const rows = await loadSavedBackupRows();
     savedBackupsList.innerHTML = "";
     if (!rows.length) {
       const empty = document.createElement("li");
