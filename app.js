@@ -2186,9 +2186,14 @@ async function loadSavedBackupRows(limit = 4) {
     .select("key,value,updated_at")
     .like("key", `${automaticBackupKeyPrefix}%`)
     .order("key", { ascending: false })
-    .limit(limit);
+    .limit(limit * 2);
   if (error) throw error;
-  return Array.isArray(data) ? data.filter(isAutomaticBackupRow) : [];
+  const uniqueRows = new Map();
+  (Array.isArray(data) ? data.filter(isAutomaticBackupRow) : []).forEach((row) => {
+    const day = row.value?.backupDate || String(row.key || "").replace(automaticBackupKeyPrefix, "") || row.updated_at || "";
+    if (!uniqueRows.has(day)) uniqueRows.set(day, row);
+  });
+  return [...uniqueRows.values()].slice(0, limit);
 }
 
 async function pruneOldAutomaticBackups() {
@@ -3025,6 +3030,17 @@ function formatSavedBackupTitleDate(value) {
   }).format(date);
 }
 
+function formatSavedBackupDay(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    return new Intl.DateTimeFormat("fr-FR", { dateStyle: "full" }).format(
+      new Date(Number(year), Number(month) - 1, Number(day)),
+    );
+  }
+  return formatSavedBackupTitleDate(value);
+}
+
 function parseBackupStorageArray(payload, storageKey) {
   const value = payload?.data?.[storageKey];
   if (!value) return [];
@@ -3148,8 +3164,9 @@ async function renderSavedBackupsPanel() {
       const applyButton = document.createElement("button");
       const downloadButton = document.createElement("button");
       const createdAt = payload.exportedAt || row.updated_at;
+      const savedDay = payload.backupDate || String(row.key || "").replace(automaticBackupKeyPrefix, "") || createdAt;
 
-      title.textContent = `Sauvegarde du ${formatSavedBackupTitleDate(createdAt)}`;
+      title.textContent = `Sauvegarde du ${formatSavedBackupDay(savedDay)}`;
       actions.className = "saved-backup-actions";
       applyButton.type = "button";
       applyButton.textContent = "Appliquer";
