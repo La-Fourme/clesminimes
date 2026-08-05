@@ -551,7 +551,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (value !== null && remoteRow && isKeysStorageKey(storageKey)) {
-        value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value, { keepFallbackWhenPreferredEmpty: true }));
+        value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value));
         localStorage.setItem(storageKey, value);
       }
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
@@ -664,7 +664,7 @@ async function writeStorageKeyToCloudNow(storageKey) {
       .eq("key", storageKey)
       .maybeSingle();
     if (!remoteError && remoteRow) {
-      value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value, { keepFallbackWhenPreferredEmpty: true }));
+      value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value));
       localStorage.setItem(storageKey, value);
     }
   }
