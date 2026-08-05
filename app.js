@@ -185,10 +185,6 @@ function markLocalEdit() {
   localStorage.setItem(lastLocalEditStorageKey, String(lastLocalEditAt));
 }
 
-function hasRecentLocalEdit(windowMs = 20000) {
-  return Date.now() - lastLocalEditAt < windowMs;
-}
-
 function loadTileViewMode() {
   return localStorage.getItem(tileViewStorageKey) === "photo" ? "photo" : "text";
 }
@@ -498,7 +494,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
-        if ((dirtyCloudKeys.has(storageKey) || isKeyPanelOpen() || isKeyFormBeingEdited() || hasRecentLocalEdit()) && value !== null) {
+        if ((dirtyCloudKeys.has(storageKey) || isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) && value !== null) {
           const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
             key: storageKey,
             value: parseStorageValue(value),
@@ -683,24 +679,10 @@ async function loadStorageFromCloud(options = {}) {
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
     await retryFailedCloudSyncs();
-    if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
-      try {
-        flushSelectedKeyInfoToLocal();
-        await syncCurrentRegistryToCloud();
-      } catch (error) {
-        console.warn("Supabase local-first sync failed", error.message);
-      } finally {
-        isCloudCheckRunning = false;
-      }
-      return;
-    }
   } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
-    const keysToSaveFirst = [...new Set([...dirtyCloudKeys, ...failedCloudSyncKeys])];
-    try {
-      await Promise.all(keysToSaveFirst.map((storageKey) => syncStorageKeyToCloud(storageKey, { force: true })));
-    } catch (error) {
-      console.warn("Supabase startup sync failed", error.message);
-    }
+    dirtyCloudKeys.clear();
+    failedCloudSyncKeys.clear();
+    savePendingCloudKeys();
   }
   try {
     if (!hasLoadedCloudState) {
@@ -744,7 +726,7 @@ async function loadStorageFromCloud(options = {}) {
       .map((row) => row.key);
     const deletedKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
     if (!changedKeys.length && !deletedKeys.length) return;
-    if (isKeyFormBeingEdited()) return;
+    if (isKeyPanelOpen() || isKeyFormBeingEdited()) return;
 
     let changedRows = [];
     if (changedKeys.length) {
@@ -1665,11 +1647,6 @@ function getKeyInfoDraftChanges() {
 
 function updateSelectedKeyInfoFromDraft() {
   updateSelectedKey(getKeyInfoDraftChanges());
-}
-
-function flushSelectedKeyInfoToLocal() {
-  if (!selectedId || selectedArchiveRecord || detailPanel.hidden || form.hidden) return;
-  updateSelectedKeyInfoFromDraft();
 }
 
 function isTouchLayout() {
@@ -5507,7 +5484,6 @@ backupFileInput.addEventListener("change", () => {
 });
 closePanelBtn.addEventListener("click", () => {
   clearTimeout(detailCloseTimer);
-  flushSelectedKeyInfoToLocal();
   syncCurrentRegistryNow();
   selectedId = null;
   selectedArchiveRecord = null;
@@ -5522,7 +5498,6 @@ document.addEventListener("pointerdown", (event) => {
   if (event.target.closest(".photo-viewer, .date-dialog")) return;
 
   clearTimeout(detailCloseTimer);
-  flushSelectedKeyInfoToLocal();
   selectedId = null;
   selectedArchiveRecord = null;
   resetKeyInfoEditUnlock(null);
@@ -5591,14 +5566,12 @@ async function initializeApp() {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
-    flushSelectedKeyInfoToLocal();
     savePendingCloudKeys();
     syncCurrentRegistryNow();
   }
   else loadStorageFromCloud();
 });
 window.addEventListener("pagehide", () => {
-  flushSelectedKeyInfoToLocal();
   savePendingCloudKeys();
   syncCurrentRegistryNow();
 });
