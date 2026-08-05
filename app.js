@@ -160,6 +160,7 @@ let isPhotoImporting = false;
 let photoImportResetTimer = null;
 let undoSnapshot = null;
 let isKeyInfoEditUnlocked = false;
+let keyDrafts = new Map();
 
 const protectedKeyInfoInputs = [ownerInput, ownerFirstNameInput, propertyInput, postalCodeInput, cityInput, notesInput];
 let tileViewMode = loadTileViewMode();
@@ -639,6 +640,7 @@ function removeAutomaticBackupsFromLocalStorage() {
 }
 
 function closeKeyPanelAfterAction() {
+  clearSelectedKeyDraftIfNew();
   selectedId = null;
   selectedArchiveRecord = null;
   selectedSetId = "main";
@@ -835,6 +837,7 @@ function updateRegistryHeader() {
 function switchRegistry() {
   activeRegistry = activeRegistry === "location" ? "transaction" : "location";
   saveActiveRegistry();
+  keyDrafts.clear();
   keys = loadKeys();
   archives = loadArchives();
   contacts = loadContacts();
@@ -1356,7 +1359,9 @@ function getSelectedKey() {
       archived: true,
     };
   }
-  return keys.find((key) => key.id === selectedId);
+  const key = keys.find((savedKey) => savedKey.id === selectedId);
+  if (!key || isKeyFilled(key)) return key;
+  return getDraftKey(key);
 }
 
 function getSelectedSet(key = getSelectedKey()) {
@@ -1406,6 +1411,49 @@ function isKeyFilled(key) {
       key.notes?.trim() ||
       key.sets?.some((set) => set.photo || set.holder?.trim() || set.history?.length || hasActiveReservations(set)),
   );
+}
+
+function isStoredKeyFilled(keyId) {
+  const storedKey = keys.find((key) => key.id === keyId);
+  return Boolean(storedKey && isKeyFilled(storedKey));
+}
+
+function getDraftKey(baseKey) {
+  if (!baseKey || !keyDrafts.has(baseKey.id)) return baseKey;
+  return normalizeKey({
+    ...baseKey,
+    ...keyDrafts.get(baseKey.id),
+  });
+}
+
+function setKeyDraft(keyId, changes) {
+  const previousDraft = keyDrafts.get(keyId) || {};
+  keyDrafts.set(keyId, {
+    ...previousDraft,
+    ...changes,
+  });
+}
+
+function clearKeyDraft(keyId) {
+  keyDrafts.delete(keyId);
+}
+
+function isSelectedNewKeyDraft() {
+  return !selectedArchiveRecord && selectedId && !isStoredKeyFilled(selectedId);
+}
+
+function clearSelectedKeyDraftIfNew() {
+  if (isSelectedNewKeyDraft()) clearKeyDraft(selectedId);
+}
+
+function getRequiredKeyInfoMissingLabels(key) {
+  const missing = [];
+  if (!String(key?.owner || "").trim()) missing.push("Nom du propri\u00e9taire / de la soci\u00e9t\u00e9");
+  if (!String(key?.ownerFirstName || "").trim()) missing.push("Pr\u00e9nom du propri\u00e9taire");
+  if (!String(key?.property || "").trim()) missing.push("Adresse du bien");
+  if (!String(key?.postalCode || "").trim()) missing.push("Code postal du bien");
+  if (!String(key?.city || "").trim()) missing.push("Ville du bien");
+  return missing;
 }
 
 function hasProtectedKeyInfo(key) {
@@ -1646,6 +1694,11 @@ function getKeyInfoDraftChanges() {
 }
 
 function updateSelectedKeyInfoFromDraft() {
+  if (!selectedArchiveRecord && selectedId && !isStoredKeyFilled(selectedId)) {
+    setKeyDraft(selectedId, getKeyInfoDraftChanges());
+    renderPanel();
+    return;
+  }
   updateSelectedKey(getKeyInfoDraftChanges());
 }
 
@@ -2297,12 +2350,20 @@ async function ensureMissedAutomaticBackupOnOpen() {
 function refreshDataFromStorage({ keepSelection = false } = {}) {
   const previousSelectedId = selectedId;
   const previousSelectedSetId = selectedSetId;
+  const previousSelectedDraft =
+    keepSelection && previousSelectedId && keyDrafts.has(previousSelectedId)
+      ? keyDrafts.get(previousSelectedId)
+      : null;
+  keyDrafts.clear();
   activeRegistry = loadActiveRegistry();
   keys = loadKeys();
   archives = loadArchives();
   contacts = loadContacts();
   selectedId = keepSelection && keys.some((key) => key.id === previousSelectedId) ? previousSelectedId : null;
   selectedSetId = keepSelection ? previousSelectedSetId || "main" : "main";
+  if (previousSelectedDraft && selectedId === previousSelectedId && !isStoredKeyFilled(selectedId)) {
+    keyDrafts.set(selectedId, previousSelectedDraft);
+  }
   hoveredKeyId = null;
   isDetailPanelHovered = false;
   if (!keepSelection) {
@@ -3755,6 +3816,7 @@ function renderGrid() {
         }
 
         button.addEventListener("click", () => {
+          if (selectedId !== key.id) clearSelectedKeyDraftIfNew();
           selectedArchiveRecord = null;
           selectedId = key.id;
           selectedSetId = key.sets[0]?.id || "main";
@@ -4470,6 +4532,11 @@ function updateSelectedKeySets(sets) {
     render();
     return;
   }
+  if (selectedId && !isStoredKeyFilled(selectedId)) {
+    setKeyDraft(selectedId, { sets });
+    renderPanel();
+    return;
+  }
   updateSelectedKey({ sets });
 }
 
@@ -4538,6 +4605,18 @@ async function addMovement(type) {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+  const isNewKeyCreation = isSelectedNewKeyDraft();
+  if (isNewKeyCreation && type !== "in") {
+    alert("Pour cr\u00e9er une fiche de cl\u00e9, valide d'abord avec Entr\u00e9.");
+    return;
+  }
+  if (isNewKeyCreation) {
+    const missingLabels = getRequiredKeyInfoMissingLabels(key);
+    if (missingLabels.length) {
+      alert(`La fiche ne peut pas \u00eatre cr\u00e9\u00e9e : renseigne ${missingLabels.join(", ")} puis valide avec Entr\u00e9.`);
+      return;
+    }
+  }
   if (selectedSet.status === "out" && selectedSet.holderReservationId) {
     alert("Cette sortie vient d'une r\u00e9servation : utilise la case orange de r\u00e9servation au-dessus.");
     return;
@@ -4549,6 +4628,10 @@ async function addMovement(type) {
   const isReturningAfterCheckout = type === "in" && selectedSet.status === "out";
   if (!ensureMovementActor(type === "out" ? "Sorti" : "Entr\u00e9", { person: forcedPerson, company: forcedCompany })) return;
   if (type === "out") showCheckoutReservationWarning(selectedSet);
+  if (isNewKeyCreation) {
+    keys = keys.map((savedKey) => (savedKey.id === selectedId ? normalizeKey(key) : savedKey));
+    clearKeyDraft(selectedId);
+  }
 
   const entry = {
     id: createHistoryId(),
@@ -4814,6 +4897,10 @@ async function reserveSelectedSet() {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+  if (isSelectedNewKeyDraft()) {
+    alert("Pour cr\u00e9er une fiche de cl\u00e9, valide d'abord avec Entr\u00e9.");
+    return;
+  }
   clearTimeout(detailCloseTimer);
 
   const contact = contacts.find((savedContact) => savedContact.id === contactSelect.value);
@@ -4950,6 +5037,10 @@ function promptCompromiseDate(defaultValue = new Date().toISOString().slice(0, 1
 async function archiveSelectedKey(reason) {
   const key = getSelectedKey();
   if (!key || key.archived) return;
+  if (isSelectedNewKeyDraft()) {
+    alert("Pour cr\u00e9er une fiche de cl\u00e9, valide d'abord avec Entr\u00e9.");
+    return;
+  }
 
   const actionLabel = reason === "rented" ? getRegistryConfig().archiveActionLabel : "Archivé";
   if (!ensureMovementActor(actionLabel)) return;
@@ -5485,6 +5576,7 @@ backupFileInput.addEventListener("change", () => {
 closePanelBtn.addEventListener("click", () => {
   clearTimeout(detailCloseTimer);
   syncCurrentRegistryNow();
+  clearSelectedKeyDraftIfNew();
   selectedId = null;
   selectedArchiveRecord = null;
   resetKeyInfoEditUnlock(null);
@@ -5498,6 +5590,7 @@ document.addEventListener("pointerdown", (event) => {
   if (event.target.closest(".photo-viewer, .date-dialog")) return;
 
   clearTimeout(detailCloseTimer);
+  clearSelectedKeyDraftIfNew();
   selectedId = null;
   selectedArchiveRecord = null;
   resetKeyInfoEditUnlock(null);
