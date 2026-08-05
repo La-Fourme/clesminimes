@@ -1649,7 +1649,7 @@ function getKeyInfoDraftChanges() {
 function updateSelectedKeyInfoFromDraft() {
   isSavingKeyInfoDraft = true;
   try {
-    updateSelectedKey(getKeyInfoDraftChanges());
+    updateSelectedKey(getKeyInfoDraftChanges(), { renderPanel: false });
   } finally {
     isSavingKeyInfoDraft = false;
   }
@@ -4410,8 +4410,9 @@ function deleteHistoryEntry(historyId) {
   });
 }
 
-function updateSelectedKey(changes) {
+function updateSelectedKey(changes, options = {}) {
   if (selectedArchiveRecord) return;
+  const shouldRenderPanel = options.renderPanel !== false;
   const previousKey = getSelectedKey();
   const wasFilled = previousKey ? isKeyFilled(previousKey) : false;
   rememberUndoStep();
@@ -4440,7 +4441,12 @@ function updateSelectedKey(changes) {
     updateCreationActivityForKey(nextKey);
   }
   saveKeys();
-  render();
+  if (shouldRenderPanel) {
+    render();
+  } else {
+    renderGrid();
+    renderCompromisesPanel();
+  }
 }
 
 function updateSelectedSet(changes) {
