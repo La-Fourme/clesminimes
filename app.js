@@ -176,6 +176,7 @@ let failedCloudSyncKeys = new Set();
 let cloudSyncTimers = new Map();
 let dirtyCloudKeys = loadPendingCloudKeys();
 let cloudRowVersions = loadCloudRowVersions();
+let localStorageKeyEditTimes = new Map();
 let hasLoadedCloudState = cloudRowVersions.size > 0;
 let isCloudCheckRunning = false;
 
@@ -183,6 +184,16 @@ function markLocalEdit() {
   if (isApplyingCloudState) return;
   lastLocalEditAt = Date.now();
   localStorage.setItem(lastLocalEditStorageKey, String(lastLocalEditAt));
+}
+
+function markStorageKeyLocalEdit(storageKey) {
+  if (isApplyingCloudState) return;
+  localStorageKeyEditTimes.set(storageKey, Date.now());
+}
+
+function hasRecentStorageKeyLocalEdit(storageKey, windowMs = 20000) {
+  const editedAt = localStorageKeyEditTimes.get(storageKey) || 0;
+  return Date.now() - editedAt < windowMs;
 }
 
 function loadTileViewMode() {
@@ -460,6 +471,7 @@ function savePendingCloudKeys() {
 
 function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
   if (!supabaseClient) return;
+  markStorageKeyLocalEdit(storageKey);
   dirtyCloudKeys.add(storageKey);
   savePendingCloudKeys();
   clearTimeout(cloudSyncTimers.get(storageKey));
@@ -510,6 +522,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
 
           failedCloudSyncKeys.delete(storageKey);
           dirtyCloudKeys.delete(storageKey);
+          localStorageKeyEditTimes.delete(storageKey);
           cloudRowVersions.set(storageKey, updatedAt);
           savePendingCloudKeys();
           saveCloudRowVersions();
@@ -565,6 +578,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       }
       failedCloudSyncKeys.delete(storageKey);
       dirtyCloudKeys.delete(storageKey);
+      localStorageKeyEditTimes.delete(storageKey);
       savePendingCloudKeys();
       if (value === null) cloudRowVersions.delete(storageKey);
       else cloudRowVersions.set(storageKey, updatedAt);
@@ -614,6 +628,7 @@ async function writeStorageKeyToCloudNow(storageKey) {
 
   dirtyCloudKeys.delete(storageKey);
   failedCloudSyncKeys.delete(storageKey);
+  localStorageKeyEditTimes.delete(storageKey);
   if (value === null) cloudRowVersions.delete(storageKey);
   else cloudRowVersions.set(storageKey, updatedAt);
   savePendingCloudKeys();
@@ -680,9 +695,12 @@ async function loadStorageFromCloud(options = {}) {
   if (hasLoadedCloudState) {
     await retryFailedCloudSyncs();
   } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
-    dirtyCloudKeys.clear();
-    failedCloudSyncKeys.clear();
-    savePendingCloudKeys();
+    const keysToSaveFirst = [...new Set([...dirtyCloudKeys, ...failedCloudSyncKeys])];
+    try {
+      await Promise.all(keysToSaveFirst.map((storageKey) => syncStorageKeyToCloud(storageKey, { force: true })));
+    } catch (error) {
+      console.warn("Supabase startup sync failed", error.message);
+    }
   }
   try {
     if (!hasLoadedCloudState) {
@@ -721,12 +739,23 @@ async function loadStorageFromCloud(options = {}) {
     if (!Array.isArray(metadata)) return;
 
     const remoteVersions = new Map(metadata.map((row) => [row.key, row.updated_at || ""]));
-    const changedKeys = metadata
+    let changedKeys = metadata
       .filter((row) => cloudRowVersions.get(row.key) !== (row.updated_at || "") || localStorage.getItem(row.key) === null)
       .map((row) => row.key);
     const deletedKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
     if (!changedKeys.length && !deletedKeys.length) return;
-    if (isKeyPanelOpen() || isKeyFormBeingEdited()) return;
+    const locallyProtectedKeys = changedKeys.filter(
+      (storageKey) =>
+        dirtyCloudKeys.has(storageKey) ||
+        failedCloudSyncKeys.has(storageKey) ||
+        hasRecentStorageKeyLocalEdit(storageKey),
+    );
+    if (locallyProtectedKeys.length) {
+      await Promise.all(locallyProtectedKeys.map((storageKey) => syncStorageKeyToCloud(storageKey, { force: true })));
+      changedKeys = changedKeys.filter((storageKey) => !locallyProtectedKeys.includes(storageKey));
+    }
+    if (isKeyFormBeingEdited() && changedKeys.includes(getRegistryConfig().keysStorageKey)) return;
+    if (!changedKeys.length && !deletedKeys.length) return;
 
     let changedRows = [];
     if (changedKeys.length) {
@@ -742,7 +771,8 @@ async function loadStorageFromCloud(options = {}) {
     changedRows.forEach((row) => saveStorageValue(row.key, stringifyCloudValue(row.value)));
     deletedKeys.forEach((key) => localStorage.removeItem(key));
     isApplyingCloudState = false;
-    cloudRowVersions = remoteVersions;
+    changedRows.forEach((row) => cloudRowVersions.set(row.key, row.updated_at || ""));
+    deletedKeys.forEach((key) => cloudRowVersions.delete(key));
     saveCloudRowVersions();
     refreshDataFromStorage({ keepSelection: true });
   } catch (error) {
