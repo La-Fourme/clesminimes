@@ -425,9 +425,65 @@ function stringifyCloudValue(value) {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
+function isKeysStorageKey(storageKey) {
+  return Object.values(registryConfig).some((config) => config.keysStorageKey === storageKey);
+}
+
+function getKeyCompletenessScore(key) {
+  if (!key) return 0;
+  return [
+    key.owner,
+    key.ownerFirstName,
+    key.property,
+    key.postalCode,
+    key.city,
+    key.notes,
+    ...(key.sets || []).map((set) => set.photo),
+  ].filter((value) => String(value || "").trim()).length;
+}
+
+function mergeKeyRecord(preferredRaw, fallbackRaw, options = {}) {
+  const preferred = normalizeKey(preferredRaw);
+  if (!fallbackRaw) return preferred;
+  const fallback = normalizeKey(fallbackRaw);
+  const preferredScore = getKeyCompletenessScore(preferred);
+  const fallbackScore = getKeyCompletenessScore(fallback);
+  if (preferredScore === 0 && fallbackScore > 0) {
+    return options.keepFallbackWhenPreferredEmpty ? fallback : preferred;
+  }
+  if (fallbackScore === 0) return preferred;
+
+  return normalizeKey({
+    ...preferred,
+    property: preferred.property || fallback.property,
+    postalCode: preferred.postalCode || fallback.postalCode,
+    city: preferred.city || fallback.city,
+    owner: preferred.owner || fallback.owner,
+    ownerFirstName: preferred.ownerFirstName || fallback.ownerFirstName,
+    notes: preferred.notes || fallback.notes,
+    sets: preferred.sets.map((set) => {
+      const fallbackSet = fallback.sets.find((savedSet) => savedSet.id === set.id);
+      return fallbackSet && !set.photo ? { ...set, photo: fallbackSet.photo } : set;
+    }),
+  });
+}
+
+function mergeKeyCollections(preferredValue, fallbackValue, options = {}) {
+  const preferredKeys = typeof preferredValue === "string" ? parseStorageValue(preferredValue) : preferredValue;
+  const fallbackKeys = typeof fallbackValue === "string" ? parseStorageValue(fallbackValue) : fallbackValue;
+  if (!Array.isArray(preferredKeys) || !Array.isArray(fallbackKeys)) return preferredValue;
+
+  const fallbackById = new Map(fallbackKeys.map((key) => [key.id, key]));
+  return preferredKeys.map((key) => mergeKeyRecord(key, fallbackById.get(key.id), options));
+}
+
 function saveStorageValue(storageKey, value) {
   if (typeof value === "string") {
-    localStorage.setItem(storageKey, value);
+    const nextValue =
+      isKeysStorageKey(storageKey)
+        ? JSON.stringify(mergeKeyCollections(value, localStorage.getItem(storageKey)))
+        : value;
+    localStorage.setItem(storageKey, nextValue);
   } else {
     localStorage.removeItem(storageKey);
   }
@@ -480,7 +536,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
   failedCloudSyncKeys.delete(storageKey);
 
   const force = Boolean(options.force);
-  const value = localStorage.getItem(storageKey);
+  let value = localStorage.getItem(storageKey);
   const updatedAt = new Date().toISOString();
   const expectedUpdatedAt = cloudRowVersions.get(storageKey) || null;
   pendingCloudSync = pendingCloudSync
@@ -494,6 +550,10 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       if (versionError) throw versionError;
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
+      if (value !== null && remoteRow && isKeysStorageKey(storageKey)) {
+        value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value, { keepFallbackWhenPreferredEmpty: true }));
+        localStorage.setItem(storageKey, value);
+      }
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
         if ((dirtyCloudKeys.has(storageKey) || isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) && value !== null) {
           const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
@@ -595,8 +655,19 @@ async function writeStorageKeyToCloudNow(storageKey) {
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.delete(storageKey);
 
-  const value = localStorage.getItem(storageKey);
+  let value = localStorage.getItem(storageKey);
   const updatedAt = new Date().toISOString();
+  if (value !== null && isKeysStorageKey(storageKey)) {
+    const { data: remoteRow, error: remoteError } = await supabaseClient
+      .from("app_state")
+      .select("value")
+      .eq("key", storageKey)
+      .maybeSingle();
+    if (!remoteError && remoteRow) {
+      value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value, { keepFallbackWhenPreferredEmpty: true }));
+      localStorage.setItem(storageKey, value);
+    }
+  }
   const { error } =
     value === null
       ? await supabaseClient.from("app_state").delete().eq("key", storageKey)
