@@ -1745,6 +1745,7 @@ function updateSelectedKeyInfoFromDraft() {
     const changes = getKeyInfoDraftChanges();
     rememberActiveKeyInfoDraft(changes);
     updateSelectedKey(changes, { renderPanel: false });
+    void syncStorageKeyToCloud(getRegistryConfig().keysStorageKey, { force: true });
   } finally {
     isSavingKeyInfoDraft = false;
   }
