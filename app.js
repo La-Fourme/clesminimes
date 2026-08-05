@@ -177,6 +177,7 @@ let failedCloudSyncKeys = new Set();
 let cloudSyncTimers = new Map();
 let dirtyCloudKeys = loadPendingCloudKeys();
 let cloudRowVersions = loadCloudRowVersions();
+let activeKeyInfoDraft = null;
 let hasLoadedCloudState = cloudRowVersions.size > 0;
 let isCloudCheckRunning = false;
 
@@ -711,6 +712,7 @@ function removeAutomaticBackupsFromLocalStorage() {
 }
 
 function closeKeyPanelAfterAction() {
+  activeKeyInfoDraft = null;
   selectedId = null;
   selectedArchiveRecord = null;
   selectedSetId = "main";
@@ -1717,10 +1719,32 @@ function getKeyInfoDraftChanges() {
   };
 }
 
+function rememberActiveKeyInfoDraft(changes = getKeyInfoDraftChanges()) {
+  if (!selectedId || selectedArchiveRecord) return;
+  activeKeyInfoDraft = {
+    keyId: selectedId,
+    changes,
+    editedAt: Date.now(),
+  };
+}
+
+function restoreActiveKeyInfoDraftIfNeeded() {
+  if (!activeKeyInfoDraft || !selectedId || selectedArchiveRecord) return;
+  if (activeKeyInfoDraft.keyId !== selectedId) return;
+  if (Date.now() - activeKeyInfoDraft.editedAt > 30000) {
+    activeKeyInfoDraft = null;
+    return;
+  }
+  keys = keys.map((key) => (key.id === selectedId ? { ...key, ...activeKeyInfoDraft.changes } : key));
+  saveKeys();
+}
+
 function updateSelectedKeyInfoFromDraft() {
   isSavingKeyInfoDraft = true;
   try {
-    updateSelectedKey(getKeyInfoDraftChanges(), { renderPanel: false });
+    const changes = getKeyInfoDraftChanges();
+    rememberActiveKeyInfoDraft(changes);
+    updateSelectedKey(changes, { renderPanel: false });
   } finally {
     isSavingKeyInfoDraft = false;
   }
@@ -2380,6 +2404,7 @@ function refreshDataFromStorage({ keepSelection = false } = {}) {
   contacts = loadContacts();
   selectedId = keepSelection && keys.some((key) => key.id === previousSelectedId) ? previousSelectedId : null;
   selectedSetId = keepSelection ? previousSelectedSetId || "main" : "main";
+  if (keepSelection) restoreActiveKeyInfoDraftIfNeeded();
   hoveredKeyId = null;
   isDetailPanelHovered = false;
   if (!keepSelection) {
@@ -3832,6 +3857,7 @@ function renderGrid() {
         }
 
         button.addEventListener("click", () => {
+          if (selectedId !== key.id) activeKeyInfoDraft = null;
           selectedArchiveRecord = null;
           selectedId = key.id;
           selectedSetId = key.sets[0]?.id || "main";
@@ -5573,6 +5599,7 @@ backupFileInput.addEventListener("change", () => {
 closePanelBtn.addEventListener("click", () => {
   clearTimeout(detailCloseTimer);
   syncCurrentRegistryNow();
+  activeKeyInfoDraft = null;
   selectedId = null;
   selectedArchiveRecord = null;
   resetKeyInfoEditUnlock(null);
@@ -5586,6 +5613,7 @@ document.addEventListener("pointerdown", (event) => {
   if (event.target.closest(".photo-viewer, .date-dialog")) return;
 
   clearTimeout(detailCloseTimer);
+  activeKeyInfoDraft = null;
   selectedId = null;
   selectedArchiveRecord = null;
   resetKeyInfoEditUnlock(null);
