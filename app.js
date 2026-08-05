@@ -564,7 +564,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       if (versionError) throw versionError;
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
-      if (value !== null && remoteRow && isKeysStorageKey(storageKey)) {
+      if (!force && value !== null && remoteRow && isKeysStorageKey(storageKey)) {
         value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value));
         value = preserveActiveKeyInfoDraft(storageKey, value);
         localStorage.setItem(storageKey, value);
@@ -673,16 +673,8 @@ async function writeStorageKeyToCloudNow(storageKey) {
   let value = localStorage.getItem(storageKey);
   const updatedAt = new Date().toISOString();
   if (value !== null && isKeysStorageKey(storageKey)) {
-    const { data: remoteRow, error: remoteError } = await supabaseClient
-      .from("app_state")
-      .select("value")
-      .eq("key", storageKey)
-      .maybeSingle();
-    if (!remoteError && remoteRow) {
-      value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value));
-      value = preserveActiveKeyInfoDraft(storageKey, value);
-      localStorage.setItem(storageKey, value);
-    }
+    value = preserveActiveKeyInfoDraft(storageKey, value);
+    localStorage.setItem(storageKey, value);
   }
   const { error } =
     value === null
