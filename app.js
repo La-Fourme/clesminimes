@@ -1653,7 +1653,7 @@ async function moveKeyToSlot(sourceId, targetId, options = {}) {
   await syncCloudAfterAction();
 }
 
-function deleteKeyWithoutArchive(keyId) {
+async function deleteKeyWithoutArchive(keyId) {
   const key = keys.find((savedKey) => savedKey.id === keyId);
   if (!key || !isKeyFilled(key)) return;
 
@@ -1671,6 +1671,7 @@ function deleteKeyWithoutArchive(keyId) {
   logActivity("Suppression", `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`, [key.owner, key.property].filter(Boolean).join(" - "));
   saveKeys();
   render();
+  await syncCloudAfterAction();
 }
 
 function render() {
