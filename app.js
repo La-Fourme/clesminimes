@@ -478,11 +478,24 @@ function mergeKeyCollections(preferredValue, fallbackValue, options = {}) {
   return preferredKeys.map((key) => mergeKeyRecord(key, fallbackById.get(key.id), options));
 }
 
+function preserveActiveKeyInfoDraft(storageKey, value) {
+  if (!activeKeyInfoDraft || storageKey !== getRegistryConfig().keysStorageKey) return value;
+  const keyInfo = typeof value === "string" ? parseStorageValue(value) : value;
+  if (!Array.isArray(keyInfo)) return value;
+  const nextValue = keyInfo.map((key) =>
+    key.id === activeKeyInfoDraft.keyId ? normalizeKey({ ...key, ...activeKeyInfoDraft.changes }) : key,
+  );
+  return typeof value === "string" ? JSON.stringify(nextValue) : nextValue;
+}
+
 function saveStorageValue(storageKey, value) {
   if (typeof value === "string") {
     const nextValue =
       isKeysStorageKey(storageKey)
-        ? JSON.stringify(mergeKeyCollections(value, localStorage.getItem(storageKey)))
+        ? preserveActiveKeyInfoDraft(
+            storageKey,
+            JSON.stringify(mergeKeyCollections(value, localStorage.getItem(storageKey))),
+          )
         : value;
     localStorage.setItem(storageKey, nextValue);
   } else {
@@ -553,6 +566,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (value !== null && remoteRow && isKeysStorageKey(storageKey)) {
         value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value));
+        value = preserveActiveKeyInfoDraft(storageKey, value);
         localStorage.setItem(storageKey, value);
       }
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
@@ -666,6 +680,7 @@ async function writeStorageKeyToCloudNow(storageKey) {
       .maybeSingle();
     if (!remoteError && remoteRow) {
       value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value));
+      value = preserveActiveKeyInfoDraft(storageKey, value);
       localStorage.setItem(storageKey, value);
     }
   }

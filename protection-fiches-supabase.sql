@@ -65,8 +65,6 @@ declare
   old_item jsonb;
   merged_item jsonb;
   merged_value jsonb := '[]'::jsonb;
-  new_score integer;
-  old_score integer;
 begin
   if jsonb_typeof(new_value) <> 'array' or jsonb_typeof(old_value) <> 'array' then
     return new_value;
@@ -83,23 +81,12 @@ begin
       limit 1;
 
     if old_item is not null then
-      new_score := public.key_state_score(new_item);
-      old_score := public.key_state_score(old_item);
-
-      if new_score > 0 and old_score > new_score then
-        merged_item := jsonb_set(merged_item, '{owner}', to_jsonb(coalesce(nullif(new_item->>'owner', ''), old_item->>'owner', '')), true);
-        merged_item := jsonb_set(merged_item, '{ownerFirstName}', to_jsonb(coalesce(nullif(new_item->>'ownerFirstName', ''), old_item->>'ownerFirstName', '')), true);
-        merged_item := jsonb_set(merged_item, '{property}', to_jsonb(coalesce(nullif(new_item->>'property', ''), old_item->>'property', '')), true);
-        merged_item := jsonb_set(merged_item, '{postalCode}', to_jsonb(coalesce(nullif(new_item->>'postalCode', ''), old_item->>'postalCode', '')), true);
-        merged_item := jsonb_set(merged_item, '{city}', to_jsonb(coalesce(nullif(new_item->>'city', ''), old_item->>'city', '')), true);
-        merged_item := jsonb_set(merged_item, '{notes}', to_jsonb(coalesce(nullif(new_item->>'notes', ''), old_item->>'notes', '')), true);
-        merged_item := jsonb_set(
-          merged_item,
-          '{sets}',
-          public.merge_key_sets_without_losing_photos(coalesce(new_item->'sets', '[]'::jsonb), coalesce(old_item->'sets', '[]'::jsonb)),
-          true
-        );
-      end if;
+      merged_item := jsonb_set(
+        merged_item,
+        '{sets}',
+        public.merge_key_sets_without_losing_photos(coalesce(new_item->'sets', '[]'::jsonb), coalesce(old_item->'sets', '[]'::jsonb)),
+        true
+      );
     end if;
 
     merged_value := merged_value || jsonb_build_array(merged_item);
