@@ -171,6 +171,7 @@ let celebrationAudioPlayers = [];
 let photoViewer = null;
 let lastLocalEditAt = Number(localStorage.getItem(lastLocalEditStorageKey) || 0);
 let isApplyingCloudState = false;
+let isSavingKeyInfoDraft = false;
 let pendingCloudSync = Promise.resolve();
 let failedCloudSyncKeys = new Set();
 let cloudSyncTimers = new Map();
@@ -1646,7 +1647,12 @@ function getKeyInfoDraftChanges() {
 }
 
 function updateSelectedKeyInfoFromDraft() {
-  updateSelectedKey(getKeyInfoDraftChanges());
+  isSavingKeyInfoDraft = true;
+  try {
+    updateSelectedKey(getKeyInfoDraftChanges());
+  } finally {
+    isSavingKeyInfoDraft = false;
+  }
 }
 
 function isTouchLayout() {
@@ -4121,7 +4127,7 @@ function renderPanel() {
   keySetCountSelect.value = String(key.sets.length);
   renderKeySetSelect(key);
   renderKeySetPhotos(key);
-  if (!isProtectedKeyInfoInputActive()) {
+  if (!isSavingKeyInfoDraft && !isProtectedKeyInfoInputActive()) {
     propertyInput.value = key.property;
     postalCodeInput.value = key.postalCode || "";
     cityInput.value = key.city || "";
@@ -4129,7 +4135,12 @@ function renderPanel() {
     ownerFirstNameInput.value = formatFirstName(key.ownerFirstName);
     notesInput.value = key.notes;
   }
-  const isKeyInfoLocked = !isArchiveView && hasProtectedKeyInfo(key) && !isKeyInfoEditUnlocked;
+  const isKeyInfoLocked =
+    !isArchiveView &&
+    hasProtectedKeyInfo(key) &&
+    !isKeyInfoEditUnlocked &&
+    !isSavingKeyInfoDraft &&
+    !isProtectedKeyInfoInputActive();
   form.classList.toggle("is-key-info-locked", isKeyInfoLocked);
   protectedKeyInfoInputs.forEach((input) => {
     input.readOnly = isKeyInfoLocked;
