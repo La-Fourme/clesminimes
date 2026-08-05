@@ -165,6 +165,7 @@ let photoImportResetTimer = null;
 let undoSnapshot = null;
 let isKeyInfoEditUnlocked = false;
 const recentlyClearedKeySlots = new Map();
+const recentlyForcedKeySlots = new Map();
 
 const protectedKeyInfoInputs = [ownerInput, ownerFirstNameInput, propertyInput, postalCodeInput, cityInput, notesInput];
 let tileViewMode = loadTileViewMode();
@@ -498,6 +499,14 @@ function rememberClearedKeySlot(keyId) {
   recentlyClearedKeySlots.set(keyId, Date.now());
 }
 
+function rememberForcedKeySlot(keyId, content) {
+  if (!keyId) return;
+  recentlyForcedKeySlots.set(keyId, {
+    content: cloneKeyContent(normalizeKey({ id: keyId, ...content })),
+    updatedAt: Date.now(),
+  });
+}
+
 function forgetFilledClearedKeySlots(nextKeys) {
   nextKeys.forEach((key) => {
     if (recentlyClearedKeySlots.has(key.id) && isKeyFilled(key)) recentlyClearedKeySlots.delete(key.id);
@@ -519,8 +528,29 @@ function preserveRecentlyClearedKeySlots(storageKey, value) {
   return typeof value === "string" ? JSON.stringify(nextValue) : nextValue;
 }
 
+function preserveRecentlyForcedKeySlots(storageKey, value) {
+  if (!recentlyForcedKeySlots.size || storageKey !== getRegistryConfig().keysStorageKey) return value;
+  const keyInfo = typeof value === "string" ? parseStorageValue(value) : value;
+  if (!Array.isArray(keyInfo)) return value;
+
+  const now = Date.now();
+  [...recentlyForcedKeySlots].forEach(([keyId, entry]) => {
+    if (now - entry.updatedAt > 120000) recentlyForcedKeySlots.delete(keyId);
+  });
+  if (!recentlyForcedKeySlots.size) return value;
+
+  const nextValue = keyInfo.map((key) => {
+    const forced = recentlyForcedKeySlots.get(key.id);
+    return forced ? applyKeyContent(key, forced.content) : key;
+  });
+  return typeof value === "string" ? JSON.stringify(nextValue) : nextValue;
+}
+
 function protectLocalKeyEdits(storageKey, value) {
-  return preserveActiveKeyInfoDraft(storageKey, preserveRecentlyClearedKeySlots(storageKey, value));
+  return preserveActiveKeyInfoDraft(
+    storageKey,
+    preserveRecentlyForcedKeySlots(storageKey, preserveRecentlyClearedKeySlots(storageKey, value)),
+  );
 }
 
 function saveStorageValue(storageKey, value) {
@@ -1679,7 +1709,13 @@ async function moveKeyToSlot(sourceId, targetId, options = {}) {
     if (key.id === sourceId) return targetIsFilled ? applyKeyContent(key, targetContent) : makeEmptyKey(key);
     return key;
   });
-  if (!targetIsFilled) rememberClearedKeySlot(sourceId);
+  rememberForcedKeySlot(targetId, sourceContent);
+  if (targetIsFilled) rememberForcedKeySlot(sourceId, targetContent);
+  else {
+    const emptySource = makeEmptyKey(sourceKey);
+    rememberClearedKeySlot(sourceId);
+    rememberForcedKeySlot(sourceId, emptySource);
+  }
   forgetFilledClearedKeySlots(keys);
 
   selectedId = targetId;
@@ -1698,8 +1734,10 @@ async function deleteKeyWithoutArchive(keyId) {
   if (!confirmed) return;
   rememberUndoStep();
 
-  keys = keys.map((savedKey) => (savedKey.id === keyId ? makeEmptyKey(savedKey) : savedKey));
+  const emptyKey = makeEmptyKey(key);
+  keys = keys.map((savedKey) => (savedKey.id === keyId ? emptyKey : savedKey));
   rememberClearedKeySlot(keyId);
+  rememberForcedKeySlot(keyId, emptyKey);
   forgetFilledClearedKeySlots(keys);
   if (selectedId === keyId) {
     selectedId = null;
