@@ -1728,6 +1728,20 @@ function rememberActiveKeyInfoDraft(changes = getKeyInfoDraftChanges()) {
   };
 }
 
+function captureActiveKeyInfoDraft() {
+  if (!selectedId || selectedArchiveRecord || isSavingKeyInfoDraft) return;
+  const changes = getKeyInfoDraftChanges();
+  rememberActiveKeyInfoDraft(changes);
+  keys = keys.map((key) => (key.id === selectedId ? { ...key, ...changes } : key));
+  try {
+    markLocalEdit();
+    localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
+    scheduleStorageKeySync(getRegistryConfig().keysStorageKey);
+  } catch (error) {
+    console.warn("Local draft save failed", error.message);
+  }
+}
+
 function restoreActiveKeyInfoDraftIfNeeded() {
   if (!activeKeyInfoDraft || !selectedId || selectedArchiveRecord) return;
   if (activeKeyInfoDraft.keyId !== selectedId) return;
@@ -5284,6 +5298,9 @@ ownerFirstNameInput.addEventListener("blur", () => {
   updateSelectedKeyInfoFromDraft();
 });
 notesInput.addEventListener("input", debounce(updateSelectedKeyInfoFromDraft));
+protectedKeyInfoInputs.forEach((input) => {
+  input.addEventListener("input", captureActiveKeyInfoDraft);
+});
 protectedKeyInfoInputs.forEach((input) => {
   input.addEventListener("dblclick", unlockKeyInfoEdit);
 });
