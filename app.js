@@ -185,6 +185,10 @@ function markLocalEdit() {
   localStorage.setItem(lastLocalEditStorageKey, String(lastLocalEditAt));
 }
 
+function hasRecentLocalEdit(windowMs = 20000) {
+  return Date.now() - lastLocalEditAt < windowMs;
+}
+
 function loadTileViewMode() {
   return localStorage.getItem(tileViewStorageKey) === "photo" ? "photo" : "text";
 }
@@ -494,7 +498,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
       if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
-        if ((dirtyCloudKeys.has(storageKey) || isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) && value !== null) {
+        if ((dirtyCloudKeys.has(storageKey) || isKeyPanelOpen() || isKeyFormBeingEdited() || hasRecentLocalEdit()) && value !== null) {
           const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
             key: storageKey,
             value: parseStorageValue(value),
@@ -679,6 +683,11 @@ async function loadStorageFromCloud(options = {}) {
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
     await retryFailedCloudSyncs();
+    if (dirtyCloudKeys.size || failedCloudSyncKeys.size || hasRecentLocalEdit()) {
+      flushSelectedKeyInfoToLocal();
+      await syncCurrentRegistryToCloud();
+      return;
+    }
   } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
     const keysToSaveFirst = [...new Set([...dirtyCloudKeys, ...failedCloudSyncKeys])];
     await Promise.all(keysToSaveFirst.map((storageKey) => syncStorageKeyToCloud(storageKey, { force: true })));
