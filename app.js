@@ -2939,7 +2939,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     const activityActionClass = getActionClass(activityEntry.action);
     const activitySearch = `${activityEntry.title} ${activityEntry.details} ${activityEntry.actor}`.toLocaleLowerCase("fr-FR");
     const activityKeyLabel = getTitleKeyLabel(activityEntry.title);
-    const matchingRegistryEntry = registryEntries.find((registryEntry) => {
+    const matchingRegistryEntries = registryEntries.filter((registryEntry) => {
       if (registryEntry.registry !== activityEntry.registry) return false;
       if (getActionClass(registryEntry.action) !== activityActionClass) return false;
       if (Math.abs(Math.floor(registryEntry.timestamp / 60000) - activityMinute) > 1) return false;
@@ -2955,8 +2955,13 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
           (actor && activitySearch.includes(actor)),
       );
     });
+    const matchingRegistryEntry =
+      activityKeyLabel || matchingRegistryEntries.length === 1 ? matchingRegistryEntries[0] : null;
+    const isAmbiguousMovement =
+      !activityKeyLabel && matchingRegistryEntries.length > 1 && ["in", "out", "reserved", "signed"].includes(activityActionClass);
 
-    return matchingRegistryEntry ? { ...activityEntry, title: matchingRegistryEntry.title, action: matchingRegistryEntry.action } : activityEntry;
+    if (matchingRegistryEntry) return { ...activityEntry, title: matchingRegistryEntry.title, action: matchingRegistryEntry.action };
+    return isAmbiguousMovement ? { ...activityEntry, isAmbiguousOwnerMovement: true } : activityEntry;
   };
   activityEntries.forEach((entry, index) => {
     activityEntries[index] = completeActivityTitleFromRegistry(entry);
@@ -2993,7 +2998,9 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       activityId: activityEntry.id || "",
     };
   });
-  activityEntriesByKey.forEach((remainingEntries) => deduplicatedEntries.push(...remainingEntries));
+  activityEntriesByKey.forEach((remainingEntries) => {
+    deduplicatedEntries.push(...remainingEntries.filter((entry) => !entry.isAmbiguousOwnerMovement));
+  });
   const getGlobalHistoryPriority = (entry) => {
     const action = String(entry.action || "").toLocaleLowerCase("fr-FR");
     if (action.includes("cr\u00e9ation fiche")) return 0;
@@ -4804,7 +4811,7 @@ async function addMovement(type) {
         : selectedSet.reservations || [],
     history: [entry, ...selectedSet.history],
   });
-  logActivity(getMovementActionLabel(entry), `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
+  logActivity(getMovementActionLabel(entry), `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
   movementNameInput.value = "";
