@@ -184,7 +184,8 @@ let cloudSyncTimers = new Map();
 let dirtyCloudKeys = loadPendingCloudKeys();
 let cloudRowVersions = loadCloudRowVersions();
 let activeKeyInfoDraft = null;
-let hasLoadedCloudState = cloudRowVersions.size > 0;
+let hasLoadedCloudState = false;
+let hasCompletedInitialCloudLoad = false;
 let isCloudCheckRunning = false;
 
 function markLocalEdit() {
@@ -598,6 +599,7 @@ function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
   if (!supabaseClient) return;
   dirtyCloudKeys.add(storageKey);
   savePendingCloudKeys();
+  if (!hasCompletedInitialCloudLoad) return;
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.set(
     storageKey,
@@ -610,6 +612,11 @@ function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
 
 function syncStorageKeyToCloud(storageKey, options = {}) {
   if (!supabaseClient) return Promise.resolve();
+  if (!hasCompletedInitialCloudLoad) {
+    dirtyCloudKeys.add(storageKey);
+    savePendingCloudKeys();
+    return Promise.resolve();
+  }
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.delete(storageKey);
   failedCloudSyncKeys.delete(storageKey);
@@ -732,6 +739,11 @@ function syncCurrentRegistryToCloud() {
 
 async function writeStorageKeyToCloudNow(storageKey) {
   if (!supabaseClient) return;
+  if (!hasCompletedInitialCloudLoad) {
+    dirtyCloudKeys.add(storageKey);
+    savePendingCloudKeys();
+    return;
+  }
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.delete(storageKey);
 
@@ -838,12 +850,7 @@ async function loadStorageFromCloud(options = {}) {
         .in("key", getBackupStorageKeys());
       if (error) throw error;
       if (!Array.isArray(data) || !data.length) {
-        localStorage.setItem(registryStorageKey, activeRegistry);
-        localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
-        localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
-        localStorage.setItem(sharedContactsStorageKey, JSON.stringify(contacts));
-        await syncAllStorageToCloud();
-        hasLoadedCloudState = true;
+        console.warn("Supabase initial load returned no app state rows; cloud writes remain locked.");
         return;
       }
 
@@ -854,6 +861,7 @@ async function loadStorageFromCloud(options = {}) {
       });
       isApplyingCloudState = false;
       hasLoadedCloudState = true;
+      hasCompletedInitialCloudLoad = true;
       saveCloudRowVersions();
       refreshDataFromStorage({ keepSelection: true });
       return;
