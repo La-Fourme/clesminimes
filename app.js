@@ -5070,12 +5070,14 @@ async function archiveReservationKey(reservationId) {
     return;
   }
 
+  const actionLabel = "Archiv\u00e9";
   const confirmed = confirm(`Archiver ${keyLabel(key)} et lib\u00e9rer la case ?`);
   if (!confirmed) return;
+  const signature = await promptMovementSignature(actionLabel);
+  if (signature === null) return;
   rememberUndoStep();
 
   const archivedAt = new Date().toISOString();
-  const actionLabel = "Archiv\u00e9";
   const entry = {
     id: createHistoryId(),
     type: "removed",
@@ -5084,7 +5086,7 @@ async function archiveReservationKey(reservationId) {
     company: reservation.company || "",
     phone: formatPhoneNumber(reservation.phone || ""),
     note: formatSentenceStart(getInlineReservationComment(reservationId)).trim(),
-    signature: getInlineReservationSignature(reservationId),
+    signature,
     date: getMovementDateText(),
     reservationId,
   };
@@ -5280,6 +5282,8 @@ async function archiveSelectedKey(reason) {
 
   const confirmed = confirm(`${actionLabel} ${keyLabel(key)} et libérer la case ?`);
   if (!confirmed) return;
+  const signature = await promptMovementSignature(actionLabel);
+  if (signature === null) return;
   rememberUndoStep();
 
   const archivedAt = new Date().toISOString();
@@ -5294,7 +5298,7 @@ async function archiveSelectedKey(reason) {
           company: formatCompanyName(movementCompanyInput.value).trim(),
           phone: formatPhoneNumber(movementPhoneInput.value),
           note: formatSentenceStart(movementNoteInput.value).trim(),
-          signature: getMainSignatureDataUrl(),
+          signature,
           date: new Intl.DateTimeFormat("fr-FR", {
             dateStyle: "short",
             timeStyle: "short",
