@@ -986,6 +986,16 @@ function updateRegistryHeader() {
     activeRegistry === "location" ? "Basculer vers le registre Transaction" : "Basculer vers le registre Location";
 }
 
+function closeSidePanels() {
+  contactsPanel.hidden = true;
+  compromisesPanel.hidden = true;
+  archivesPanel.hidden = true;
+  globalHistoryPanel.hidden = true;
+  savedBackupsPanel.hidden = true;
+  clearTimeout(contactsCloseTimer);
+  clearTimeout(archivesCloseTimer);
+}
+
 function switchRegistry() {
   activeRegistry = activeRegistry === "location" ? "transaction" : "location";
   saveActiveRegistry();
@@ -997,14 +1007,8 @@ function switchRegistry() {
   selectedSetId = "main";
   hoveredKeyId = null;
   isDetailPanelHovered = false;
-  contactsPanel.hidden = true;
-  compromisesPanel.hidden = true;
-  archivesPanel.hidden = true;
-  globalHistoryPanel.hidden = true;
-  savedBackupsPanel.hidden = true;
+  closeSidePanels();
   clearTimeout(detailCloseTimer);
-  clearTimeout(contactsCloseTimer);
-  clearTimeout(archivesCloseTimer);
   clearSignature();
   migrateArchivedSlots();
   updateRegistryHeader();
@@ -3984,6 +3988,7 @@ function renderGrid() {
 
         button.addEventListener("click", () => {
           if (selectedId !== key.id) activeKeyInfoDraft = null;
+          closeSidePanels();
           selectedArchiveRecord = null;
           selectedId = key.id;
           selectedSetId = key.sets[0]?.id || "main";
