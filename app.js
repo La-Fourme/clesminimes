@@ -4794,6 +4794,8 @@ async function addMovement(type) {
   const isReturningAfterCheckout = type === "in" && selectedSet.status === "out";
   if (!ensureMovementActor(type === "out" ? "Sorti" : "Entr\u00e9", { person: forcedPerson, company: forcedCompany })) return;
   if (type === "out") showCheckoutReservationWarning(selectedSet);
+  const signature = await promptMovementSignature(type === "out" ? "Sorti" : isReturningAfterCheckout ? "Rentr\u00e9" : "Entr\u00e9");
+  if (signature === null) return;
 
   const entry = {
     id: createHistoryId(),
@@ -4802,7 +4804,7 @@ async function addMovement(type) {
     company: forcedCompany || formatCompanyName(movementCompanyInput.value).trim(),
     phone: formatPhoneNumber(forcedPhone || movementPhoneInput.value),
     note: formatSentenceStart(movementNoteInput.value).trim(),
-    signature: getMainSignatureDataUrl(),
+    signature,
     returnReason: type === "in" && isReturningAfterCheckout ? "returned" : "created",
     date: new Intl.DateTimeFormat("fr-FR", {
       dateStyle: "short",
@@ -4903,7 +4905,75 @@ function setupInlineSignatureCanvas(canvas) {
   canvas.addEventListener("pointercancel", stopDrawing);
 }
 
-function toggleReservationMovement(reservationId) {
+function canvasHasInk(canvas) {
+  const context = canvas.getContext("2d");
+  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+  for (let index = 3; index < data.length; index += 4) {
+    if (data[index] > 0) return true;
+  }
+  return false;
+}
+
+function promptMovementSignature(actionLabel) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    const title = document.createElement("h3");
+    const field = document.createElement("div");
+    const label = document.createElement("div");
+    const canvas = document.createElement("canvas");
+    const clearButton = document.createElement("button");
+    const actions = document.createElement("div");
+    const cancelButton = document.createElement("button");
+    const validateButton = document.createElement("button");
+
+    dialog.className = "movement-signature-dialog";
+    title.textContent = `Signature - ${actionLabel}`;
+    field.className = "movement-signature-field";
+    label.className = "movement-signature-label";
+    label.innerHTML = "<span>Signature</span>";
+    canvas.className = "movement-signature-canvas";
+    canvas.width = 320;
+    canvas.height = 180;
+    canvas.setAttribute("aria-label", `Zone de signature ${actionLabel}`);
+
+    clearButton.type = "button";
+    clearButton.textContent = "Effacer";
+    clearButton.addEventListener("click", () => clearInlineSignature(canvas));
+
+    cancelButton.type = "button";
+    cancelButton.textContent = "Annuler";
+    cancelButton.className = "movement-signature-cancel";
+    cancelButton.addEventListener("click", () => dialog.close("cancel"));
+
+    validateButton.type = "button";
+    validateButton.textContent = "Valider";
+    validateButton.className = "movement-signature-validate";
+    validateButton.addEventListener("click", () => {
+      const signature = canvasHasInk(canvas) ? canvas.toDataURL("image/png") : "";
+      dialog.close("validate");
+      resolve(signature);
+    });
+
+    label.append(clearButton);
+    field.append(label, canvas);
+    actions.className = "movement-signature-actions";
+    actions.append(cancelButton, validateButton);
+    dialog.append(title, field, actions);
+    document.body.append(dialog);
+    setupInlineSignatureCanvas(canvas);
+    dialog.addEventListener(
+      "close",
+      () => {
+        if (dialog.returnValue !== "validate") resolve(null);
+        dialog.remove();
+      },
+      { once: true },
+    );
+    dialog.showModal();
+  });
+}
+
+async function toggleReservationMovement(reservationId) {
   if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
@@ -4914,6 +4984,8 @@ function toggleReservationMovement(reservationId) {
 
   const isReservationOut = selectedSet.status === "out" && selectedSet.holderReservationId === reservationId;
   if (!isReservationOut) showCheckoutReservationWarning(selectedSet, reservationId);
+  const signature = await promptMovementSignature(isReservationOut ? "Rentr\u00e9" : "Sorti");
+  if (signature === null) return;
   const inlineComment = formatSentenceStart(getInlineReservationComment(reservationId)).trim();
   const reservationMovement = isReservationOut
     ? `Rentr\u00e9 r\u00e9servation du ${reservation.reservationDate || ""}`.trim()
@@ -4926,7 +4998,7 @@ function toggleReservationMovement(reservationId) {
     phone: formatPhoneNumber(reservation.phone || ""),
     reservationMovement,
     note: inlineComment ? `Commentaire : ${inlineComment}` : "",
-    signature: getInlineReservationSignature(reservationId),
+    signature,
     returnReason: isReservationOut ? "returned" : "",
     date: getMovementDateText(),
     reservationId,
@@ -4945,10 +5017,11 @@ function toggleReservationMovement(reservationId) {
   });
   logActivity(
     getMovementActionLabel(entry),
-    `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`,
+    `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${selectedSet.label}`,
     [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "),
   );
   if (selectedArchiveRecord) renderCompromisesPanel();
+  await syncCloudAfterAction();
 }
 
 function cancelReservation(reservationId) {
