@@ -4910,6 +4910,8 @@ function promptMovementSignature(actionLabel) {
     const validateButton = document.createElement("button");
 
     dialog.className = "movement-signature-dialog";
+    dialog.addEventListener("pointerdown", (event) => event.stopPropagation());
+    dialog.addEventListener("click", (event) => event.stopPropagation());
     title.textContent = `Signature - ${actionLabel}`;
     field.className = "movement-signature-field";
     label.className = "movement-signature-label";
@@ -5797,7 +5799,7 @@ document.addEventListener("pointerdown", (event) => {
   if (detailPanel.hidden) return;
   if (detailPanel.contains(event.target)) return;
   if (event.target.closest(".key-tile")) return;
-  if (event.target.closest(".photo-viewer, .date-dialog")) return;
+  if (event.target.closest(".photo-viewer, .date-dialog, .movement-signature-dialog")) return;
 
   clearTimeout(detailCloseTimer);
   activeKeyInfoDraft = null;
