@@ -1890,25 +1890,10 @@ function beginPhotoImport(event) {
 function finishPhotoImport() {
   clearTimeout(photoImportResetTimer);
   isPhotoImporting = false;
-  scheduleDetailPanelClose();
 }
 
 function scheduleDetailPanelClose() {
   clearTimeout(detailCloseTimer);
-  if (isTouchLayout()) return;
-  if (!selectedId) return;
-
-  detailCloseTimer = setTimeout(() => {
-    if (hoveredKeyId === selectedId || isDetailPanelHovered || isDetailPanelBusy()) {
-      scheduleDetailPanelClose();
-      return;
-    }
-
-    selectedId = null;
-    selectedArchiveRecord = null;
-    clearSignature();
-    render();
-  }, 1000);
 }
 
 function renderContactSelect() {
@@ -3994,7 +3979,6 @@ function renderGrid() {
           selectedSetId = key.sets[0]?.id || "main";
           resetKeyInfoEditUnlock(key);
           render();
-          if (!isTouchLayout()) scheduleDetailPanelClose();
         });
         button.addEventListener("mouseenter", () => {
           hoveredKeyId = key.id;
@@ -4002,7 +3986,6 @@ function renderGrid() {
         });
         button.addEventListener("mouseleave", () => {
           if (hoveredKeyId === key.id) hoveredKeyId = null;
-          if (selectedId === key.id) scheduleDetailPanelClose();
         });
         button.addEventListener("dragstart", (event) => {
           if (!isKeyFilled(key)) {
@@ -5375,16 +5358,10 @@ function openArchivesPanel() {
 
 function scheduleCloseContactsPanel() {
   clearTimeout(contactsCloseTimer);
-  contactsCloseTimer = setTimeout(() => {
-    contactsPanel.hidden = true;
-  }, 1000);
 }
 
 function scheduleCloseArchivesPanel() {
   clearTimeout(archivesCloseTimer);
-  archivesCloseTimer = setTimeout(() => {
-    archivesPanel.hidden = true;
-  }, 1000);
 }
 
 function debounce(callback, delay = 250) {
@@ -5677,7 +5654,6 @@ closeCompromisesBtn.addEventListener("click", () => {
 });
 archivesTabBtn.addEventListener("click", openArchivesPanel);
 archivesPanel.addEventListener("mouseenter", () => clearTimeout(archivesCloseTimer));
-archivesPanel.addEventListener("mouseleave", scheduleCloseArchivesPanel);
 closeArchivesBtn.addEventListener("click", () => {
   archivesPanel.hidden = true;
 });
@@ -5832,14 +5808,12 @@ document.addEventListener("pointerdown", (event) => {
   render();
 });
 form.addEventListener("focusin", () => clearTimeout(detailCloseTimer));
-form.addEventListener("focusout", scheduleDetailPanelClose);
 detailPanel.addEventListener("mouseenter", () => {
   isDetailPanelHovered = true;
   clearTimeout(detailCloseTimer);
 });
 detailPanel.addEventListener("mouseleave", () => {
   isDetailPanelHovered = false;
-  scheduleDetailPanelClose();
 });
 exportKeyCsvBtn.addEventListener("click", () => {
   const key = getSelectedKey();
