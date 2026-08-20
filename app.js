@@ -952,9 +952,32 @@ function closeKeyPanelAfterAction() {
 async function syncCloudAfterAction() {
   try {
     await syncCurrentRegistryNow();
+    return true;
   } catch (error) {
     console.warn("Supabase action sync failed", error.message);
+    alert("La synchronisation en ligne a échoué. L'action reste en attente et sera renvoyée automatiquement.");
+    return false;
   }
+}
+
+function markKeyControlActionForSync(keyId, options = {}) {
+  const config = getRegistryConfig();
+  const keysChanged = options.keysChanged !== false;
+  const archivesChanged = Boolean(options.archivesChanged);
+
+  if (keysChanged) {
+    if (keyId) markDirtyKeySlot(keyId, config.keysStorageKey);
+    dirtyCloudKeys.add(config.keysStorageKey);
+  }
+  if (archivesChanged) dirtyCloudKeys.add(config.archivesStorageKey);
+  dirtyCloudKeys.add(appActivityLogStorageKey);
+  savePendingCloudKeys();
+}
+
+async function finishKeyControlAction(keyId, options = {}) {
+  markKeyControlActionForSync(keyId, options);
+  await syncCloudAfterAction();
+  closeKeyPanelAfterAction();
 }
 
 function subscribeToCloudChanges() {
@@ -5000,9 +5023,9 @@ async function addMovement(type) {
   movementNoteInput.value = "";
   contactSelect.value = "";
   clearSignature();
+  const actionArchivesChanged = Boolean(selectedArchiveRecord);
   if (selectedArchiveRecord) renderCompromisesPanel();
-  closeKeyPanelAfterAction();
-  await syncCloudAfterAction();
+  await finishKeyControlAction(key.id, { keysChanged: !actionArchivesChanged, archivesChanged: actionArchivesChanged });
 }
 
 function getMovementDateText() {
@@ -5187,7 +5210,9 @@ async function toggleReservationMovement(reservationId) {
     `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${selectedSet.label}`,
     [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "),
   );
+  const actionArchivesChanged = Boolean(selectedArchiveRecord);
   if (selectedArchiveRecord) renderCompromisesPanel();
+  markKeyControlActionForSync(key.id, { keysChanged: !actionArchivesChanged, archivesChanged: actionArchivesChanged });
   await syncCloudAfterAction();
 }
 
@@ -5295,8 +5320,7 @@ async function archiveReservationKey(reservationId) {
   logActivity(actionLabel, keyLabel(key), [key.owner, key.property, entry.person || entry.company, entry.phone].filter(Boolean).join(" - "));
   saveArchives();
   saveKeys();
-  closeKeyPanelAfterAction();
-  await syncCloudAfterAction();
+  await finishKeyControlAction(key.id, { keysChanged: true, archivesChanged: true });
 }
 
 async function reserveSelectedSet() {
@@ -5365,9 +5389,9 @@ async function reserveSelectedSet() {
   movementNoteInput.value = "";
   contactSelect.value = "";
   clearSignature();
+  const actionArchivesChanged = Boolean(selectedArchiveRecord);
   if (selectedArchiveRecord) renderCompromisesPanel();
-  closeKeyPanelAfterAction();
-  await syncCloudAfterAction();
+  await finishKeyControlAction(key.id, { keysChanged: !actionArchivesChanged, archivesChanged: actionArchivesChanged });
 }
 
 function promptReservationDateTime() {
@@ -5509,8 +5533,7 @@ async function archiveSelectedKey(reason) {
   logActivity(actionLabel, keyLabel(key), [key.owner, key.property, movementActor.person || movementActor.company, compromiseSignedAt ? `Signature : ${formatDateOnly(compromiseSignedAt)}` : ""].filter(Boolean).join(" - "));
   saveArchives();
   saveKeys();
-  closeKeyPanelAfterAction();
-  await syncCloudAfterAction();
+  await finishKeyControlAction(key.id, { keysChanged: true, archivesChanged: true });
 }
 
 function openContactsPanel() {
