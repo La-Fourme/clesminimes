@@ -887,40 +887,46 @@ async function writeStorageKeyToCloudNow(storageKey, options = {}) {
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.delete(storageKey);
 
-  let value = localStorage.getItem(storageKey);
-  const updatedAt = new Date().toISOString();
-  const { data: remoteRow, error: versionError } = await supabaseClient
-    .from("app_state")
-    .select("key,value,updated_at")
-    .eq("key", storageKey)
-    .maybeSingle();
-  if (versionError) {
-    dirtyCloudKeys.add(storageKey);
-    failedCloudSyncKeys.add(storageKey);
-    savePendingCloudKeys();
-    throw versionError;
-  }
-  if (value !== null) {
-    value = prepareStorageValueForCloud(storageKey, value, remoteRow?.value ?? null);
-    localStorage.setItem(storageKey, value);
-  }
-  const { error } =
-    value === null
-      ? await supabaseClient.from("app_state").delete().eq("key", storageKey)
-      : await supabaseClient.from("app_state").upsert({
-          key: storageKey,
-          value: parseStorageValue(value),
-          updated_at: updatedAt,
-        });
+  pendingCloudSync = pendingCloudSync
+    .catch(() => {})
+    .then(async () => {
+      let value = localStorage.getItem(storageKey);
+      const updatedAt = new Date().toISOString();
+      const { data: remoteRow, error: versionError } = await supabaseClient
+        .from("app_state")
+        .select("key,value,updated_at")
+        .eq("key", storageKey)
+        .maybeSingle();
+      if (versionError) {
+        dirtyCloudKeys.add(storageKey);
+        failedCloudSyncKeys.add(storageKey);
+        savePendingCloudKeys();
+        throw versionError;
+      }
+      if (value !== null) {
+        value = prepareStorageValueForCloud(storageKey, value, remoteRow?.value ?? null);
+        localStorage.setItem(storageKey, value);
+      }
+      const { error } =
+        value === null
+          ? await supabaseClient.from("app_state").delete().eq("key", storageKey)
+          : await supabaseClient.from("app_state").upsert({
+              key: storageKey,
+              value: parseStorageValue(value),
+              updated_at: updatedAt,
+            });
 
-  if (error) {
-    dirtyCloudKeys.add(storageKey);
-    failedCloudSyncKeys.add(storageKey);
-    savePendingCloudKeys();
-    throw error;
-  }
+      if (error) {
+        dirtyCloudKeys.add(storageKey);
+        failedCloudSyncKeys.add(storageKey);
+        savePendingCloudKeys();
+        throw error;
+      }
 
-  finishSuccessfulCloudWrite(storageKey, value, updatedAt);
+      finishSuccessfulCloudWrite(storageKey, value, updatedAt);
+    });
+
+  return pendingCloudSync;
 }
 
 async function syncCurrentRegistryNow() {
@@ -976,15 +982,10 @@ async function loadStorageFromCloud(options = {}) {
   await pendingCloudSync.catch(() => {});
   if (hasLoadedCloudState) {
     await retryFailedCloudSyncs();
-  } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
-    dirtyCloudKeys.clear();
-    failedCloudSyncKeys.clear();
-    dirtyKeySlots.clear();
-    savePendingCloudKeys();
-    saveDirtyKeySlots();
   }
   try {
     if (!hasLoadedCloudState) {
+      const pendingStartupKeys = new Set([...dirtyCloudKeys, ...failedCloudSyncKeys]);
       const { data, error } = await supabaseClient
         .from("app_state")
         .select("key,value,updated_at")
@@ -997,13 +998,17 @@ async function loadStorageFromCloud(options = {}) {
 
       isApplyingCloudState = true;
       data.forEach((row) => {
-        saveStorageValue(row.key, stringifyCloudValue(row.value));
+        if (!pendingStartupKeys.has(row.key)) saveStorageValue(row.key, stringifyCloudValue(row.value));
         cloudRowVersions.set(row.key, row.updated_at || "");
       });
       isApplyingCloudState = false;
       hasLoadedCloudState = true;
       hasCompletedInitialCloudLoad = true;
       saveCloudRowVersions();
+      if (pendingStartupKeys.size) {
+        const syncablePendingKeys = [...pendingStartupKeys].filter((key) => getBackupStorageKeys().includes(key));
+        await Promise.all(syncablePendingKeys.map((key) => syncStorageKeyToCloud(key)));
+      }
       refreshDataFromStorage({ keepSelection: true });
       return;
     }
