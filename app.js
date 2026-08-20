@@ -931,7 +931,18 @@ async function writeStorageKeyToCloudNow(storageKey, options = {}) {
 
 async function syncCurrentRegistryNow() {
   const pendingKeys = getBackupStorageKeys().filter((storageKey) => dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey));
-  await Promise.all(pendingKeys.map((storageKey) => writeStorageKeyToCloudNow(storageKey)));
+  let didSyncEveryKey = true;
+
+  for (const storageKey of pendingKeys) {
+    try {
+      await writeStorageKeyToCloudNow(storageKey);
+    } catch (error) {
+      didSyncEveryKey = false;
+      console.warn("Supabase action sync failed", storageKey, error.message);
+    }
+  }
+
+  return didSyncEveryKey;
 }
 
 function removeAutomaticBackupsFromLocalStorage() {
@@ -951,11 +962,14 @@ function closeKeyPanelAfterAction() {
 
 async function syncCloudAfterAction() {
   try {
-    await syncCurrentRegistryNow();
-    return true;
+    const didSync = await syncCurrentRegistryNow();
+    if (!didSync) {
+      setTimeout(() => retryFailedCloudSyncs().catch((error) => console.warn("Supabase retry failed", error.message)), 2500);
+    }
+    return didSync;
   } catch (error) {
     console.warn("Supabase action sync failed", error.message);
-    alert("La synchronisation en ligne a échoué. L'action reste en attente et sera renvoyée automatiquement.");
+    setTimeout(() => retryFailedCloudSyncs().catch((retryError) => console.warn("Supabase retry failed", retryError.message)), 2500);
     return false;
   }
 }
