@@ -17,6 +17,7 @@ const photoMaxDataUrlLength = 260000;
 const photoOptimizationStorageKey = "cles-photo-optimization-560-v2";
 const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
+const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
 const automaticBackupRetentionCount = 2;
@@ -182,6 +183,7 @@ let pendingCloudSync = Promise.resolve();
 let failedCloudSyncKeys = new Set();
 let cloudSyncTimers = new Map();
 let dirtyCloudKeys = loadPendingCloudKeys();
+let dirtyKeySlots = loadDirtyKeySlots();
 let cloudRowVersions = loadCloudRowVersions();
 let activeKeyInfoDraft = null;
 let hasLoadedCloudState = false;
@@ -450,6 +452,22 @@ function getKeyCompletenessScore(key) {
   ].filter((value) => String(value || "").trim()).length;
 }
 
+function comparableKeyIdentityValue(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleUpperCase("fr-FR")
+    .replace(/\s+/g, " ");
+}
+
+function shouldMergeKeyFallback(preferred, fallback) {
+  const identityFields = ["owner", "property"];
+  return identityFields.every((field) => {
+    const preferredValue = comparableKeyIdentityValue(preferred[field]);
+    const fallbackValue = comparableKeyIdentityValue(fallback[field]);
+    return !preferredValue || !fallbackValue || preferredValue === fallbackValue;
+  });
+}
+
 function mergeKeyRecord(preferredRaw, fallbackRaw, options = {}) {
   const preferred = normalizeKey(preferredRaw);
   if (!fallbackRaw) return preferred;
@@ -460,6 +478,7 @@ function mergeKeyRecord(preferredRaw, fallbackRaw, options = {}) {
     return options.keepFallbackWhenPreferredEmpty ? fallback : preferred;
   }
   if (fallbackScore === 0) return preferred;
+  if (!shouldMergeKeyFallback(preferred, fallback)) return preferred;
 
   return normalizeKey({
     ...preferred,
@@ -595,6 +614,151 @@ function savePendingCloudKeys() {
   localStorage.setItem(pendingCloudKeysStorageKey, JSON.stringify([...dirtyCloudKeys]));
 }
 
+function loadDirtyKeySlots() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(dirtyKeySlotsStorageKey) || "{}");
+    return new Map(
+      Object.entries(saved && typeof saved === "object" ? saved : {}).map(([storageKey, keyIds]) => [
+        storageKey,
+        new Set(Array.isArray(keyIds) ? keyIds : []),
+      ]),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+function saveDirtyKeySlots() {
+  localStorage.setItem(
+    dirtyKeySlotsStorageKey,
+    JSON.stringify(
+      Object.fromEntries([...dirtyKeySlots].map(([storageKey, keyIds]) => [storageKey, [...keyIds]])),
+    ),
+  );
+}
+
+function markDirtyKeySlot(keyId, storageKey = getRegistryConfig().keysStorageKey) {
+  if (!keyId || !isKeysStorageKey(storageKey)) return;
+  const savedKeyIds = dirtyKeySlots.get(storageKey) || new Set();
+  savedKeyIds.add(keyId);
+  dirtyKeySlots.set(storageKey, savedKeyIds);
+  saveDirtyKeySlots();
+}
+
+function getDirtyKeySlotIds(storageKey) {
+  const savedKeyIds = new Set(dirtyKeySlots.get(storageKey) || []);
+  if (storageKey === getRegistryConfig().keysStorageKey && activeKeyInfoDraft?.keyId) {
+    savedKeyIds.add(activeKeyInfoDraft.keyId);
+  }
+  if (storageKey === getRegistryConfig().keysStorageKey) {
+    recentlyForcedKeySlots.forEach((_, keyId) => savedKeyIds.add(keyId));
+    recentlyClearedKeySlots.forEach((_, keyId) => savedKeyIds.add(keyId));
+  }
+  return savedKeyIds;
+}
+
+function clearDirtyKeySlots(storageKey) {
+  if (!dirtyKeySlots.has(storageKey)) return;
+  dirtyKeySlots.delete(storageKey);
+  saveDirtyKeySlots();
+}
+
+function markChangedKeySlots(storageKey, nextValue, previousValue) {
+  if (!isKeysStorageKey(storageKey)) return;
+  const nextKeys = typeof nextValue === "string" ? parseStorageValue(nextValue) : nextValue;
+  const previousKeys = typeof previousValue === "string" ? parseStorageValue(previousValue) : previousValue;
+  if (!Array.isArray(nextKeys) || !Array.isArray(previousKeys)) return;
+
+  const previousById = new Map(previousKeys.map((key) => [key.id, normalizeKey(key)]));
+  nextKeys.forEach((key) => {
+    const normalizedKey = normalizeKey(key);
+    const previousKey = previousById.get(normalizedKey.id);
+    if (JSON.stringify(normalizedKey) !== JSON.stringify(previousKey)) markDirtyKeySlot(normalizedKey.id, storageKey);
+  });
+}
+
+function rebaseKeyStorageValueForCloud(storageKey, localValue, remoteValue) {
+  if (!isKeysStorageKey(storageKey) || localValue === null) return localValue;
+
+  const localKeys = typeof localValue === "string" ? parseStorageValue(localValue) : localValue;
+  const remoteKeys = typeof remoteValue === "string" ? parseStorageValue(remoteValue) : remoteValue;
+  if (!Array.isArray(localKeys) || !Array.isArray(remoteKeys)) return localValue;
+
+  const dirtyIds = getDirtyKeySlotIds(storageKey);
+  if (!dirtyIds.size) return stringifyCloudValue(remoteKeys);
+
+  const localById = new Map(localKeys.map((key) => [key.id, key]));
+  const rebasedKeys = remoteKeys.map((remoteKey) => {
+    const localKey = localById.get(remoteKey.id);
+    return dirtyIds.has(remoteKey.id) && localKey ? normalizeKey(localKey) : normalizeKey(remoteKey);
+  });
+
+  return stringifyCloudValue(rebasedKeys);
+}
+
+function mergeActivityLogValues(localValue, remoteValue) {
+  const localEntries = typeof localValue === "string" ? parseStorageValue(localValue) : localValue;
+  const remoteEntries = typeof remoteValue === "string" ? parseStorageValue(remoteValue) : remoteValue;
+  if (!Array.isArray(localEntries) || !Array.isArray(remoteEntries)) return localValue;
+
+  const byId = new Map();
+  [...remoteEntries, ...localEntries].forEach((entry) => {
+    if (!entry?.id) return;
+    byId.set(entry.id, entry);
+  });
+  return stringifyCloudValue(
+    [...byId.values()]
+      .sort((first, second) => new Date(second.date || 0) - new Date(first.date || 0))
+      .slice(0, 600),
+  );
+}
+
+function mergeHiddenHistoryValues(localValue, remoteValue) {
+  const localIds = typeof localValue === "string" ? parseStorageValue(localValue) : localValue;
+  const remoteIds = typeof remoteValue === "string" ? parseStorageValue(remoteValue) : remoteValue;
+  if (!Array.isArray(localIds) || !Array.isArray(remoteIds)) return localValue;
+  return stringifyCloudValue([...new Set([...remoteIds, ...localIds])]);
+}
+
+function prepareStorageValueForCloud(storageKey, localValue, remoteValue = null, options = {}) {
+  if (localValue === null) return null;
+  if (options.fullReplace) {
+    return isKeysStorageKey(storageKey) ? protectLocalKeyEdits(storageKey, localValue) : localValue;
+  }
+  if (isKeysStorageKey(storageKey) && remoteValue !== null) {
+    return rebaseKeyStorageValueForCloud(storageKey, localValue, remoteValue);
+  }
+  if (storageKey === appActivityLogStorageKey && remoteValue !== null) {
+    return mergeActivityLogValues(localValue, remoteValue);
+  }
+  if (storageKey === hiddenGlobalHistoryStorageKey && remoteValue !== null) {
+    return mergeHiddenHistoryValues(localValue, remoteValue);
+  }
+  if (isKeysStorageKey(storageKey)) {
+    return protectLocalKeyEdits(storageKey, localValue);
+  }
+  return localValue;
+}
+
+function finishSuccessfulCloudWrite(storageKey, sentValue, updatedAt) {
+  failedCloudSyncKeys.delete(storageKey);
+  const currentValue = localStorage.getItem(storageKey);
+  const localStillMatchesSentValue = sentValue === null ? currentValue === null : currentValue === sentValue;
+
+  if (localStillMatchesSentValue) {
+    dirtyCloudKeys.delete(storageKey);
+    clearDirtyKeySlots(storageKey);
+  } else {
+    dirtyCloudKeys.add(storageKey);
+    scheduleStorageKeySync(storageKey);
+  }
+
+  if (sentValue === null) cloudRowVersions.delete(storageKey);
+  else cloudRowVersions.set(storageKey, updatedAt);
+  savePendingCloudKeys();
+  saveCloudRowVersions();
+}
+
 function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
   if (!supabaseClient) return;
   dirtyCloudKeys.add(storageKey);
@@ -622,12 +786,12 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
   failedCloudSyncKeys.delete(storageKey);
 
   const force = Boolean(options.force);
-  let value = localStorage.getItem(storageKey);
-  const updatedAt = new Date().toISOString();
-  const expectedUpdatedAt = cloudRowVersions.get(storageKey) || null;
   pendingCloudSync = pendingCloudSync
     .catch(() => {})
     .then(async () => {
+      let value = localStorage.getItem(storageKey);
+      const updatedAt = new Date().toISOString();
+      const expectedUpdatedAt = cloudRowVersions.get(storageKey) || null;
       const { data: remoteRow, error: versionError } = await supabaseClient
         .from("app_state")
         .select("key,value,updated_at")
@@ -636,13 +800,14 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       if (versionError) throw versionError;
 
       const remoteUpdatedAt = remoteRow?.updated_at || "";
-      if (!force && value !== null && remoteRow && isKeysStorageKey(storageKey)) {
-        value = JSON.stringify(mergeKeyCollections(parseStorageValue(value), remoteRow.value));
-        value = protectLocalKeyEdits(storageKey, value);
+      const hasRemoteVersionChanged = remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "");
+      const hasLocalKeySlotChanges = isKeysStorageKey(storageKey) && getDirtyKeySlotIds(storageKey).size > 0;
+      if (value !== null && remoteRow) {
+        value = prepareStorageValueForCloud(storageKey, value, remoteRow.value, { fullReplace: force });
         localStorage.setItem(storageKey, value);
       }
-      if (!force && remoteRow && remoteUpdatedAt !== (expectedUpdatedAt || "")) {
-        if ((dirtyCloudKeys.has(storageKey) || isKeyPanelOpen() || isKeyFormBeingEdited() || Date.now() - lastLocalEditAt < 20000) && value !== null) {
+      if (!force && hasRemoteVersionChanged) {
+        if ((dirtyCloudKeys.has(storageKey) || hasLocalKeySlotChanges) && value !== null) {
           const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
             key: storageKey,
             value: parseStorageValue(value),
@@ -656,11 +821,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
             return;
           }
 
-          failedCloudSyncKeys.delete(storageKey);
-          dirtyCloudKeys.delete(storageKey);
-          cloudRowVersions.set(storageKey, updatedAt);
-          savePendingCloudKeys();
-          saveCloudRowVersions();
+          finishSuccessfulCloudWrite(storageKey, value, updatedAt);
           return;
         }
 
@@ -679,31 +840,13 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       const request =
         value === null
           ? supabaseClient.from("app_state").delete().eq("key", storageKey)
-          : supabaseClient.from("app_state").upsert(
-              force
-                ? {
-                    key: storageKey,
-                    value: parseStorageValue(value),
-                    updated_at: updatedAt,
-                  }
-                : {
-                    key: storageKey,
-                    value: parseStorageValue(value),
-                    updated_at: updatedAt,
-                    expected_updated_at: expectedUpdatedAt,
-                  },
-            );
+          : supabaseClient.from("app_state").upsert({
+              key: storageKey,
+              value: parseStorageValue(value),
+              updated_at: updatedAt,
+            });
 
       let { error } = await request;
-      if (error && /expected_updated_at/i.test(error.message || "") && value !== null) {
-        const fallbackRequest = supabaseClient.from("app_state").upsert({
-          key: storageKey,
-          value: parseStorageValue(value),
-          updated_at: updatedAt,
-        });
-        const fallbackResult = await fallbackRequest;
-        error = fallbackResult.error;
-      }
       if (error) {
         dirtyCloudKeys.add(storageKey);
         failedCloudSyncKeys.add(storageKey);
@@ -711,12 +854,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
         console.warn("Supabase sync failed", storageKey, error.message);
         return;
       }
-      failedCloudSyncKeys.delete(storageKey);
-      dirtyCloudKeys.delete(storageKey);
-      savePendingCloudKeys();
-      if (value === null) cloudRowVersions.delete(storageKey);
-      else cloudRowVersions.set(storageKey, updatedAt);
-      saveCloudRowVersions();
+      finishSuccessfulCloudWrite(storageKey, value, updatedAt);
     });
 
   return pendingCloudSync;
@@ -737,8 +875,10 @@ function syncCurrentRegistryToCloud() {
   return Promise.all([...dirtyCloudKeys].map(syncStorageKeyToCloud));
 }
 
-async function writeStorageKeyToCloudNow(storageKey) {
+async function writeStorageKeyToCloudNow(storageKey, options = {}) {
   if (!supabaseClient) return;
+  const shouldWrite = dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey) || options.allowClean;
+  if (!shouldWrite) return;
   if (!hasCompletedInitialCloudLoad) {
     dirtyCloudKeys.add(storageKey);
     savePendingCloudKeys();
@@ -749,8 +889,19 @@ async function writeStorageKeyToCloudNow(storageKey) {
 
   let value = localStorage.getItem(storageKey);
   const updatedAt = new Date().toISOString();
-  if (value !== null && isKeysStorageKey(storageKey)) {
-    value = protectLocalKeyEdits(storageKey, value);
+  const { data: remoteRow, error: versionError } = await supabaseClient
+    .from("app_state")
+    .select("key,value,updated_at")
+    .eq("key", storageKey)
+    .maybeSingle();
+  if (versionError) {
+    dirtyCloudKeys.add(storageKey);
+    failedCloudSyncKeys.add(storageKey);
+    savePendingCloudKeys();
+    throw versionError;
+  }
+  if (value !== null) {
+    value = prepareStorageValueForCloud(storageKey, value, remoteRow?.value ?? null);
     localStorage.setItem(storageKey, value);
   }
   const { error } =
@@ -769,24 +920,12 @@ async function writeStorageKeyToCloudNow(storageKey) {
     throw error;
   }
 
-  dirtyCloudKeys.delete(storageKey);
-  failedCloudSyncKeys.delete(storageKey);
-  if (value === null) cloudRowVersions.delete(storageKey);
-  else cloudRowVersions.set(storageKey, updatedAt);
-  savePendingCloudKeys();
-  saveCloudRowVersions();
+  finishSuccessfulCloudWrite(storageKey, value, updatedAt);
 }
 
 async function syncCurrentRegistryNow() {
-  const config = getRegistryConfig();
-  await Promise.all([
-    writeStorageKeyToCloudNow(registryStorageKey),
-    writeStorageKeyToCloudNow(config.keysStorageKey),
-    writeStorageKeyToCloudNow(config.archivesStorageKey),
-    writeStorageKeyToCloudNow(sharedContactsStorageKey),
-    writeStorageKeyToCloudNow(appActivityLogStorageKey),
-    writeStorageKeyToCloudNow(hiddenGlobalHistoryStorageKey),
-  ]);
+  const pendingKeys = getBackupStorageKeys().filter((storageKey) => dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey));
+  await Promise.all(pendingKeys.map((storageKey) => writeStorageKeyToCloudNow(storageKey)));
 }
 
 function removeAutomaticBackupsFromLocalStorage() {
@@ -840,7 +979,9 @@ async function loadStorageFromCloud(options = {}) {
   } else if (dirtyCloudKeys.size || failedCloudSyncKeys.size) {
     dirtyCloudKeys.clear();
     failedCloudSyncKeys.clear();
+    dirtyKeySlots.clear();
     savePendingCloudKeys();
+    saveDirtyKeySlots();
   }
   try {
     if (!hasLoadedCloudState) {
@@ -878,16 +1019,27 @@ async function loadStorageFromCloud(options = {}) {
     const changedKeys = metadata
       .filter((row) => cloudRowVersions.get(row.key) !== (row.updated_at || "") || localStorage.getItem(row.key) === null)
       .map((row) => row.key);
-    const deletedKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
+    const missingRemoteKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
+    const locallyDirtyMissingKeys = missingRemoteKeys.filter((key) => dirtyCloudKeys.has(key) || failedCloudSyncKeys.has(key));
+    if (locallyDirtyMissingKeys.length) {
+      await Promise.all(locallyDirtyMissingKeys.map((key) => syncStorageKeyToCloud(key)));
+    }
+    const deletedKeys = missingRemoteKeys.filter((key) => !locallyDirtyMissingKeys.includes(key));
     if (!changedKeys.length && !deletedKeys.length) return;
-    if (isKeyPanelOpen() || isKeyFormBeingEdited()) return;
+
+    const locallyDirtyChangedKeys = changedKeys.filter((key) => dirtyCloudKeys.has(key) || failedCloudSyncKeys.has(key));
+    if (locallyDirtyChangedKeys.length) {
+      await Promise.all(locallyDirtyChangedKeys.map((key) => syncStorageKeyToCloud(key)));
+    }
+    const cloudOnlyChangedKeys = changedKeys.filter((key) => !locallyDirtyChangedKeys.includes(key));
+    if (!cloudOnlyChangedKeys.length && !deletedKeys.length) return;
 
     let changedRows = [];
-    if (changedKeys.length) {
+    if (cloudOnlyChangedKeys.length) {
       const { data, error } = await supabaseClient
         .from("app_state")
         .select("key,value,updated_at")
-        .in("key", changedKeys);
+        .in("key", cloudOnlyChangedKeys);
       if (error) throw error;
       changedRows = Array.isArray(data) ? data : [];
     }
@@ -896,7 +1048,10 @@ async function loadStorageFromCloud(options = {}) {
     changedRows.forEach((row) => saveStorageValue(row.key, stringifyCloudValue(row.value)));
     deletedKeys.forEach((key) => localStorage.removeItem(key));
     isApplyingCloudState = false;
-    cloudRowVersions = remoteVersions;
+    metadata.forEach((row) => {
+      if (!locallyDirtyChangedKeys.includes(row.key)) cloudRowVersions.set(row.key, row.updated_at || "");
+    });
+    deletedKeys.forEach((key) => cloudRowVersions.delete(key));
     saveCloudRowVersions();
     refreshDataFromStorage({ keepSelection: true });
   } catch (error) {
@@ -934,8 +1089,10 @@ function restoreStorageSnapshot(snapshot) {
   const changedKeys = [];
   getBackupStorageKeys().forEach((key) => {
     const value = snapshot.storage[key];
-    if (localStorage.getItem(key) === value) return;
+    const previousValue = localStorage.getItem(key);
+    if (previousValue === value) return;
     saveStorageValue(key, value);
+    markChangedKeySlots(key, localStorage.getItem(key), previousValue);
     changedKeys.push(key);
   });
   changedKeys.forEach((key) => dirtyCloudKeys.add(key));
@@ -1287,7 +1444,10 @@ async function migrateStoredPropertyAddresses() {
       property: formatPropertyAddress(key.property || ""),
     }));
     if (JSON.stringify(formattedKeys) !== JSON.stringify(savedKeys)) {
-      localStorage.setItem(config.keysStorageKey, JSON.stringify(formattedKeys));
+      const previousValue = localStorage.getItem(config.keysStorageKey);
+      const nextValue = JSON.stringify(formattedKeys);
+      localStorage.setItem(config.keysStorageKey, nextValue);
+      markChangedKeySlots(config.keysStorageKey, nextValue, previousValue);
       changedStorageKeys.push(config.keysStorageKey);
     }
 
@@ -1306,6 +1466,8 @@ async function migrateStoredPropertyAddresses() {
 
   if (!changedStorageKeys.length) return;
   markLocalEdit();
+  changedStorageKeys.forEach((storageKey) => dirtyCloudKeys.add(storageKey));
+  savePendingCloudKeys();
   await Promise.all(changedStorageKeys.map(syncStorageKeyToCloud));
   keys = loadKeys();
   archives = loadArchives();
@@ -1722,12 +1884,14 @@ async function moveKeyToSlot(sourceId, targetId, options = {}) {
     return key;
   });
   rememberForcedKeySlot(targetId, sourceContent);
+  markDirtyKeySlot(targetId);
   if (targetIsFilled) rememberForcedKeySlot(sourceId, targetContent);
   else {
     const emptySource = makeEmptyKey(sourceKey);
     rememberClearedKeySlot(sourceId);
     rememberForcedKeySlot(sourceId, emptySource);
   }
+  markDirtyKeySlot(sourceId);
   forgetFilledClearedKeySlots(keys);
 
   selectedId = targetId;
@@ -1750,6 +1914,7 @@ async function deleteKeyWithoutArchive(keyId) {
   keys = keys.map((savedKey) => (savedKey.id === keyId ? emptyKey : savedKey));
   rememberClearedKeySlot(keyId);
   rememberForcedKeySlot(keyId, emptyKey);
+  markDirtyKeySlot(keyId);
   forgetFilledClearedKeySlots(keys);
   if (selectedId === keyId) {
     selectedId = null;
@@ -1829,6 +1994,7 @@ function captureActiveKeyInfoDraft() {
   if (!selectedId || selectedArchiveRecord || isSavingKeyInfoDraft) return;
   const changes = getKeyInfoDraftChanges();
   rememberActiveKeyInfoDraft(changes);
+  markDirtyKeySlot(selectedId);
   keys = keys.map((key) => (key.id === selectedId ? { ...key, ...changes } : key));
   try {
     markLocalEdit();
@@ -1855,8 +2021,9 @@ function updateSelectedKeyInfoFromDraft() {
   try {
     const changes = getKeyInfoDraftChanges();
     rememberActiveKeyInfoDraft(changes);
+    markDirtyKeySlot(selectedId);
     updateSelectedKey(changes, { renderPanel: false });
-    void syncStorageKeyToCloud(getRegistryConfig().keysStorageKey, { force: true });
+    void syncStorageKeyToCloud(getRegistryConfig().keysStorageKey);
   } finally {
     isSavingKeyInfoDraft = false;
   }
@@ -3344,8 +3511,10 @@ function applyBackupPayload(payload, sourceLabel = "cette sauvegarde") {
   const changedKeys = [];
   getBackupStorageKeys().forEach((key) => {
     const value = payload.data[key];
-    if (localStorage.getItem(key) === value) return;
+    const previousValue = localStorage.getItem(key);
+    if (previousValue === value) return;
     saveStorageValue(key, value);
+    markChangedKeySlots(key, localStorage.getItem(key), previousValue);
     changedKeys.push(key);
   });
   changedKeys.forEach((key) => dirtyCloudKeys.add(key));
@@ -3832,6 +4001,7 @@ function restoreArchive(recordId) {
 
   rememberUndoStep();
   keys = keys.map((key) => (key.id === targetKey.id ? restoredKey : key));
+  markDirtyKeySlot(targetKey.id);
   archives = archives.filter((archive) => archive.id !== recordId);
   selectedId = targetKey.id;
   selectedSetId = record.key.sets?.[0]?.id || "main";
@@ -4162,12 +4332,14 @@ async function optimizeStoredPhotos() {
     const storedKeys = parseStoredArray(config.keysStorageKey, makeInitialKeys()).map(normalizeKey);
     const storedArchives = parseStoredArray(config.archivesStorageKey, []).map(normalizeArchive);
     let changed = false;
+    const changedKeyIds = [];
     const nextKeys = [];
     const nextArchives = [];
 
     for (const key of storedKeys) {
       const [nextKey, keyChanged] = await compressKeyPhotos(key);
       changed = changed || keyChanged;
+      if (keyChanged) changedKeyIds.push(key.id);
       nextKeys.push(nextKey);
     }
 
@@ -4180,6 +4352,10 @@ async function optimizeStoredPhotos() {
     if (changed) {
       localStorage.setItem(config.keysStorageKey, JSON.stringify(nextKeys));
       localStorage.setItem(config.archivesStorageKey, JSON.stringify(nextArchives));
+      changedKeyIds.forEach((keyId) => markDirtyKeySlot(keyId, config.keysStorageKey));
+      dirtyCloudKeys.add(config.keysStorageKey);
+      dirtyCloudKeys.add(config.archivesStorageKey);
+      savePendingCloudKeys();
       syncStorageKeyToCloud(config.keysStorageKey);
       syncStorageKeyToCloud(config.archivesStorageKey);
     }
@@ -4626,6 +4802,7 @@ function updateSelectedKey(changes, options = {}) {
   const shouldRenderPanel = options.renderPanel !== false;
   const previousKey = getSelectedKey();
   const wasFilled = previousKey ? isKeyFilled(previousKey) : false;
+  markDirtyKeySlot(selectedId);
   rememberUndoStep();
   keys = keys.map((key) => (key.id === selectedId ? { ...key, ...changes } : key));
   let nextKey = getSelectedKey();
@@ -5104,6 +5281,9 @@ async function archiveReservationKey(reservationId) {
     ...archives,
   ];
   keys = keys.map((savedKey) => (savedKey.id === key.id ? makeEmptyKey(savedKey) : savedKey));
+  rememberClearedKeySlot(key.id);
+  rememberForcedKeySlot(key.id, makeEmptyKey(key));
+  markDirtyKeySlot(key.id);
   selectedId = null;
   selectedArchiveRecord = null;
   selectedSetId = "main";
@@ -5314,6 +5494,9 @@ async function archiveSelectedKey(reason) {
     ...archives,
   ];
   keys = keys.map((savedKey) => (savedKey.id === key.id ? makeEmptyKey(savedKey) : savedKey));
+  rememberClearedKeySlot(key.id);
+  rememberForcedKeySlot(key.id, makeEmptyKey(key));
+  markDirtyKeySlot(key.id);
   selectedId = null;
   selectedArchiveRecord = null;
   selectedSetId = "main";
