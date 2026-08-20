@@ -19,7 +19,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260820-10";
+const syncMetadataVersion = "20260820-11";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -1025,6 +1025,30 @@ async function loadKeySlotCloudRows(selectColumns = "key,value,updated_at") {
   });
 }
 
+async function loadCloudRowsByKeys(keys) {
+  if (!supabaseClient || !Array.isArray(keys) || !keys.length) return [];
+  const uniqueKeys = [...new Set(keys)];
+  const baseKeys = uniqueKeys.filter((key) => !isKeySlotCloudKey(key));
+  const slotKeys = new Set(uniqueKeys.filter(isKeySlotCloudKey));
+  const rows = [];
+
+  if (baseKeys.length) {
+    const { data, error } = await supabaseClient
+      .from("app_state")
+      .select("key,value,updated_at")
+      .in("key", baseKeys);
+    if (error) throw error;
+    if (Array.isArray(data)) rows.push(...data);
+  }
+
+  if (slotKeys.size) {
+    const slotRows = await loadKeySlotCloudRows();
+    rows.push(...slotRows.filter((row) => slotKeys.has(row.key)));
+  }
+
+  return rows;
+}
+
 async function writeStorageKeyToCloudNow(storageKey, options = {}) {
   if (!supabaseClient) return;
   const shouldWrite = options.allowClean || hasPendingStorageKeyChange(storageKey);
@@ -1158,7 +1182,20 @@ function subscribeToCloudChanges() {
       { event: "*", schema: "public", table: "app_state" },
       (payload) => {
         const storageKey = payload.new?.key || payload.old?.key || "";
-        if (getBackupStorageKeys().includes(storageKey) || isKeySlotCloudKey(storageKey)) loadStorageFromCloud({ force: true });
+        const slotStorageKey = getKeyStorageKeyFromSlotCloudKey(storageKey);
+        if (slotStorageKey && payload.new?.value && !hasPendingStorageKeyChange(slotStorageKey)) {
+          isApplyingCloudState = true;
+          try {
+            saveKeySlotCloudRow(payload.new);
+            cloudRowVersions.set(storageKey, payload.new.updated_at || "");
+            saveCloudRowVersions();
+            refreshDataFromStorage({ keepSelection: true });
+          } finally {
+            isApplyingCloudState = false;
+          }
+          return;
+        }
+        if (getBackupStorageKeys().includes(storageKey) || slotStorageKey) loadStorageFromCloud({ force: true });
       },
     )
     .subscribe();
@@ -1247,15 +1284,7 @@ async function loadStorageFromCloud(options = {}) {
     const cloudOnlyChangedKeys = changedKeys.filter((key) => !locallyDirtyChangedKeys.includes(key));
     if (!cloudOnlyChangedKeys.length && !deletedKeys.length) return;
 
-    let changedRows = [];
-    if (cloudOnlyChangedKeys.length) {
-      const { data, error } = await supabaseClient
-        .from("app_state")
-        .select("key,value,updated_at")
-        .in("key", cloudOnlyChangedKeys);
-      if (error) throw error;
-      changedRows = Array.isArray(data) ? data : [];
-    }
+    const changedRows = await loadCloudRowsByKeys(cloudOnlyChangedKeys);
 
     isApplyingCloudState = true;
     changedRows.forEach((row) => {
