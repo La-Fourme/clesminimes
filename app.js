@@ -19,7 +19,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260820-14";
+const syncMetadataVersion = "20260820-15";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -286,7 +286,12 @@ function ensureDeviceName() {
   if (savedName) return savedName;
 
   const detectedName = getDetectedDeviceName();
-  const customName = prompt("Nom de cet appareil pour l'historique :", detectedName);
+  let customName = "";
+  try {
+    customName = prompt("Nom de cet appareil pour l'historique :", detectedName);
+  } catch (error) {
+    console.warn("Device name prompt unavailable", error.message);
+  }
   const deviceName = customName?.trim() || detectedName;
   localStorage.setItem(deviceNameStorageKey, deviceName);
   return deviceName;
