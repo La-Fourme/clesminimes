@@ -19,7 +19,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260820-15";
+const syncMetadataVersion = "20260820-16";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -441,6 +441,10 @@ function getCloudBaseStorageKeys() {
   return getBackupStorageKeys().filter((storageKey) => !isKeysStorageKey(storageKey));
 }
 
+function getKeyStorageKeys() {
+  return Object.values(registryConfig).map((config) => config.keysStorageKey);
+}
+
 function parseStorageValue(value) {
   if (typeof value !== "string") return null;
 
@@ -684,6 +688,25 @@ function saveKeySlotCloudRow(row, options = {}) {
   const nextValue = JSON.stringify(nextKeys);
   if (options.protectLocal === false) localStorage.setItem(storageKey, nextValue);
   else saveStorageValue(storageKey, nextValue);
+}
+
+function applyLegacyKeyStorageFallback(row, slotCloudKeys, pendingStartupKeys) {
+  const storageKey = row?.key;
+  if (!isKeysStorageKey(storageKey) || pendingStartupKeys.has(storageKey)) return;
+  const legacyKeys = parseStorageValue(stringifyCloudValue(row.value));
+  if (!Array.isArray(legacyKeys)) return;
+
+  const legacyById = new Map(legacyKeys.map((key) => [key.id, normalizeKey(key)]));
+  const savedKeys = parseStoredArray(storageKey, makeInitialKeys()).map(normalizeKey);
+  const nextKeys = savedKeys.map((key) => {
+    const legacyKey = legacyById.get(key.id);
+    const cloudSlotKey = getKeySlotCloudKey(storageKey, key.id);
+    if (!legacyKey || slotCloudKeys.has(cloudSlotKey)) return key;
+    if (isKeyFilled(legacyKey)) markDirtyKeySlot(key.id, storageKey);
+    return normalizeKey({ ...legacyKey, id: key.id });
+  });
+
+  localStorage.setItem(storageKey, JSON.stringify(nextKeys));
 }
 
 function loadCloudRowVersions() {
@@ -1300,15 +1323,20 @@ async function loadStorageFromCloud(options = {}) {
   try {
     if (!hasLoadedCloudState) {
       const pendingStartupKeys = new Set(getPendingCloudSyncKeys());
-      const [{ data, error }, slotRows] = await Promise.all([
+      const [{ data, error }, { data: legacyKeyRows, error: legacyKeyRowsError }, slotRows] = await Promise.all([
         supabaseClient
           .from("app_state")
           .select("key,value,updated_at")
           .in("key", getCloudBaseStorageKeys()),
+        supabaseClient
+          .from("app_state")
+          .select("key,value,updated_at")
+          .in("key", getKeyStorageKeys()),
         loadKeySlotCloudRows(),
       ]);
       if (error) throw error;
-      if ((!Array.isArray(data) || !data.length) && !slotRows.length) {
+      if (legacyKeyRowsError) throw legacyKeyRowsError;
+      if ((!Array.isArray(data) || !data.length) && (!Array.isArray(legacyKeyRows) || !legacyKeyRows.length) && !slotRows.length) {
         console.warn("Supabase initial load returned no app state rows; cloud writes remain locked.");
         return;
       }
@@ -1317,6 +1345,10 @@ async function loadStorageFromCloud(options = {}) {
       (Array.isArray(data) ? data : []).forEach((row) => {
         if (!pendingStartupKeys.has(row.key)) saveStorageValue(row.key, stringifyCloudValue(row.value));
         cloudRowVersions.set(row.key, row.updated_at || "");
+      });
+      const slotCloudKeys = new Set(slotRows.map((row) => row.key));
+      (Array.isArray(legacyKeyRows) ? legacyKeyRows : []).forEach((row) => {
+        applyLegacyKeyStorageFallback(row, slotCloudKeys, pendingStartupKeys);
       });
       slotRows.forEach((row) => {
         if (hasPendingCloudRowChange(row.key)) return;
@@ -1328,6 +1360,7 @@ async function loadStorageFromCloud(options = {}) {
       hasLoadedCloudState = true;
       hasCompletedInitialCloudLoad = true;
       saveCloudRowVersions();
+      await syncCurrentRegistryToCloud();
       if (pendingStartupKeys.size) {
         const syncablePendingKeys = [...pendingStartupKeys].filter((key) => getBackupStorageKeys().includes(key));
         await Promise.all(syncablePendingKeys.map((key) => syncStorageKeyToCloud(key)));
