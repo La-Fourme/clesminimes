@@ -18,6 +18,8 @@ const photoOptimizationStorageKey = "cles-photo-optimization-560-v2";
 const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
+const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
+const syncMetadataVersion = "20260820-09";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
 const automaticBackupRetentionCount = 2;
@@ -26,6 +28,7 @@ const automaticBackupHour = 12;
 const automaticBackupMinute = 0;
 const cloudPollIntervalMs = 5000;
 const cloudWriteDebounceMs = 300;
+const pendingLocalEditGraceMs = 10 * 60 * 1000;
 const registryConfig = {
   location: {
     title: "LOCATION",
@@ -194,6 +197,10 @@ function markLocalEdit() {
   if (isApplyingCloudState) return;
   lastLocalEditAt = Date.now();
   localStorage.setItem(lastLocalEditStorageKey, String(lastLocalEditAt));
+}
+
+function hasRecentLocalEdit() {
+  return Date.now() - lastLocalEditAt <= pendingLocalEditGraceMs;
 }
 
 function loadTileViewMode() {
@@ -631,6 +638,20 @@ function saveDirtyKeySlots() {
   );
 }
 
+function resetLegacySyncMetadataIfNeeded() {
+  if (localStorage.getItem(syncMetadataVersionStorageKey) === syncMetadataVersion) return;
+  dirtyCloudKeys = new Set();
+  failedCloudSyncKeys = new Set();
+  dirtyKeySlots = new Map();
+  cloudRowVersions = new Map();
+  cloudSyncTimers.forEach((timer) => clearTimeout(timer));
+  cloudSyncTimers = new Map();
+  localStorage.removeItem(pendingCloudKeysStorageKey);
+  localStorage.removeItem(dirtyKeySlotsStorageKey);
+  localStorage.removeItem(cloudVersionsStorageKey);
+  localStorage.setItem(syncMetadataVersionStorageKey, syncMetadataVersion);
+}
+
 function markDirtyKeySlot(keyId, storageKey = getRegistryConfig().keysStorageKey) {
   if (!keyId || !isKeysStorageKey(storageKey)) return;
   const savedKeyIds = dirtyKeySlots.get(storageKey) || new Set();
@@ -653,17 +674,29 @@ function getDirtyKeySlotIds(storageKey) {
 
 function pruneStalePendingKeyStorageFlags() {
   let didChange = false;
+  let didChangeDirtySlots = false;
+  const keepRecentLocalFlags = hasRecentLocalEdit();
   Object.values(registryConfig).forEach((config) => {
     const storageKey = config.keysStorageKey;
-    if (getDirtyKeySlotIds(storageKey).size) return;
+    const savedDirtySlots = dirtyKeySlots.get(storageKey);
+    if (savedDirtySlots?.size && !keepRecentLocalFlags) {
+      dirtyKeySlots.delete(storageKey);
+      didChangeDirtySlots = true;
+    }
+    if (getDirtyKeySlotIds(storageKey).size || (keepRecentLocalFlags && (dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey)))) {
+      return;
+    }
     if (dirtyCloudKeys.delete(storageKey)) didChange = true;
     if (failedCloudSyncKeys.delete(storageKey)) didChange = true;
   });
+  if (didChangeDirtySlots) saveDirtyKeySlots();
   if (didChange) savePendingCloudKeys();
 }
 
 function hasPendingStorageKeyChange(storageKey) {
-  if (isKeysStorageKey(storageKey)) return getDirtyKeySlotIds(storageKey).size > 0;
+  if (isKeysStorageKey(storageKey)) {
+    return getDirtyKeySlotIds(storageKey).size > 0 || (hasRecentLocalEdit() && (dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey)));
+  }
   return dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey);
 }
 
@@ -6095,6 +6128,7 @@ keySetPhotoList.addEventListener("change", (event) => {
 });
 
 async function initializeApp() {
+  resetLegacySyncMetadataIfNeeded();
   removeAutomaticBackupsFromLocalStorage();
   migrateArchivedSlots();
   ensureDeviceName();
