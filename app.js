@@ -575,13 +575,7 @@ function protectLocalKeyEdits(storageKey, value) {
 
 function saveStorageValue(storageKey, value) {
   if (typeof value === "string") {
-    const nextValue =
-      isKeysStorageKey(storageKey)
-        ? protectLocalKeyEdits(
-            storageKey,
-            JSON.stringify(mergeKeyCollections(value, localStorage.getItem(storageKey))),
-          )
-        : value;
+    const nextValue = isKeysStorageKey(storageKey) ? protectLocalKeyEdits(storageKey, value) : value;
     localStorage.setItem(storageKey, nextValue);
   } else {
     localStorage.removeItem(storageKey);
@@ -655,6 +649,27 @@ function getDirtyKeySlotIds(storageKey) {
     recentlyClearedKeySlots.forEach((_, keyId) => savedKeyIds.add(keyId));
   }
   return savedKeyIds;
+}
+
+function pruneStalePendingKeyStorageFlags() {
+  let didChange = false;
+  Object.values(registryConfig).forEach((config) => {
+    const storageKey = config.keysStorageKey;
+    if (getDirtyKeySlotIds(storageKey).size) return;
+    if (dirtyCloudKeys.delete(storageKey)) didChange = true;
+    if (failedCloudSyncKeys.delete(storageKey)) didChange = true;
+  });
+  if (didChange) savePendingCloudKeys();
+}
+
+function hasPendingStorageKeyChange(storageKey) {
+  if (isKeysStorageKey(storageKey)) return getDirtyKeySlotIds(storageKey).size > 0;
+  return dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey);
+}
+
+function getPendingCloudSyncKeys() {
+  pruneStalePendingKeyStorageFlags();
+  return getBackupStorageKeys().filter(hasPendingStorageKeyChange);
 }
 
 function clearDirtyKeySlots(storageKey) {
@@ -781,11 +796,12 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
     savePendingCloudKeys();
     return Promise.resolve();
   }
+  const force = Boolean(options.force);
+  if (!force && !hasPendingStorageKeyChange(storageKey)) return Promise.resolve();
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.delete(storageKey);
   failedCloudSyncKeys.delete(storageKey);
 
-  const force = Boolean(options.force);
   pendingCloudSync = pendingCloudSync
     .catch(() => {})
     .then(async () => {
@@ -861,23 +877,24 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
 }
 
 function retryFailedCloudSyncs() {
+  pruneStalePendingKeyStorageFlags();
   if (!failedCloudSyncKeys.size) return Promise.resolve();
-  const keys = [...failedCloudSyncKeys];
+  const keys = [...failedCloudSyncKeys].filter(hasPendingStorageKeyChange);
   failedCloudSyncKeys.clear();
   return Promise.all(keys.map(syncStorageKeyToCloud));
 }
 
 function syncAllStorageToCloud() {
-  return Promise.all(getBackupStorageKeys().map(syncStorageKeyToCloud));
+  return Promise.all(getBackupStorageKeys().map((storageKey) => syncStorageKeyToCloud(storageKey, { force: true })));
 }
 
 function syncCurrentRegistryToCloud() {
-  return Promise.all([...dirtyCloudKeys].map(syncStorageKeyToCloud));
+  return Promise.all(getPendingCloudSyncKeys().map(syncStorageKeyToCloud));
 }
 
 async function writeStorageKeyToCloudNow(storageKey, options = {}) {
   if (!supabaseClient) return;
-  const shouldWrite = dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey) || options.allowClean;
+  const shouldWrite = options.allowClean || hasPendingStorageKeyChange(storageKey);
   if (!shouldWrite) return;
   if (!hasCompletedInitialCloudLoad) {
     dirtyCloudKeys.add(storageKey);
@@ -930,7 +947,7 @@ async function writeStorageKeyToCloudNow(storageKey, options = {}) {
 }
 
 async function syncCurrentRegistryNow() {
-  const pendingKeys = getBackupStorageKeys().filter((storageKey) => dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey));
+  const pendingKeys = getPendingCloudSyncKeys();
   let didSyncEveryKey = true;
 
   for (const storageKey of pendingKeys) {
@@ -1022,7 +1039,7 @@ async function loadStorageFromCloud(options = {}) {
   }
   try {
     if (!hasLoadedCloudState) {
-      const pendingStartupKeys = new Set([...dirtyCloudKeys, ...failedCloudSyncKeys]);
+      const pendingStartupKeys = new Set(getPendingCloudSyncKeys());
       const { data, error } = await supabaseClient
         .from("app_state")
         .select("key,value,updated_at")
@@ -1062,14 +1079,14 @@ async function loadStorageFromCloud(options = {}) {
       .filter((row) => cloudRowVersions.get(row.key) !== (row.updated_at || "") || localStorage.getItem(row.key) === null)
       .map((row) => row.key);
     const missingRemoteKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
-    const locallyDirtyMissingKeys = missingRemoteKeys.filter((key) => dirtyCloudKeys.has(key) || failedCloudSyncKeys.has(key));
+    const locallyDirtyMissingKeys = missingRemoteKeys.filter(hasPendingStorageKeyChange);
     if (locallyDirtyMissingKeys.length) {
       await Promise.all(locallyDirtyMissingKeys.map((key) => syncStorageKeyToCloud(key)));
     }
     const deletedKeys = missingRemoteKeys.filter((key) => !locallyDirtyMissingKeys.includes(key));
     if (!changedKeys.length && !deletedKeys.length) return;
 
-    const locallyDirtyChangedKeys = changedKeys.filter((key) => dirtyCloudKeys.has(key) || failedCloudSyncKeys.has(key));
+    const locallyDirtyChangedKeys = changedKeys.filter(hasPendingStorageKeyChange);
     if (locallyDirtyChangedKeys.length) {
       await Promise.all(locallyDirtyChangedKeys.map((key) => syncStorageKeyToCloud(key)));
     }
@@ -1359,9 +1376,13 @@ function loadKeys() {
 
 function saveKeys() {
   try {
+    const storageKey = getRegistryConfig().keysStorageKey;
+    const previousValue = localStorage.getItem(storageKey);
+    const nextValue = JSON.stringify(keys);
     markLocalEdit();
-    localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
-    scheduleStorageKeySync(getRegistryConfig().keysStorageKey);
+    localStorage.setItem(storageKey, nextValue);
+    markChangedKeySlots(storageKey, nextValue, previousValue);
+    scheduleStorageKeySync(storageKey);
   } catch (error) {
     alert("La sauvegarde a échoué. Une photo est probablement trop lourde : essayez une image plus légère.");
     throw error;
