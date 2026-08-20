@@ -19,7 +19,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260820-11";
+const syncMetadataVersion = "20260820-12";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -154,6 +154,7 @@ let selectedId = null;
 let selectedSetId = "main";
 let selectedArchiveRecord = null;
 let draggedKeyId = null;
+let suppressKeyTileClickUntil = 0;
 let activeContactType = "internal";
 let isSigning = false;
 let hasSignature = false;
@@ -427,6 +428,10 @@ function getBackupStorageKeys() {
     registryConfig.transaction.keysStorageKey,
     registryConfig.transaction.archivesStorageKey,
   ];
+}
+
+function getCloudBaseStorageKeys() {
+  return getBackupStorageKeys().filter((storageKey) => !isKeysStorageKey(storageKey));
 }
 
 function parseStorageValue(value) {
@@ -742,6 +747,13 @@ function hasPendingStorageKeyChange(storageKey) {
     return getDirtyKeySlotIds(storageKey).size > 0 || (hasRecentLocalEdit() && (dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey)));
   }
   return dirtyCloudKeys.has(storageKey) || failedCloudSyncKeys.has(storageKey);
+}
+
+function hasPendingCloudRowChange(cloudKey) {
+  const slotStorageKey = getKeyStorageKeyFromSlotCloudKey(cloudKey);
+  if (!slotStorageKey) return hasPendingStorageKeyChange(cloudKey);
+  const keyId = getKeyIdFromSlotCloudKey(cloudKey);
+  return getDirtyKeySlotIds(slotStorageKey).has(keyId);
 }
 
 function getPendingCloudSyncKeys() {
@@ -1183,7 +1195,7 @@ function subscribeToCloudChanges() {
       (payload) => {
         const storageKey = payload.new?.key || payload.old?.key || "";
         const slotStorageKey = getKeyStorageKeyFromSlotCloudKey(storageKey);
-        if (slotStorageKey && payload.new?.value && !hasPendingStorageKeyChange(slotStorageKey)) {
+        if (slotStorageKey && payload.new?.value && !hasPendingCloudRowChange(storageKey)) {
           isApplyingCloudState = true;
           try {
             saveKeySlotCloudRow(payload.new);
@@ -1195,7 +1207,7 @@ function subscribeToCloudChanges() {
           }
           return;
         }
-        if (getBackupStorageKeys().includes(storageKey) || slotStorageKey) loadStorageFromCloud({ force: true });
+        if (getCloudBaseStorageKeys().includes(storageKey) || slotStorageKey) loadStorageFromCloud({ force: true });
       },
     )
     .subscribe();
@@ -1219,7 +1231,7 @@ async function loadStorageFromCloud(options = {}) {
         supabaseClient
           .from("app_state")
           .select("key,value,updated_at")
-          .in("key", getBackupStorageKeys()),
+          .in("key", getCloudBaseStorageKeys()),
         loadKeySlotCloudRows(),
       ]);
       if (error) throw error;
@@ -1254,7 +1266,7 @@ async function loadStorageFromCloud(options = {}) {
       supabaseClient
         .from("app_state")
         .select("key,updated_at")
-        .in("key", getBackupStorageKeys()),
+        .in("key", getCloudBaseStorageKeys()),
       loadKeySlotCloudRows("key,updated_at"),
     ]);
     if (metadataError) throw metadataError;
@@ -1270,14 +1282,14 @@ async function loadStorageFromCloud(options = {}) {
       })
       .map((row) => row.key);
     const missingRemoteKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
-    const locallyDirtyMissingKeys = missingRemoteKeys.filter(hasPendingStorageKeyChange);
+    const locallyDirtyMissingKeys = missingRemoteKeys.filter(hasPendingCloudRowChange);
     if (locallyDirtyMissingKeys.length) {
       await Promise.all(locallyDirtyMissingKeys.map((key) => syncStorageKeyToCloud(key)));
     }
     const deletedKeys = missingRemoteKeys.filter((key) => !locallyDirtyMissingKeys.includes(key));
     if (!changedKeys.length && !deletedKeys.length) return;
 
-    const locallyDirtyChangedKeys = changedKeys.filter(hasPendingStorageKeyChange);
+    const locallyDirtyChangedKeys = changedKeys.filter(hasPendingCloudRowChange);
     if (locallyDirtyChangedKeys.length) {
       await Promise.all(locallyDirtyChangedKeys.map((key) => syncStorageKeyToCloud(key)));
     }
@@ -2145,9 +2157,10 @@ async function moveKeyToSlot(sourceId, targetId, options = {}) {
   markDirtyKeySlot(sourceId);
   forgetFilledClearedKeySlots(keys);
 
-  selectedId = targetId;
-  selectedSetId = sourceContent.sets[0]?.id || "main";
-  resetKeyInfoEditUnlock(keys.find((key) => key.id === targetId));
+  selectedId = null;
+  selectedArchiveRecord = null;
+  selectedSetId = "main";
+  resetKeyInfoEditUnlock(null);
   saveKeys();
   render();
   await syncCloudAfterAction();
@@ -4392,7 +4405,12 @@ function renderGrid() {
           button.append(strip);
         }
 
-        button.addEventListener("click", () => {
+        button.addEventListener("click", (event) => {
+          if (Date.now() < suppressKeyTileClickUntil) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
           if (selectedId !== key.id) activeKeyInfoDraft = null;
           closeSidePanels();
           selectedArchiveRecord = null;
@@ -4432,6 +4450,7 @@ function renderGrid() {
         });
         button.addEventListener("dragend", () => {
           draggedKeyId = null;
+          suppressKeyTileClickUntil = Date.now() + 500;
           document.body.classList.remove("is-moving-key");
           button.classList.remove("is-dragging");
           document.querySelectorAll(".key-tile.is-drop-target").forEach((tile) => {
@@ -4449,6 +4468,7 @@ function renderGrid() {
         });
         button.addEventListener("drop", (event) => {
           event.preventDefault();
+          suppressKeyTileClickUntil = Date.now() + 500;
           button.classList.remove("is-drop-target");
           void moveKeyToSlot(event.dataTransfer.getData("text/plain") || draggedKeyId, key.id, {
             copy: event.ctrlKey,
