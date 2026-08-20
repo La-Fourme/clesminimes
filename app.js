@@ -19,8 +19,9 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260820-09";
+const syncMetadataVersion = "20260820-10";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
+const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
 const automaticBackupRetentionCount = 2;
 const automaticBackupWeekday = 5;
@@ -446,6 +447,35 @@ function isKeysStorageKey(storageKey) {
   return Object.values(registryConfig).some((config) => config.keysStorageKey === storageKey);
 }
 
+function getKeySlotCloudPrefix(storageKey) {
+  return `${storageKey}${keySlotCloudSeparator}`;
+}
+
+function getKeySlotCloudKey(storageKey, keyId) {
+  return `${getKeySlotCloudPrefix(storageKey)}${keyId}`;
+}
+
+function getKeyStorageKeyFromSlotCloudKey(cloudKey) {
+  const config = Object.values(registryConfig).find((item) => String(cloudKey || "").startsWith(getKeySlotCloudPrefix(item.keysStorageKey)));
+  return config?.keysStorageKey || "";
+}
+
+function getKeyIdFromSlotCloudKey(cloudKey) {
+  const storageKey = getKeyStorageKeyFromSlotCloudKey(cloudKey);
+  return storageKey ? String(cloudKey).slice(getKeySlotCloudPrefix(storageKey).length) : "";
+}
+
+function isKeySlotCloudKey(cloudKey) {
+  return Boolean(getKeyStorageKeyFromSlotCloudKey(cloudKey));
+}
+
+function getKeySlotStorageRows() {
+  return Object.values(registryConfig).map((config) => ({
+    storageKey: config.keysStorageKey,
+    prefix: getKeySlotCloudPrefix(config.keysStorageKey),
+  }));
+}
+
 function getKeyCompletenessScore(key) {
   if (!key) return 0;
   return [
@@ -587,6 +617,20 @@ function saveStorageValue(storageKey, value) {
   } else {
     localStorage.removeItem(storageKey);
   }
+}
+
+function saveKeySlotCloudRow(row) {
+  const storageKey = getKeyStorageKeyFromSlotCloudKey(row?.key);
+  const keyId = getKeyIdFromSlotCloudKey(row?.key);
+  if (!storageKey || !keyId) return;
+
+  const incomingKey = normalizeKey({ ...(row.value || {}), id: keyId });
+  const savedKeys = parseStoredArray(storageKey, makeInitialKeys()).map(normalizeKey);
+  const hasSavedSlot = savedKeys.some((key) => key.id === keyId);
+  const nextKeys = hasSavedSlot
+    ? savedKeys.map((key) => (key.id === keyId ? incomingKey : key))
+    : [...savedKeys, incomingKey];
+  saveStorageValue(storageKey, JSON.stringify(nextKeys));
 }
 
 function loadCloudRowVersions() {
@@ -822,6 +866,40 @@ function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
   );
 }
 
+async function writeKeySlotsToCloud(storageKey, options = {}) {
+  const savedKeys = parseStoredArray(storageKey, makeInitialKeys()).map(normalizeKey);
+  const keyById = new Map(savedKeys.map((key) => [key.id, key]));
+  const keyIds = options.force ? savedKeys.map((key) => key.id) : [...getDirtyKeySlotIds(storageKey)];
+  if (!keyIds.length && !options.allowClean) return;
+
+  for (const keyId of keyIds) {
+    const key = keyById.get(keyId);
+    if (!key) continue;
+    const updatedAt = new Date().toISOString();
+    const cloudKey = getKeySlotCloudKey(storageKey, keyId);
+    const { error } = await supabaseClient.from("app_state").upsert({
+      key: cloudKey,
+      value: normalizeKey(key),
+      updated_at: updatedAt,
+    });
+
+    if (error) {
+      dirtyCloudKeys.add(storageKey);
+      failedCloudSyncKeys.add(storageKey);
+      savePendingCloudKeys();
+      console.warn("Supabase key slot sync failed", cloudKey, error.message);
+      throw error;
+    }
+    cloudRowVersions.set(cloudKey, updatedAt);
+  }
+
+  dirtyCloudKeys.delete(storageKey);
+  failedCloudSyncKeys.delete(storageKey);
+  clearDirtyKeySlots(storageKey);
+  savePendingCloudKeys();
+  saveCloudRowVersions();
+}
+
 function syncStorageKeyToCloud(storageKey, options = {}) {
   if (!supabaseClient) return Promise.resolve();
   if (!hasCompletedInitialCloudLoad) {
@@ -834,6 +912,11 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.delete(storageKey);
   failedCloudSyncKeys.delete(storageKey);
+
+  if (isKeysStorageKey(storageKey)) {
+    pendingCloudSync = pendingCloudSync.catch(() => {}).then(() => writeKeySlotsToCloud(storageKey, options));
+    return pendingCloudSync;
+  }
 
   pendingCloudSync = pendingCloudSync
     .catch(() => {})
@@ -925,6 +1008,23 @@ function syncCurrentRegistryToCloud() {
   return Promise.all(getPendingCloudSyncKeys().map(syncStorageKeyToCloud));
 }
 
+async function loadKeySlotCloudRows(selectColumns = "key,value,updated_at") {
+  if (!supabaseClient) return [];
+  const results = await Promise.all(
+    getKeySlotStorageRows().map(({ prefix }) =>
+      supabaseClient
+        .from("app_state")
+        .select(selectColumns)
+        .like("key", `${prefix}%`),
+    ),
+  );
+
+  return results.flatMap(({ data, error }) => {
+    if (error) throw error;
+    return Array.isArray(data) ? data : [];
+  });
+}
+
 async function writeStorageKeyToCloudNow(storageKey, options = {}) {
   if (!supabaseClient) return;
   const shouldWrite = options.allowClean || hasPendingStorageKeyChange(storageKey);
@@ -936,6 +1036,11 @@ async function writeStorageKeyToCloudNow(storageKey, options = {}) {
   }
   clearTimeout(cloudSyncTimers.get(storageKey));
   cloudSyncTimers.delete(storageKey);
+
+  if (isKeysStorageKey(storageKey)) {
+    pendingCloudSync = pendingCloudSync.catch(() => {}).then(() => writeKeySlotsToCloud(storageKey, options));
+    return pendingCloudSync;
+  }
 
   pendingCloudSync = pendingCloudSync
     .catch(() => {})
@@ -1053,7 +1158,7 @@ function subscribeToCloudChanges() {
       { event: "*", schema: "public", table: "app_state" },
       (payload) => {
         const storageKey = payload.new?.key || payload.old?.key || "";
-        if (getBackupStorageKeys().includes(storageKey)) loadStorageFromCloud({ force: true });
+        if (getBackupStorageKeys().includes(storageKey) || isKeySlotCloudKey(storageKey)) loadStorageFromCloud({ force: true });
       },
     )
     .subscribe();
@@ -1073,19 +1178,27 @@ async function loadStorageFromCloud(options = {}) {
   try {
     if (!hasLoadedCloudState) {
       const pendingStartupKeys = new Set(getPendingCloudSyncKeys());
-      const { data, error } = await supabaseClient
-        .from("app_state")
-        .select("key,value,updated_at")
-        .in("key", getBackupStorageKeys());
+      const [{ data, error }, slotRows] = await Promise.all([
+        supabaseClient
+          .from("app_state")
+          .select("key,value,updated_at")
+          .in("key", getBackupStorageKeys()),
+        loadKeySlotCloudRows(),
+      ]);
       if (error) throw error;
-      if (!Array.isArray(data) || !data.length) {
+      if ((!Array.isArray(data) || !data.length) && !slotRows.length) {
         console.warn("Supabase initial load returned no app state rows; cloud writes remain locked.");
         return;
       }
 
       isApplyingCloudState = true;
-      data.forEach((row) => {
+      (Array.isArray(data) ? data : []).forEach((row) => {
         if (!pendingStartupKeys.has(row.key)) saveStorageValue(row.key, stringifyCloudValue(row.value));
+        cloudRowVersions.set(row.key, row.updated_at || "");
+      });
+      slotRows.forEach((row) => {
+        const storageKey = getKeyStorageKeyFromSlotCloudKey(row.key);
+        if (!pendingStartupKeys.has(storageKey)) saveKeySlotCloudRow(row);
         cloudRowVersions.set(row.key, row.updated_at || "");
       });
       isApplyingCloudState = false;
@@ -1100,16 +1213,24 @@ async function loadStorageFromCloud(options = {}) {
       return;
     }
 
-    const { data: metadata, error: metadataError } = await supabaseClient
-      .from("app_state")
-      .select("key,updated_at")
-      .in("key", getBackupStorageKeys());
+    const [{ data: baseMetadata, error: metadataError }, slotMetadata] = await Promise.all([
+      supabaseClient
+        .from("app_state")
+        .select("key,updated_at")
+        .in("key", getBackupStorageKeys()),
+      loadKeySlotCloudRows("key,updated_at"),
+    ]);
     if (metadataError) throw metadataError;
+    const metadata = [...(Array.isArray(baseMetadata) ? baseMetadata : []), ...slotMetadata];
     if (!Array.isArray(metadata)) return;
 
     const remoteVersions = new Map(metadata.map((row) => [row.key, row.updated_at || ""]));
     const changedKeys = metadata
-      .filter((row) => cloudRowVersions.get(row.key) !== (row.updated_at || "") || localStorage.getItem(row.key) === null)
+      .filter((row) => {
+        const versionChanged = cloudRowVersions.get(row.key) !== (row.updated_at || "");
+        const missingLocalBaseRow = !isKeySlotCloudKey(row.key) && localStorage.getItem(row.key) === null;
+        return versionChanged || missingLocalBaseRow;
+      })
       .map((row) => row.key);
     const missingRemoteKeys = [...cloudRowVersions.keys()].filter((key) => !remoteVersions.has(key));
     const locallyDirtyMissingKeys = missingRemoteKeys.filter(hasPendingStorageKeyChange);
@@ -1137,8 +1258,13 @@ async function loadStorageFromCloud(options = {}) {
     }
 
     isApplyingCloudState = true;
-    changedRows.forEach((row) => saveStorageValue(row.key, stringifyCloudValue(row.value)));
-    deletedKeys.forEach((key) => localStorage.removeItem(key));
+    changedRows.forEach((row) => {
+      if (isKeySlotCloudKey(row.key)) saveKeySlotCloudRow(row);
+      else saveStorageValue(row.key, stringifyCloudValue(row.value));
+    });
+    deletedKeys.forEach((key) => {
+      if (!isKeySlotCloudKey(key)) localStorage.removeItem(key);
+    });
     isApplyingCloudState = false;
     metadata.forEach((row) => {
       if (!locallyDirtyChangedKeys.includes(row.key)) cloudRowVersions.set(row.key, row.updated_at || "");
