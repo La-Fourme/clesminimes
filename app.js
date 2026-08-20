@@ -19,7 +19,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260820-16";
+const syncMetadataVersion = "20260820-17";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -722,6 +722,24 @@ function saveCloudRowVersions() {
   localStorage.setItem(cloudVersionsStorageKey, JSON.stringify(Object.fromEntries(cloudRowVersions)));
 }
 
+function isStaleCloudWriteError(error) {
+  const message = String(error?.message || "");
+  return /ancienne version|expected_updated_at|stale|concurrent/i.test(message);
+}
+
+function getCloudWritePayload(storageKey, value, updatedAt, expectedUpdatedAt = null) {
+  return {
+    key: storageKey,
+    value,
+    updated_at: updatedAt,
+    expected_updated_at: expectedUpdatedAt || null,
+  };
+}
+
+async function upsertCloudRow(storageKey, value, expectedUpdatedAt = null, updatedAt = new Date().toISOString()) {
+  return supabaseClient.from("app_state").upsert(getCloudWritePayload(storageKey, value, updatedAt, expectedUpdatedAt));
+}
+
 function loadPendingCloudKeys() {
   try {
     const saved = JSON.parse(localStorage.getItem(pendingCloudKeysStorageKey) || "[]");
@@ -954,21 +972,37 @@ function scheduleStorageKeySync(storageKey, delay = cloudWriteDebounceMs) {
 }
 
 async function writeKeySlotsToCloud(storageKey, options = {}) {
-  const savedKeys = parseStoredArray(storageKey, makeInitialKeys()).map(normalizeKey);
+  let savedKeys = parseStoredArray(storageKey, makeInitialKeys()).map(normalizeKey);
   const keyById = new Map(savedKeys.map((key) => [key.id, key]));
   const keyIds = options.force ? savedKeys.map((key) => key.id) : [...getDirtyKeySlotIds(storageKey)];
   if (!keyIds.length && !options.allowClean) return;
 
   for (const keyId of keyIds) {
-    const key = keyById.get(keyId);
+    let key = keyById.get(keyId);
     if (!key) continue;
-    const updatedAt = new Date().toISOString();
     const cloudKey = getKeySlotCloudKey(storageKey, keyId);
-    const { error } = await supabaseClient.from("app_state").upsert({
-      key: cloudKey,
-      value: normalizeKey(key),
-      updated_at: updatedAt,
-    });
+    let updatedAt = new Date().toISOString();
+    let expectedUpdatedAt = cloudRowVersions.get(cloudKey) || null;
+    let { error } = await upsertCloudRow(cloudKey, normalizeKey(key), expectedUpdatedAt, updatedAt);
+
+    if (error && isStaleCloudWriteError(error)) {
+      const { data: remoteRow, error: remoteError } = await supabaseClient
+        .from("app_state")
+        .select("key,value,updated_at")
+        .eq("key", cloudKey)
+        .maybeSingle();
+      if (remoteError) throw remoteError;
+
+      expectedUpdatedAt = remoteRow?.updated_at || null;
+      if (remoteRow?.value) {
+        key = mergeKeyRecord(key, parseCloudObjectValue(remoteRow.value));
+        keyById.set(keyId, key);
+        savedKeys = savedKeys.map((savedKey) => (savedKey.id === keyId ? key : savedKey));
+        localStorage.setItem(storageKey, JSON.stringify(savedKeys));
+      }
+      updatedAt = new Date().toISOString();
+      ({ error } = await upsertCloudRow(cloudKey, normalizeKey(key), expectedUpdatedAt, updatedAt));
+    }
 
     if (error) {
       dirtyCloudKeys.add(storageKey);
@@ -1009,7 +1043,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
     .catch(() => {})
     .then(async () => {
       let value = localStorage.getItem(storageKey);
-      const updatedAt = new Date().toISOString();
+      let updatedAt = new Date().toISOString();
       const expectedUpdatedAt = cloudRowVersions.get(storageKey) || null;
       const { data: remoteRow, error: versionError } = await supabaseClient
         .from("app_state")
@@ -1027,11 +1061,12 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       }
       if (!force && hasRemoteVersionChanged) {
         if ((dirtyCloudKeys.has(storageKey) || hasLocalKeySlotChanges) && value !== null) {
-          const { error: localSaveError } = await supabaseClient.from("app_state").upsert({
-            key: storageKey,
-            value: parseStorageValue(value),
-            updated_at: updatedAt,
-          });
+          const { error: localSaveError } = await upsertCloudRow(
+            storageKey,
+            parseStorageValue(value),
+            remoteUpdatedAt || null,
+            updatedAt,
+          );
           if (localSaveError) {
             dirtyCloudKeys.add(storageKey);
             failedCloudSyncKeys.add(storageKey);
@@ -1059,13 +1094,29 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       const request =
         value === null
           ? supabaseClient.from("app_state").delete().eq("key", storageKey)
-          : supabaseClient.from("app_state").upsert({
-              key: storageKey,
-              value: parseStorageValue(value),
-              updated_at: updatedAt,
-            });
+          : upsertCloudRow(storageKey, parseStorageValue(value), expectedUpdatedAt, updatedAt);
 
       let { error } = await request;
+      if (error && isStaleCloudWriteError(error) && value !== null) {
+        const { data: latestRemoteRow, error: latestRemoteError } = await supabaseClient
+          .from("app_state")
+          .select("key,value,updated_at")
+          .eq("key", storageKey)
+          .maybeSingle();
+        if (latestRemoteError) throw latestRemoteError;
+        if (latestRemoteRow?.value) {
+          value = prepareStorageValueForCloud(storageKey, value, latestRemoteRow.value);
+          localStorage.setItem(storageKey, value);
+        }
+        updatedAt = new Date().toISOString();
+        const retryResult = await upsertCloudRow(
+          storageKey,
+          parseStorageValue(value),
+          latestRemoteRow?.updated_at || null,
+          updatedAt,
+        );
+        error = retryResult.error;
+      }
       if (error) {
         dirtyCloudKeys.add(storageKey);
         failedCloudSyncKeys.add(storageKey);
@@ -1177,7 +1228,7 @@ async function writeStorageKeyToCloudNow(storageKey, options = {}) {
     .catch(() => {})
     .then(async () => {
       let value = localStorage.getItem(storageKey);
-      const updatedAt = new Date().toISOString();
+      let updatedAt = new Date().toISOString();
       const { data: remoteRow, error: versionError } = await supabaseClient
         .from("app_state")
         .select("key,value,updated_at")
@@ -1193,14 +1244,31 @@ async function writeStorageKeyToCloudNow(storageKey, options = {}) {
         value = prepareStorageValueForCloud(storageKey, value, remoteRow?.value ?? null);
         localStorage.setItem(storageKey, value);
       }
-      const { error } =
+      let { error } =
         value === null
           ? await supabaseClient.from("app_state").delete().eq("key", storageKey)
-          : await supabaseClient.from("app_state").upsert({
-              key: storageKey,
-              value: parseStorageValue(value),
-              updated_at: updatedAt,
-            });
+          : await upsertCloudRow(storageKey, parseStorageValue(value), remoteRow?.updated_at || null, updatedAt);
+
+      if (error && isStaleCloudWriteError(error) && value !== null) {
+        const { data: latestRemoteRow, error: latestRemoteError } = await supabaseClient
+          .from("app_state")
+          .select("key,value,updated_at")
+          .eq("key", storageKey)
+          .maybeSingle();
+        if (latestRemoteError) throw latestRemoteError;
+        if (latestRemoteRow?.value) {
+          value = prepareStorageValueForCloud(storageKey, value, latestRemoteRow.value);
+          localStorage.setItem(storageKey, value);
+        }
+        updatedAt = new Date().toISOString();
+        const retryResult = await upsertCloudRow(
+          storageKey,
+          parseStorageValue(value),
+          latestRemoteRow?.updated_at || null,
+          updatedAt,
+        );
+        error = retryResult.error;
+      }
 
       if (error) {
         dirtyCloudKeys.add(storageKey);
@@ -2988,22 +3056,16 @@ async function createAutomaticBackup({ force = false, date = new Date() } = {}) 
   await syncCurrentRegistryToCloud();
 
   const backupKey = getAutomaticBackupKey(date);
-  if (!force) {
-    const { data: existingBackup } = await supabaseClient
-      .from("app_state")
-      .select("key")
-      .eq("key", backupKey)
-      .maybeSingle();
-    if (existingBackup) return false;
-  }
+  const { data: existingBackup } = await supabaseClient
+    .from("app_state")
+    .select("key,updated_at")
+    .eq("key", backupKey)
+    .maybeSingle();
+  if (!force && existingBackup) return false;
 
   const payload = createDataBackupPayload({ backupDate: getLocalDateKey(date) });
   const updatedAt = new Date().toISOString();
-  const { error } = await supabaseClient.from("app_state").upsert({
-    key: backupKey,
-    value: payload,
-    updated_at: updatedAt,
-  });
+  const { error } = await upsertCloudRow(backupKey, payload, existingBackup?.updated_at || null, updatedAt);
   if (error) throw error;
   await pruneOldAutomaticBackups();
   return true;
