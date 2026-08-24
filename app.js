@@ -76,6 +76,9 @@ const cityInput = document.querySelector("#cityInput");
 const ownerInput = document.querySelector("#ownerInput");
 const ownerFirstNameInput = document.querySelector("#ownerFirstNameInput");
 const notesInput = document.querySelector("#notesInput");
+const keyDetailsHeading = document.querySelector("#keyDetailsHeading");
+const keyDetailsToggleBtn = document.querySelector("#keyDetailsToggleBtn");
+const keyDetailsContent = document.querySelector("#keyDetailsContent");
 const keySetPhotoList = document.querySelector("#keySetPhotoList");
 const keySetSelect = document.querySelector("#keySetSelect");
 const activeReservationPanel = document.querySelector("#activeReservationPanel");
@@ -173,6 +176,7 @@ let photoImportResetTimer = null;
 let undoSnapshot = null;
 let isKeyInfoEditUnlocked = false;
 let expandedKeyHistoryIds = new Set();
+let expandedKeyDetailsIds = new Set();
 const recentlyClearedKeySlots = new Map();
 const recentlyForcedKeySlots = new Map();
 
@@ -2149,6 +2153,25 @@ function toggleSelectedHistory() {
   if (!historyId) return;
   if (expandedKeyHistoryIds.has(historyId)) expandedKeyHistoryIds.delete(historyId);
   else expandedKeyHistoryIds.add(historyId);
+  renderPanel();
+}
+
+function getSelectedDetailsExpansionId(key = getSelectedKey()) {
+  if (!key) return "";
+  const sourceId = selectedArchiveRecord ? `archive:${selectedArchiveRecord.id}` : activeRegistry;
+  return `${sourceId}:${key.id}`;
+}
+
+function isSelectedDetailsExpanded(key = getSelectedKey()) {
+  const detailsId = getSelectedDetailsExpansionId(key);
+  return Boolean(detailsId && expandedKeyDetailsIds.has(detailsId));
+}
+
+function toggleSelectedDetails() {
+  const detailsId = getSelectedDetailsExpansionId();
+  if (!detailsId) return;
+  if (expandedKeyDetailsIds.has(detailsId)) expandedKeyDetailsIds.delete(detailsId);
+  else expandedKeyDetailsIds.add(detailsId);
   renderPanel();
 }
 
@@ -5005,6 +5028,14 @@ function renderPanel() {
     input.title = isKeyInfoLocked ? "Double-cliquez pour modifier" : "";
     input.setAttribute("aria-readonly", String(isKeyInfoLocked));
   });
+  const canCollapseKeyDetails = hasProtectedKeyInfo(key);
+  const forceShowKeyDetails = !canCollapseKeyDetails || isKeyInfoEditUnlocked || isProtectedKeyInfoInputActive();
+  const areKeyDetailsExpanded = forceShowKeyDetails || isSelectedDetailsExpanded(key);
+  keyDetailsHeading.hidden = !canCollapseKeyDetails;
+  keyDetailsContent.hidden = !areKeyDetailsExpanded;
+  keyDetailsToggleBtn.classList.toggle("is-expanded", areKeyDetailsExpanded);
+  keyDetailsToggleBtn.setAttribute("aria-expanded", String(areKeyDetailsExpanded));
+  keyDetailsToggleBtn.setAttribute("aria-label", areKeyDetailsExpanded ? "Masquer les détails" : "Afficher les détails");
   const canMoveSelectedKey = !isArchiveView || isSelectedCompromiseEditable();
   const isSelectedSetOut = selectedSet.status === "out";
   const isSelectedSetOutForReservation = isSelectedSetOut && Boolean(selectedSet.holderReservationId);
@@ -6148,6 +6179,7 @@ reservedBtn.addEventListener("click", reserveSelectedSet);
 rentedBtn.addEventListener("click", () => archiveSelectedKey("rented"));
 removedBtn.addEventListener("click", () => archiveSelectedKey("removed"));
 clearSignatureBtn.addEventListener("click", clearSignature);
+keyDetailsToggleBtn.addEventListener("click", toggleSelectedDetails);
 keyHistoryToggleBtn.addEventListener("click", toggleSelectedHistory);
 historyList.addEventListener("click", (event) => {
   if (!event.ctrlKey) return;

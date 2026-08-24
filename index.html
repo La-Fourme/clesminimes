@@ -6,7 +6,7 @@
     <title>CENTURY 21 LES MINIMES - TABLEAUX DE GESTION DES CL&Eacute;S</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20260713" />
     <link rel="shortcut icon" href="favicon.svg?v=20260713" />
-    <link rel="stylesheet" href="styles.css?v=20260824-1" />
+    <link rel="stylesheet" href="styles.css?v=20260824-2" />
   </head>
   <body>
     <div id="saleCelebration" class="sale-celebration" aria-live="polite" hidden>
@@ -178,30 +178,38 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
             <input id="ownerInput" type="text" placeholder="Nom du propriétaire ou de la société" autocomplete="off" autocapitalize="words" spellcheck="false" />
           </label>
 
-          <label>
-            Prénom du propriétaire
-            <input id="ownerFirstNameInput" type="text" placeholder="Prénom du propriétaire" autocomplete="off" autocapitalize="words" spellcheck="false" />
-          </label>
+          <section class="key-details-section">
+            <div id="keyDetailsHeading" class="key-details-heading" hidden>
+              <h3>Détails</h3>
+              <button id="keyDetailsToggleBtn" class="history-toggle-button key-details-toggle-button" type="button" aria-expanded="false" aria-label="Afficher les détails"></button>
+            </div>
+            <div id="keyDetailsContent" class="key-details-content">
+              <label>
+                Prénom du propriétaire
+                <input id="ownerFirstNameInput" type="text" placeholder="Prénom du propriétaire" autocomplete="off" autocapitalize="words" spellcheck="false" />
+              </label>
 
-          <label>
-            Adresse du bien
-            <input id="propertyInput" type="text" placeholder="Ex. 12 rue Victor Hugo" autocomplete="off" autocapitalize="words" spellcheck="false" />
-          </label>
+              <label>
+                Adresse du bien
+                <input id="propertyInput" type="text" placeholder="Ex. 12 rue Victor Hugo" autocomplete="off" autocapitalize="words" spellcheck="false" />
+              </label>
 
-          <label>
-            Code postal du bien
-            <input id="postalCodeInput" type="text" inputmode="numeric" placeholder="Ex. 31000" autocomplete="off" spellcheck="false" />
-          </label>
+              <label>
+                Code postal du bien
+                <input id="postalCodeInput" type="text" inputmode="numeric" placeholder="Ex. 31000" autocomplete="off" spellcheck="false" />
+              </label>
 
-          <label>
-            Ville du bien
-            <input id="cityInput" type="text" placeholder="Ex. Toulouse" autocomplete="off" autocapitalize="words" spellcheck="false" />
-          </label>
+              <label>
+                Ville du bien
+                <input id="cityInput" type="text" placeholder="Ex. Toulouse" autocomplete="off" autocapitalize="words" spellcheck="false" />
+              </label>
 
-          <label>
-            Notes
-            <textarea id="notesInput" rows="2" placeholder="Badge, boîte aux lettres, remarques..." autocomplete="off" autocapitalize="sentences" spellcheck="false"></textarea>
-          </label>
+              <label>
+                Notes
+                <textarea id="notesInput" rows="2" placeholder="Badge, boîte aux lettres, remarques..." autocomplete="off" autocapitalize="sentences" spellcheck="false"></textarea>
+              </label>
+            </div>
+          </section>
 
           <section class="photo-box">
             <h3>Photos des jeux</h3>
@@ -376,7 +384,7 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260824-1"></script>
+    <script src="app.js?v=20260824-2"></script>
   </body>
 </html>
 
