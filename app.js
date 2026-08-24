@@ -613,53 +613,69 @@ function preserveActiveKeyInfoDraft(storageKey, value) {
   return typeof value === "string" ? JSON.stringify(nextValue) : nextValue;
 }
 
-function rememberClearedKeySlot(keyId) {
-  if (!keyId) return;
-  recentlyClearedKeySlots.set(keyId, Date.now());
+function getRecentKeySlotMemoryKey(storageKey, keyId) {
+  return `${storageKey}${keySlotCloudSeparator}${keyId}`;
 }
 
-function rememberForcedKeySlot(keyId, content) {
+function getRecentKeySlotMemoryParts(memoryKey) {
+  const separatorIndex = String(memoryKey || "").lastIndexOf(keySlotCloudSeparator);
+  if (separatorIndex < 0) return { storageKey: getRegistryConfig().keysStorageKey, keyId: String(memoryKey || "") };
+  return {
+    storageKey: memoryKey.slice(0, separatorIndex),
+    keyId: memoryKey.slice(separatorIndex + keySlotCloudSeparator.length),
+  };
+}
+
+function rememberClearedKeySlot(keyId, storageKey = getRegistryConfig().keysStorageKey) {
   if (!keyId) return;
-  recentlyForcedKeySlots.set(keyId, {
+  recentlyClearedKeySlots.set(getRecentKeySlotMemoryKey(storageKey, keyId), Date.now());
+}
+
+function rememberForcedKeySlot(keyId, content, storageKey = getRegistryConfig().keysStorageKey) {
+  if (!keyId) return;
+  recentlyForcedKeySlots.set(getRecentKeySlotMemoryKey(storageKey, keyId), {
     content: cloneKeyContent(normalizeKey({ id: keyId, ...content })),
     updatedAt: Date.now(),
   });
 }
 
-function forgetFilledClearedKeySlots(nextKeys) {
+function forgetFilledClearedKeySlots(nextKeys, storageKey = getRegistryConfig().keysStorageKey) {
   nextKeys.forEach((key) => {
-    if (recentlyClearedKeySlots.has(key.id) && isKeyFilled(key)) recentlyClearedKeySlots.delete(key.id);
+    const memoryKey = getRecentKeySlotMemoryKey(storageKey, key.id);
+    if (recentlyClearedKeySlots.has(memoryKey) && isKeyFilled(key)) recentlyClearedKeySlots.delete(memoryKey);
   });
 }
 
 function preserveRecentlyClearedKeySlots(storageKey, value) {
-  if (!recentlyClearedKeySlots.size || storageKey !== getRegistryConfig().keysStorageKey) return value;
+  if (!recentlyClearedKeySlots.size) return value;
   const keyInfo = typeof value === "string" ? parseStorageValue(value) : value;
   if (!Array.isArray(keyInfo)) return value;
 
   const now = Date.now();
-  [...recentlyClearedKeySlots].forEach(([keyId, clearedAt]) => {
-    if (now - clearedAt > 120000) recentlyClearedKeySlots.delete(keyId);
+  [...recentlyClearedKeySlots].forEach(([memoryKey, clearedAt]) => {
+    if (now - clearedAt > 120000) recentlyClearedKeySlots.delete(memoryKey);
   });
   if (!recentlyClearedKeySlots.size) return value;
 
-  const nextValue = keyInfo.map((key) => (recentlyClearedKeySlots.has(key.id) ? makeEmptyKey(key) : key));
+  const nextValue = keyInfo.map((key) =>
+    recentlyClearedKeySlots.has(getRecentKeySlotMemoryKey(storageKey, key.id)) ? makeEmptyKey(key) : key,
+  );
   return typeof value === "string" ? JSON.stringify(nextValue) : nextValue;
 }
 
 function preserveRecentlyForcedKeySlots(storageKey, value) {
-  if (!recentlyForcedKeySlots.size || storageKey !== getRegistryConfig().keysStorageKey) return value;
+  if (!recentlyForcedKeySlots.size) return value;
   const keyInfo = typeof value === "string" ? parseStorageValue(value) : value;
   if (!Array.isArray(keyInfo)) return value;
 
   const now = Date.now();
-  [...recentlyForcedKeySlots].forEach(([keyId, entry]) => {
-    if (now - entry.updatedAt > 120000) recentlyForcedKeySlots.delete(keyId);
+  [...recentlyForcedKeySlots].forEach(([memoryKey, entry]) => {
+    if (now - entry.updatedAt > 120000) recentlyForcedKeySlots.delete(memoryKey);
   });
   if (!recentlyForcedKeySlots.size) return value;
 
   const nextValue = keyInfo.map((key) => {
-    const forced = recentlyForcedKeySlots.get(key.id);
+    const forced = recentlyForcedKeySlots.get(getRecentKeySlotMemoryKey(storageKey, key.id));
     return forced ? applyKeyContent(key, forced.content) : key;
   });
   return typeof value === "string" ? JSON.stringify(nextValue) : nextValue;
@@ -810,10 +826,14 @@ function getDirtyKeySlotIds(storageKey) {
   if (storageKey === getRegistryConfig().keysStorageKey && activeKeyInfoDraft?.keyId) {
     savedKeyIds.add(activeKeyInfoDraft.keyId);
   }
-  if (storageKey === getRegistryConfig().keysStorageKey) {
-    recentlyForcedKeySlots.forEach((_, keyId) => savedKeyIds.add(keyId));
-    recentlyClearedKeySlots.forEach((_, keyId) => savedKeyIds.add(keyId));
-  }
+  recentlyForcedKeySlots.forEach((_, memoryKey) => {
+    const parts = getRecentKeySlotMemoryParts(memoryKey);
+    if (parts.storageKey === storageKey) savedKeyIds.add(parts.keyId);
+  });
+  recentlyClearedKeySlots.forEach((_, memoryKey) => {
+    const parts = getRecentKeySlotMemoryParts(memoryKey);
+    if (parts.storageKey === storageKey) savedKeyIds.add(parts.keyId);
+  });
   return savedKeyIds;
 }
 
@@ -2477,6 +2497,9 @@ async function transferSelectedKeyToOtherRegistry() {
 
   saveKeysForRegistry(sourceRegistry, nextSourceKeys);
   saveKeysForRegistry(targetRegistry, nextTargetKeys);
+  rememberClearedKeySlot(sourceKey.id, sourceStorageKey);
+  rememberForcedKeySlot(sourceKey.id, emptiedSourceKey, sourceStorageKey);
+  rememberForcedKeySlot(targetKey.id, sourceContent, targetStorageKey);
   markDirtyKeySlot(sourceKey.id, sourceStorageKey);
   markDirtyKeySlot(targetKey.id, targetStorageKey);
   dirtyCloudKeys.add(sourceStorageKey);
