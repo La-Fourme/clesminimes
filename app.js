@@ -94,6 +94,7 @@ const exportKeyCsvBtn = document.querySelector("#exportKeyCsvBtn");
 const signatureCanvas = document.querySelector("#signatureCanvas");
 const clearSignatureBtn = document.querySelector("#clearSignatureBtn");
 const historyList = document.querySelector("#historyList");
+const keyHistoryToggleBtn = document.querySelector("#keyHistoryToggleBtn");
 const searchInput = document.querySelector("#searchInput");
 const textViewBtn = document.querySelector("#textViewBtn");
 const photoViewBtn = document.querySelector("#photoViewBtn");
@@ -171,6 +172,7 @@ let isPhotoImporting = false;
 let photoImportResetTimer = null;
 let undoSnapshot = null;
 let isKeyInfoEditUnlocked = false;
+let expandedKeyHistoryIds = new Set();
 const recentlyClearedKeySlots = new Map();
 const recentlyForcedKeySlots = new Map();
 
@@ -2128,6 +2130,26 @@ function getSelectedKey() {
 function getSelectedSet(key = getSelectedKey()) {
   if (!key) return null;
   return key.sets.find((set) => set.id === selectedSetId) || key.sets[0];
+}
+
+function getSelectedHistoryExpansionId(key = getSelectedKey()) {
+  if (!key) return "";
+  const setId = selectedSetId || getSelectedSet(key)?.id || "main";
+  const sourceId = selectedArchiveRecord ? `archive:${selectedArchiveRecord.id}` : activeRegistry;
+  return `${sourceId}:${key.id}:${setId}`;
+}
+
+function isSelectedHistoryExpanded(key = getSelectedKey()) {
+  const historyId = getSelectedHistoryExpansionId(key);
+  return Boolean(historyId && expandedKeyHistoryIds.has(historyId));
+}
+
+function toggleSelectedHistory() {
+  const historyId = getSelectedHistoryExpansionId();
+  if (!historyId) return;
+  if (expandedKeyHistoryIds.has(historyId)) expandedKeyHistoryIds.delete(historyId);
+  else expandedKeyHistoryIds.add(historyId);
+  renderPanel();
 }
 
 function keyLabel(key) {
@@ -5017,6 +5039,11 @@ function renderPanel() {
   historyList.innerHTML = "";
   activeReservationPanel.innerHTML = "";
   activeReservationPanel.hidden = true;
+  const isHistoryExpanded = isSelectedHistoryExpanded(key);
+  historyList.hidden = !isHistoryExpanded;
+  keyHistoryToggleBtn.classList.toggle("is-expanded", isHistoryExpanded);
+  keyHistoryToggleBtn.setAttribute("aria-expanded", String(isHistoryExpanded));
+  keyHistoryToggleBtn.setAttribute("aria-label", isHistoryExpanded ? "Masquer l'historique" : "Afficher l'historique");
   const displayedHistory = [...selectedSet.history];
   const latestMovementEntry = getLatestMovementEntry(displayedHistory) || {};
   if (selectedArchiveRecord?.reason === "removed" && !displayedHistory.some((entry) => entry.type === "removed")) {
@@ -5044,21 +5071,27 @@ function renderPanel() {
       date: formatArchiveDate(selectedArchiveRecord.archivedAt),
     });
   }
+  const activeReservationItems = [];
+
   if (!displayedHistory.length) {
     const item = document.createElement("li");
     item.textContent = "Aucun mouvement enregistré pour ce jeu.";
-    historyList.append(item);
+    if (isHistoryExpanded) historyList.append(item);
     return;
   }
-
-  const activeReservationItems = [];
 
   displayedHistory
     .sort(sortKeyHistoryEntries)
     .forEach((entry) => {
-    const item = document.createElement("li");
-    const title = document.createElement("strong");
-    const date = document.createElement("small");
+      const activeReservation =
+        entry.type === "reserved"
+          ? (selectedSet.reservations || []).find((reservation) => reservation.id === entry.reservationId && isActiveReservation(reservation))
+          : null;
+      if (!isHistoryExpanded && !activeReservation) return;
+
+      const item = document.createElement("li");
+      const title = document.createElement("strong");
+      const date = document.createElement("small");
     item.dataset.historyId = entry.id;
     item.title = "Ctrl + clic pour supprimer cette ligne d'historique";
     item.dataset.historyAction =
@@ -5118,10 +5151,6 @@ function renderPanel() {
       signature.alt = `Signature ${entry.type === "out" ? "Sorti" : "Entr\u00e9"}`;
       item.append(signature);
     }
-    const activeReservation =
-      entry.type === "reserved"
-        ? (selectedSet.reservations || []).find((reservation) => reservation.id === entry.reservationId && isActiveReservation(reservation))
-        : null;
     let historySummary = null;
     if (activeReservation) {
       historySummary = item.cloneNode(true);
@@ -5197,8 +5226,8 @@ function renderPanel() {
         item,
         timestamp: parseHistoryTimestamp(activeReservation.reservationDate || activeReservation.createdAt || entry.reservationDate || entry.date),
       });
-      historyList.append(historySummary);
-    } else {
+      if (isHistoryExpanded) historyList.append(historySummary);
+    } else if (isHistoryExpanded) {
       historyList.append(item);
     }
   });
@@ -6119,6 +6148,7 @@ reservedBtn.addEventListener("click", reserveSelectedSet);
 rentedBtn.addEventListener("click", () => archiveSelectedKey("rented"));
 removedBtn.addEventListener("click", () => archiveSelectedKey("removed"));
 clearSignatureBtn.addEventListener("click", clearSignature);
+keyHistoryToggleBtn.addEventListener("click", toggleSelectedHistory);
 historyList.addEventListener("click", (event) => {
   if (!event.ctrlKey) return;
   if (event.target.closest("button")) return;
