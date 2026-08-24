@@ -1683,7 +1683,7 @@ body.is-moving-key .photo-hover {
   padding: 0 10px;
   border-color: var(--blue);
   color: var(--ink);
-  background: var(--blue-soft);
+  background: #cadee6;
   line-height: 1;
 }
 

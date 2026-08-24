@@ -1582,7 +1582,7 @@ function updateRegistryHeader() {
   document.title = config.title.replace(/\n/g, " - ");
   registryToggleBtn.textContent = config.toggleLabel;
   rentedBtn.textContent = config.archiveActionLabel;
-  transferKeyBtn.textContent = `Transférer vers "${targetConfig.title}"`;
+  transferKeyBtn.textContent = `Transférer vers ${targetConfig.title}`;
   rentedArchiveTitle.textContent = config.rentedArchiveTitle;
   compromisesTabBtn.hidden = activeRegistry !== "transaction";
   rentedArchiveSection.hidden = activeRegistry === "transaction";
