@@ -1911,6 +1911,23 @@ function ensureCompletePhoneNumber(input, label = "num\u00e9ro de t\u00e9l\u00e9
   return false;
 }
 
+function ensureTypedMovementPhone(actionLabel) {
+  if (contactSelect.value) return true;
+
+  const typedActor = getTypedMovementActor();
+  const hasTypedActor = Boolean(typedActor.person || typedActor.company);
+  if (!hasTypedActor) return true;
+
+  const digitCount = getPhoneDigitCount(movementPhoneInput.value);
+  if (!digitCount) {
+    alert(`Renseigne le num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant avant de cliquer sur ${actionLabel}.`);
+    movementPhoneInput.focus();
+    return false;
+  }
+
+  return ensureCompletePhoneNumber(movementPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant");
+}
+
 function formatCity(value) {
   return String(value || "").replace(/(^|[\s-])(\p{L})/gu, (match, separator, letter) => {
     return `${separator}${letter.toLocaleUpperCase("fr-FR")}`;
@@ -5740,12 +5757,13 @@ async function addMovement(type) {
     alert("Cette sortie vient d'une r\u00e9servation : utilise la case orange de r\u00e9servation au-dessus.");
     return;
   }
-  if (!ensureCompletePhoneNumber(movementPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant")) return;
   const forcedPerson = type === "in" && selectedSet.status === "out" ? selectedSet.holder : "";
   const forcedPhone = type === "in" && selectedSet.status === "out" ? selectedSet.holderPhone : "";
   const forcedCompany = type === "in" && selectedSet.status === "out" ? selectedSet.holderCompany : "";
   const isReturningAfterCheckout = type === "in" && selectedSet.status === "out";
   if (!ensureMovementActor(type === "out" ? "Sorti" : "Entr\u00e9", { person: forcedPerson, company: forcedCompany })) return;
+  if (type === "out" && !ensureTypedMovementPhone("Sorti")) return;
+  if (type !== "out" && !ensureCompletePhoneNumber(movementPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant")) return;
   if (type === "out") showCheckoutReservationWarning(selectedSet);
   const signature = await promptMovementSignature(type === "out" ? "Sorti" : isReturningAfterCheckout ? "Rentr\u00e9" : "Entr\u00e9");
   if (signature === null) return;
@@ -6100,7 +6118,7 @@ async function reserveSelectedSet() {
   const company = contact?.type === "external" ? formatCompanyName(contact.companyName || "").trim() : formatCompanyName(movementCompanyInput.value).trim();
   const phone = formatPhoneNumber(contact?.phone || movementPhoneInput.value);
   if (!ensureMovementActor("R\u00e9serv\u00e9")) return;
-  if (!contact && !ensureCompletePhoneNumber(movementPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant")) return;
+  if (!ensureTypedMovementPhone("R\u00e9serv\u00e9")) return;
 
   const reservationDateTime = await promptReservationDateTime();
   if (!reservationDateTime) return;
