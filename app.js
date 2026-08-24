@@ -5071,7 +5071,7 @@ function renderPanel() {
   activeReservationPanel.innerHTML = "";
   activeReservationPanel.hidden = true;
   const isHistoryExpanded = isSelectedHistoryExpanded(key);
-  historyList.hidden = !isHistoryExpanded;
+  historyList.hidden = false;
   keyHistoryToggleBtn.classList.toggle("is-expanded", isHistoryExpanded);
   keyHistoryToggleBtn.setAttribute("aria-expanded", String(isHistoryExpanded));
   keyHistoryToggleBtn.setAttribute("aria-label", isHistoryExpanded ? "Masquer l'historique" : "Afficher l'historique");
@@ -5111,14 +5111,17 @@ function renderPanel() {
     return;
   }
 
-  displayedHistory
-    .sort(sortKeyHistoryEntries)
+  const sortedDisplayedHistory = displayedHistory.sort(sortKeyHistoryEntries);
+  const latestHistoryEntryId = sortedDisplayedHistory[0]?.id || "";
+
+  sortedDisplayedHistory
     .forEach((entry) => {
       const activeReservation =
         entry.type === "reserved"
           ? (selectedSet.reservations || []).find((reservation) => reservation.id === entry.reservationId && isActiveReservation(reservation))
           : null;
-      if (!isHistoryExpanded && !activeReservation) return;
+      const shouldShowHistoryEntry = isHistoryExpanded || entry.id === latestHistoryEntryId;
+      if (!shouldShowHistoryEntry && !activeReservation) return;
 
       const item = document.createElement("li");
       const title = document.createElement("strong");
@@ -5257,8 +5260,8 @@ function renderPanel() {
         item,
         timestamp: parseHistoryTimestamp(activeReservation.reservationDate || activeReservation.createdAt || entry.reservationDate || entry.date),
       });
-      if (isHistoryExpanded) historyList.append(historySummary);
-    } else if (isHistoryExpanded) {
+      if (shouldShowHistoryEntry) historyList.append(historySummary);
+    } else if (shouldShowHistoryEntry) {
       historyList.append(item);
     }
   });
