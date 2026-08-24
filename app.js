@@ -93,6 +93,7 @@ const checkinBtn = document.querySelector("#checkinBtn");
 const rentedBtn = document.querySelector("#rentedBtn");
 const removedBtn = document.querySelector("#removedBtn");
 const reservedBtn = document.querySelector("#reservedBtn");
+const transferKeyBtn = document.querySelector("#transferKeyBtn");
 const exportKeyCsvBtn = document.querySelector("#exportKeyCsvBtn");
 const signatureCanvas = document.querySelector("#signatureCanvas");
 const clearSignatureBtn = document.querySelector("#clearSignatureBtn");
@@ -1575,10 +1576,13 @@ function getRegistryConfig() {
 
 function updateRegistryHeader() {
   const config = getRegistryConfig();
+  const targetRegistry = activeRegistry === "location" ? "transaction" : "location";
+  const targetConfig = registryConfig[targetRegistry];
   appTitleText.textContent = config.title;
   document.title = config.title.replace(/\n/g, " - ");
   registryToggleBtn.textContent = config.toggleLabel;
   rentedBtn.textContent = config.archiveActionLabel;
+  transferKeyBtn.textContent = `Transférer vers "${targetConfig.title}"`;
   rentedArchiveTitle.textContent = config.rentedArchiveTitle;
   compromisesTabBtn.hidden = activeRegistry !== "transaction";
   rentedArchiveSection.hidden = activeRegistry === "transaction";
@@ -1763,11 +1767,43 @@ function loadKeys() {
   }
 }
 
+function loadKeysForRegistry(registry) {
+  const config = registryConfig[registry];
+  if (!config) return makeInitialKeys();
+  const saved = localStorage.getItem(config.keysStorageKey);
+  if (!saved) return makeInitialKeys();
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed.map(normalizeKey) : makeInitialKeys();
+  } catch {
+    return makeInitialKeys();
+  }
+}
+
 function saveKeys() {
   try {
     const storageKey = getRegistryConfig().keysStorageKey;
     const previousValue = localStorage.getItem(storageKey);
     const nextValue = JSON.stringify(keys);
+    markLocalEdit();
+    localStorage.setItem(storageKey, nextValue);
+    markChangedKeySlots(storageKey, nextValue, previousValue);
+    scheduleStorageKeySync(storageKey);
+  } catch (error) {
+    alert("La sauvegarde a échoué. Une photo est probablement trop lourde : essayez une image plus légère.");
+    throw error;
+  }
+}
+
+function saveKeysForRegistry(registry, nextKeys) {
+  const config = registryConfig[registry];
+  if (!config) return;
+
+  try {
+    const storageKey = config.keysStorageKey;
+    const previousValue = localStorage.getItem(storageKey);
+    const nextValue = JSON.stringify(nextKeys.map(normalizeKey));
     markLocalEdit();
     localStorage.setItem(storageKey, nextValue);
     markChangedKeySlots(storageKey, nextValue, previousValue);
@@ -2390,6 +2426,81 @@ async function moveKeyToSlot(sourceId, targetId, options = {}) {
   selectedSetId = "main";
   resetKeyInfoEditUnlock(null);
   saveKeys();
+  render();
+  await syncCloudAfterAction();
+}
+
+async function transferSelectedKeyToOtherRegistry() {
+  if (selectedArchiveRecord) return;
+  captureActiveKeyInfoDraft();
+  await loadStorageFromCloud({ force: true });
+
+  const sourceRegistry = activeRegistry;
+  const targetRegistry = sourceRegistry === "location" ? "transaction" : "location";
+  const sourceConfig = registryConfig[sourceRegistry];
+  const targetConfig = registryConfig[targetRegistry];
+  const sourceKey = getSelectedKey();
+
+  if (!sourceKey || !isKeyFilled(sourceKey)) {
+    alert("Aucune fiche renseignée à transférer.");
+    return;
+  }
+
+  const targetKeys = loadKeysForRegistry(targetRegistry);
+  const targetKey = targetKeys.find((key) => key.category === sourceKey.category && !isKeyFilled(key));
+
+  if (!targetKey) {
+    alert(`Aucun emplacement disponible dans les ${sourceKey.category} du tableau ${targetConfig.title}.`);
+    return;
+  }
+
+  const ownerText = sourceKey.owner ? ` de ${formatOwner(sourceKey.owner)}` : "";
+  const firstConfirmation = confirm(
+    `Transférer ${keyLabel(sourceKey)}${ownerText} du tableau ${sourceConfig.title} vers ${keyLabel(targetKey)} du tableau ${targetConfig.title} ?\n\nLa fiche sera retirée de ${keyLabel(sourceKey)} dans ${sourceConfig.title}.`,
+  );
+  if (!firstConfirmation) return;
+
+  const finalConfirmation = confirm(
+    `Confirmez-vous le transfert vers "${targetConfig.title}" ?\n\nDestination : ${keyLabel(targetKey)}.`,
+  );
+  if (!finalConfirmation) return;
+
+  rememberUndoStep();
+
+  const sourceContent = cloneKeyContent(sourceKey);
+  const emptiedSourceKey = makeEmptyKey(sourceKey);
+  const sourceStorageKey = sourceConfig.keysStorageKey;
+  const targetStorageKey = targetConfig.keysStorageKey;
+  const nextSourceKeys = keys.map((key) => (key.id === sourceKey.id ? emptiedSourceKey : key));
+  const nextTargetKeys = targetKeys.map((key) => (key.id === targetKey.id ? applyKeyContent(key, sourceContent) : key));
+  const nextSelectedSetId = sourceKey.sets.some((set) => set.id === selectedSetId) ? selectedSetId : "main";
+
+  saveKeysForRegistry(sourceRegistry, nextSourceKeys);
+  saveKeysForRegistry(targetRegistry, nextTargetKeys);
+  markDirtyKeySlot(sourceKey.id, sourceStorageKey);
+  markDirtyKeySlot(targetKey.id, targetStorageKey);
+  dirtyCloudKeys.add(sourceStorageKey);
+  dirtyCloudKeys.add(targetStorageKey);
+  savePendingCloudKeys();
+
+  activeKeyInfoDraft = null;
+  activeRegistry = targetRegistry;
+  saveActiveRegistry();
+  keys = loadKeysForRegistry(targetRegistry);
+  archives = loadArchives();
+  contacts = loadContacts();
+  selectedId = targetKey.id;
+  selectedArchiveRecord = null;
+  selectedSetId = nextSelectedSetId;
+  resetKeyInfoEditUnlock(getSelectedKey());
+  clearSignature();
+  closeSidePanels();
+  updateRegistryHeader();
+  logActivity(
+    "Transfert",
+    `${keyLabel(targetKey)} - ${targetConfig.title}${sourceKey.owner ? ` - ${formatOwner(sourceKey.owner)}` : ""}`,
+    `Depuis ${sourceConfig.title} ${keyLabel(sourceKey)}`,
+  );
   render();
   await syncCloudAfterAction();
 }
@@ -5051,6 +5162,7 @@ function renderPanel() {
   reservedBtn.disabled = !canMoveSelectedKey;
   rentedBtn.disabled = isArchiveView || key.archived || isSelectedSetOut;
   removedBtn.disabled = isArchiveView || key.archived || isSelectedSetOut;
+  transferKeyBtn.disabled = isArchiveView || key.archived;
   keySetCountSelect.disabled = isReadOnlyArchive;
   propertyInput.disabled = isArchiveView;
   postalCodeInput.disabled = isArchiveView;
@@ -6517,6 +6629,9 @@ exportKeyCsvBtn.addEventListener("click", () => {
   const key = getSelectedKey();
   if (!key) return;
   exportKeyExcel(key, selectedArchiveRecord);
+});
+transferKeyBtn.addEventListener("click", () => {
+  void transferSelectedKeyToOtherRegistry();
 });
 keySetPhotoList.addEventListener("change", (event) => {
   const input = event.target;

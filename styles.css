@@ -326,6 +326,7 @@ h3 {
 .contact-delete,
 .archive-list button,
 .export-csv-button,
+.transfer-key-button,
 .delete-key-button,
 .reserved-button,
 .reservation-history-button {
@@ -1666,6 +1667,7 @@ body.is-moving-key .photo-hover {
   white-space: nowrap;
 }
 
+.transfer-key-button,
 .export-csv-button,
 .delete-key-button {
   display: grid;
@@ -1674,6 +1676,17 @@ body.is-moving-key .photo-hover {
   border: 2px solid #7c8781;
   color: var(--ink);
   background: #cbd1cd;
+}
+
+.transfer-key-button {
+  border-color: #204d61;
+  color: #fff;
+  background: var(--blue);
+}
+
+.transfer-key-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .delete-key-button {
