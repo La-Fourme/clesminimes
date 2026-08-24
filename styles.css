@@ -1458,7 +1458,7 @@ body.is-moving-key .photo-hover {
   display: grid;
   gap: 4px;
   padding: 10px;
-  border: 1px solid var(--line);
+  border: 1px solid #3f4844;
   border-radius: 8px;
   background: #d8dcd8;
 }
@@ -1492,7 +1492,7 @@ body.is-moving-key .photo-hover {
 
 .global-history-list li[data-history-action="removed"],
 .archive-list li[data-history-action="removed"] {
-  border-color: #6b7275;
+  border-color: #303734;
   background: #e5e7e6;
 }
 
@@ -1577,7 +1577,7 @@ body.is-moving-key .photo-hover {
   align-items: start;
   gap: 10px;
   padding: 10px;
-  border: 1px solid var(--line);
+  border: 1px solid #3f4844;
   border-radius: 8px;
   background: #d8dcd8;
 }
@@ -1676,6 +1676,12 @@ body.is-moving-key .photo-hover {
   border: 2px solid #7c8781;
   color: var(--ink);
   background: #cbd1cd;
+}
+
+.export-csv-button {
+  min-height: 46px;
+  padding: 0 10px;
+  line-height: 1;
 }
 
 .transfer-key-button {
@@ -2221,7 +2227,7 @@ body.is-moving-key .photo-hover {
 .history-list li {
   display: grid;
   padding: 10px;
-  border: 1px solid var(--line);
+  border: 1px solid #3f4844;
   border-radius: 8px;
   color: var(--ink);
   background: #d8dcd8;
@@ -2248,7 +2254,7 @@ body.is-moving-key .photo-hover {
 }
 
 .history-list li[data-history-action="removed"] {
-  border-color: #6b7275;
+  border-color: #303734;
   background: #e5e7e6;
 }
 

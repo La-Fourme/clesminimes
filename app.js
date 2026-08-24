@@ -3933,7 +3933,14 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
           .join(" | ")
       : entry.details;
     const actionClass = getActionClass(entry.action);
-    const isTransferAction = String(entry.action || "").toLocaleLowerCase("fr-FR").includes("transfert");
+    const normalizedEntryAction = String(entry.action || "")
+      .toLocaleLowerCase("fr-FR")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    const isInlineDetailAction =
+      normalizedEntryAction.includes("transfert") ||
+      normalizedEntryAction.includes("ajout jeu") ||
+      normalizedEntryAction.includes("creation jeu");
     const isRegisteredAction = String(entry.actor || "").toLocaleLowerCase("fr-FR") === "action enregistr\u00e9e";
     const fallbackActorParts =
       isRegisteredAction && ["in", "out", "signed", "removed"].includes(actionClass)
@@ -3954,9 +3961,9 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       actionClass === "reserved"
         ? [reservationPerson, reservationPhone].filter(Boolean).join(" - ")
         : [movementActor === "Action enregistr\u00e9e" ? "" : movementActor, movementPhone].filter(Boolean).join(" - ");
-    const transferDetailText = isTransferAction ? String(visibleDetails || "").trim() : "";
-    if (isTransferAction) visibleDetails = "";
-    meta.textContent = `${entry.date}${actorText ? ` - ${actorText}` : ""}${transferDetailText ? ` - ${transferDetailText}` : ""}`;
+    const inlineDetailText = isInlineDetailAction ? String(visibleDetails || "").trim() : "";
+    if (isInlineDetailAction) visibleDetails = "";
+    meta.textContent = `${entry.date}${actorText ? ` - ${actorText}` : ""}${inlineDetailText ? ` - ${inlineDetailText}` : ""}`;
     details.textContent = visibleDetails;
     deviceButton.className = "history-device-button";
     deviceButton.type = "button";
