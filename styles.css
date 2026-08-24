@@ -1679,14 +1679,17 @@ body.is-moving-key .photo-hover {
 }
 
 .transfer-key-button {
-  border-color: #204d61;
-  color: #fff;
-  background: var(--blue);
+  min-height: 46px;
+  padding: 0 10px;
+  border-color: var(--blue);
+  color: var(--ink);
+  background: var(--blue-soft);
+  line-height: 1;
 }
 
 .transfer-key-button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.48;
 }
 
 .delete-key-button {
