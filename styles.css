@@ -2219,7 +2219,7 @@ body.is-moving-key .photo-hover {
 
 .active-reservation-panel::before {
   color: var(--ink);
-  content: "Réservation en cours";
+  content: "Réservations en cours";
   font-size: 13px;
   font-weight: 800;
 }

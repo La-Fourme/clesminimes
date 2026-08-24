@@ -5248,11 +5248,149 @@ function renderPanel() {
     });
   }
   const activeReservationItems = [];
+  const createActiveReservationItem = (entry, reservation, reservationSet) => {
+    const item = document.createElement("li");
+    const title = document.createElement("strong");
+    const reservationDate = document.createElement("strong");
+    const date = document.createElement("small");
+    const reservationEntry = {
+      ...entry,
+      person: entry.person || reservation.person || "",
+      company: entry.company || reservation.company || "",
+      phone: entry.phone || reservation.phone || "",
+      note: entry.note || reservation.note || "",
+    };
+    const historyPersonName = getHistoryPersonName(reservationEntry);
+    const hasHistoryPerson = Boolean(
+      String(reservationEntry.person || "").trim() ||
+        String(reservationEntry.company || "").trim() ||
+        String(reservationEntry.phone || "").trim(),
+    );
+    const isReservationOut = reservationSet.status === "out" && reservationSet.holderReservationId === entry.reservationId;
+    const isOutForAnotherReason = reservationSet.status === "out" && reservationSet.holderReservationId !== entry.reservationId;
+
+    item.dataset.historyId = entry.id;
+    item.dataset.historyAction = "reserved";
+    item.title = "Ctrl + clic pour supprimer cette ligne d'historique";
+    title.textContent = `${reservationSet.label} - ${hasHistoryPerson ? `R\u00e9serv\u00e9 : ${historyPersonName}` : "R\u00e9serv\u00e9"}`;
+    reservationDate.textContent = `Pour le ${formatReservationHistoryDate(entry.reservationDate || reservation.reservationDate || entry.date)}`;
+    item.append(title, reservationDate);
+
+    if (reservationEntry.company) {
+      const company = document.createElement("p");
+      company.textContent = `Soci\u00e9t\u00e9 : ${reservationEntry.company}`;
+      item.append(company);
+    }
+    if (reservationEntry.note) {
+      const note = document.createElement("p");
+      const normalizedComment = reservationEntry.note.replace(/^Commentaire\s*:\s*/i, "");
+      note.textContent = `Commentaire : ${formatSentenceStart(normalizedComment)}`;
+      item.append(note);
+    }
+
+    const reservationCommentField = document.createElement("label");
+    const reservationCommentLabel = document.createElement("span");
+    const reservationComment = document.createElement("textarea");
+    const actions = document.createElement("div");
+    const movementButton = document.createElement("button");
+    const removeButton = document.createElement("button");
+    const cancelButton = document.createElement("button");
+    const signatureField = document.createElement("div");
+    const signatureLabel = document.createElement("div");
+    const signatureCanvas = document.createElement("canvas");
+    const clearReservationSignatureBtn = document.createElement("button");
+
+    reservationCommentField.className = "reservation-comment-field";
+    reservationCommentLabel.textContent = "Commentaire";
+    reservationComment.className = "reservation-comment-input";
+    reservationComment.rows = 2;
+    reservationComment.placeholder = "Motif, rendez-vous, r\u00e9f\u00e9rence...";
+    reservationComment.dataset.reservationId = entry.reservationId;
+    reservationComment.disabled = isReadOnlyArchive;
+    reservationCommentField.append(reservationCommentLabel, reservationComment);
+    item.append(reservationCommentField);
+
+    signatureField.className = "reservation-signature-field";
+    signatureLabel.className = "reservation-signature-label";
+    signatureLabel.innerHTML = "<span>Signature</span>";
+    clearReservationSignatureBtn.type = "button";
+    clearReservationSignatureBtn.textContent = "Effacer";
+    clearReservationSignatureBtn.disabled = isReadOnlyArchive;
+    signatureCanvas.className = "reservation-signature-canvas";
+    signatureCanvas.width = 320;
+    signatureCanvas.height = 212;
+    signatureCanvas.dataset.reservationId = entry.reservationId;
+    signatureCanvas.classList.toggle("is-readonly", isReadOnlyArchive);
+    signatureCanvas.setAttribute("aria-label", "Zone de signature de la r\u00e9servation");
+    clearReservationSignatureBtn.addEventListener("click", () => clearInlineSignature(signatureCanvas));
+    signatureLabel.append(clearReservationSignatureBtn);
+    signatureField.append(signatureLabel, signatureCanvas);
+    item.append(signatureField);
+    if (!isReadOnlyArchive) setupInlineSignatureCanvas(signatureCanvas);
+
+    actions.className = "reservation-history-actions";
+    movementButton.type = "button";
+    movementButton.className = `reservation-history-button ${isReservationOut ? "in" : "out"}`;
+    movementButton.textContent = isReservationOut ? "Rentr\u00e9" : "Sorti";
+    movementButton.disabled = isReadOnlyArchive || isOutForAnotherReason;
+    movementButton.addEventListener("click", () => {
+      selectedSetId = reservationSet.id;
+      toggleReservationMovement(entry.reservationId);
+    });
+
+    removeButton.type = "button";
+    removeButton.className = "reservation-history-button removed";
+    removeButton.textContent = "Archiv\u00e9";
+    removeButton.disabled = isReadOnlyArchive || reservationSet.status === "out";
+    removeButton.addEventListener("click", () => {
+      selectedSetId = reservationSet.id;
+      archiveReservationKey(entry.reservationId);
+    });
+
+    cancelButton.type = "button";
+    cancelButton.className = "reservation-history-button cancel";
+    cancelButton.textContent = "Annulation";
+    cancelButton.disabled = isReadOnlyArchive || isReservationOut;
+    cancelButton.addEventListener("click", () => {
+      selectedSetId = reservationSet.id;
+      cancelReservation(entry.reservationId);
+    });
+
+    actions.append(movementButton, removeButton, cancelButton);
+    item.append(actions);
+    date.textContent = `R\u00e9serv\u00e9 le ${entry.createdAt || reservation.createdAt || entry.date}`;
+    item.append(date);
+
+    return {
+      item,
+      reservationId: entry.reservationId,
+      timestamp: parseHistoryTimestamp(reservation.reservationDate || reservation.createdAt || entry.reservationDate || entry.date),
+    };
+  };
+  const renderActiveReservations = () => {
+    const knownReservationIds = new Set(activeReservationItems.map((entry) => entry.reservationId).filter(Boolean));
+    key.sets.forEach((reservationSet) => {
+      (reservationSet.history || []).forEach((entry) => {
+        if (entry.type !== "reserved" || !entry.reservationId || knownReservationIds.has(entry.reservationId)) return;
+        const reservation = (reservationSet.reservations || []).find(
+          (savedReservation) => savedReservation.id === entry.reservationId && isActiveReservation(savedReservation),
+        );
+        if (!reservation) return;
+        activeReservationItems.push(createActiveReservationItem(entry, reservation, reservationSet));
+        knownReservationIds.add(entry.reservationId);
+      });
+    });
+    activeReservationItems
+      .sort((first, second) => first.timestamp - second.timestamp)
+      .forEach(({ item }) => activeReservationPanel.append(item));
+    activeReservationPanel.hidden = !activeReservationItems.length;
+  };
 
   if (!displayedHistory.length) {
     const item = document.createElement("li");
     item.textContent = "Aucun mouvement enregistré pour ce jeu.";
     if (isHistoryExpanded) historyList.append(item);
+    renderActiveReservations();
     return;
   }
 
@@ -5401,8 +5539,10 @@ function renderPanel() {
     item.append(date);
     if (historySummary) {
       historySummary.append(date.cloneNode(true));
+      title.textContent = `${selectedSet.label} - ${title.textContent}`;
       activeReservationItems.push({
         item,
+        reservationId: entry.reservationId,
         timestamp: parseHistoryTimestamp(activeReservation.reservationDate || activeReservation.createdAt || entry.reservationDate || entry.date),
       });
       if (shouldShowHistoryEntry) historyList.append(historySummary);
@@ -5410,10 +5550,7 @@ function renderPanel() {
       historyList.append(item);
     }
   });
-  activeReservationItems
-    .sort((first, second) => first.timestamp - second.timestamp)
-    .forEach(({ item }) => activeReservationPanel.append(item));
-  activeReservationPanel.hidden = !activeReservationItems.length;
+  renderActiveReservations();
 }
 
 function deleteHistoryEntry(historyId) {
