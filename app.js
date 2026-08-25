@@ -887,6 +887,20 @@ function clearDirtyKeySlots(storageKey) {
   saveDirtyKeySlots();
 }
 
+function clearSyncedDirtyKeySlots(storageKey, syncedKeySnapshots) {
+  if (!dirtyKeySlots.has(storageKey)) return;
+  const remainingKeyIds = new Set(dirtyKeySlots.get(storageKey) || []);
+  const currentKeysById = new Map(
+    parseStoredArray(storageKey, makeInitialKeys()).map((key) => [key.id, JSON.stringify(normalizeKey(key))]),
+  );
+  syncedKeySnapshots.forEach((syncedValue, keyId) => {
+    if (currentKeysById.get(keyId) === syncedValue) remainingKeyIds.delete(keyId);
+  });
+  if (remainingKeyIds.size) dirtyKeySlots.set(storageKey, remainingKeyIds);
+  else dirtyKeySlots.delete(storageKey);
+  saveDirtyKeySlots();
+}
+
 function markChangedKeySlots(storageKey, nextValue, previousValue) {
   if (!isKeysStorageKey(storageKey)) return;
   const nextKeys = typeof nextValue === "string" ? parseStorageValue(nextValue) : nextValue;
@@ -1002,6 +1016,7 @@ async function writeKeySlotsToCloud(storageKey, options = {}) {
   let savedKeys = parseStoredArray(storageKey, makeInitialKeys()).map(normalizeKey);
   const keyById = new Map(savedKeys.map((key) => [key.id, key]));
   const keyIds = options.force ? savedKeys.map((key) => key.id) : [...getDirtyKeySlotIds(storageKey)];
+  const syncedKeySnapshots = new Map();
   if (!keyIds.length && !options.allowClean) return;
 
   for (const keyId of keyIds) {
@@ -1039,11 +1054,17 @@ async function writeKeySlotsToCloud(storageKey, options = {}) {
       throw error;
     }
     cloudRowVersions.set(cloudKey, updatedAt);
+    syncedKeySnapshots.set(keyId, JSON.stringify(normalizeKey(key)));
   }
 
-  dirtyCloudKeys.delete(storageKey);
+  clearSyncedDirtyKeySlots(storageKey, syncedKeySnapshots);
+  if (getDirtyKeySlotIds(storageKey).size) {
+    dirtyCloudKeys.add(storageKey);
+    scheduleStorageKeySync(storageKey);
+  } else {
+    dirtyCloudKeys.delete(storageKey);
+  }
   failedCloudSyncKeys.delete(storageKey);
-  clearDirtyKeySlots(storageKey);
   savePendingCloudKeys();
   saveCloudRowVersions();
 }
@@ -2426,6 +2447,20 @@ function applyKeyContent(slot, content) {
     archived: false,
     sets: JSON.parse(JSON.stringify(content.sets || [makeKeySet("main")])),
   };
+}
+
+function clearActiveKeySlotForSync(keyId) {
+  const storageKey = getRegistryConfig().keysStorageKey;
+  const sourceKey = keys.find((savedKey) => savedKey.id === keyId);
+  if (!sourceKey) return null;
+  const emptyKey = makeEmptyKey(sourceKey);
+  keys = keys.map((savedKey) => (savedKey.id === keyId ? emptyKey : savedKey));
+  rememberClearedKeySlot(keyId, storageKey);
+  rememberForcedKeySlot(keyId, emptyKey, storageKey);
+  markDirtyKeySlot(keyId, storageKey);
+  dirtyCloudKeys.add(storageKey);
+  savePendingCloudKeys();
+  return emptyKey;
 }
 
 async function moveKeyToSlot(sourceId, targetId, options = {}) {
@@ -5367,7 +5402,7 @@ function renderPanel() {
     removeButton.type = "button";
     removeButton.className = "reservation-history-button removed";
     removeButton.textContent = "Archiv\u00e9";
-    removeButton.disabled = isReadOnlyArchive || reservationSet.status === "out";
+    removeButton.disabled = isReadOnlyArchive || isOutForAnotherReason;
     removeButton.addEventListener("click", () => {
       selectedSetId = reservationSet.id;
       archiveReservationKey(entry.reservationId);
@@ -5527,7 +5562,7 @@ function renderPanel() {
       removeButton.type = "button";
       removeButton.className = "reservation-history-button removed";
       removeButton.textContent = "Archivé";
-      removeButton.disabled = isReadOnlyArchive || selectedSet.status === "out";
+      removeButton.disabled = isReadOnlyArchive || isOutForAnotherReason;
       removeButton.addEventListener("click", () => archiveReservationKey(entry.reservationId));
 
       cancelButton.type = "button";
@@ -6057,8 +6092,8 @@ async function archiveReservationKey(reservationId) {
 
   const reservation = (selectedSet.reservations || []).find((item) => item.id === reservationId);
   if (!reservation) return;
-  if (selectedSet.status === "out") {
-    alert("Ce jeu est sorti : fais d'abord Rentr\u00e9 avant de l'archiver.");
+  if (selectedSet.status === "out" && selectedSet.holderReservationId !== reservationId) {
+    alert("Ce jeu est sorti pour une autre action : fais d'abord Rentr\u00e9 avant de l'archiver.");
     return;
   }
 
@@ -6110,10 +6145,7 @@ async function archiveReservationKey(reservationId) {
     },
     ...archives,
   ];
-  keys = keys.map((savedKey) => (savedKey.id === key.id ? makeEmptyKey(savedKey) : savedKey));
-  rememberClearedKeySlot(key.id);
-  rememberForcedKeySlot(key.id, makeEmptyKey(key));
-  markDirtyKeySlot(key.id);
+  clearActiveKeySlotForSync(key.id);
   selectedId = null;
   selectedArchiveRecord = null;
   selectedSetId = "main";
@@ -6322,10 +6354,7 @@ async function archiveSelectedKey(reason) {
     },
     ...archives,
   ];
-  keys = keys.map((savedKey) => (savedKey.id === key.id ? makeEmptyKey(savedKey) : savedKey));
-  rememberClearedKeySlot(key.id);
-  rememberForcedKeySlot(key.id, makeEmptyKey(key));
-  markDirtyKeySlot(key.id);
+  clearActiveKeySlotForSync(key.id);
   selectedId = null;
   selectedArchiveRecord = null;
   selectedSetId = "main";
