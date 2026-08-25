@@ -4,6 +4,10 @@ const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
 const supabaseClient = globalThis.supabase?.createClient(supabaseUrl, supabaseAnonKey);
+const appBuildVersion = "20260825-4";
+const appBuildVersionStorageKey = "cles-app-build-version-v1";
+const appBuildReloadStorageKey = "cles-app-build-reload-v1";
+const appBuildVersionUrl = "app-version.json";
 const registryStorageKey = "cles-location-active-registry-v1";
 const sharedContactsStorageKey = "cles-location-intervenants-v1";
 const appActivityLogStorageKey = "cles-global-activity-v1";
@@ -19,7 +23,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260825-1";
+const syncMetadataVersion = "20260825-2";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -213,6 +217,56 @@ function markLocalEdit() {
 
 function hasRecentLocalEdit() {
   return Date.now() - lastLocalEditAt <= pendingLocalEditGraceMs;
+}
+
+function isStandaloneHomeScreenApp() {
+  return Boolean(window.navigator.standalone || window.matchMedia?.("(display-mode: standalone)")?.matches);
+}
+
+function canCheckPublishedAppVersion() {
+  return location.protocol === "https:" || location.protocol === "http:";
+}
+
+function markAppBuildVersionAsSeen() {
+  try {
+    localStorage.setItem(appBuildVersionStorageKey, appBuildVersion);
+  } catch {
+    // Le contrôle de version ne doit jamais bloquer l'ouverture du tableau.
+  }
+}
+
+async function ensureFreshPublishedAppVersion() {
+  markAppBuildVersionAsSeen();
+  if (!canCheckPublishedAppVersion()) return false;
+
+  try {
+    const response = await fetch(`${appBuildVersionUrl}?t=${Date.now()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return false;
+    const published = await response.json();
+    const publishedVersion = String(published?.version || "").trim();
+    if (!publishedVersion || publishedVersion === appBuildVersion) return false;
+
+    const reloadKey = `${publishedVersion}:${appBuildVersion}`;
+    if (sessionStorage.getItem(appBuildReloadStorageKey) === reloadKey) return false;
+    sessionStorage.setItem(appBuildReloadStorageKey, reloadKey);
+
+    const nextUrl = new URL(location.href);
+    nextUrl.searchParams.set("v", publishedVersion);
+    location.replace(nextUrl.toString());
+    return true;
+  } catch (error) {
+    console.warn("Version check failed", error.message);
+    return false;
+  }
+}
+
+function queueStandaloneCloudRefresh(delay = 0) {
+  if (!isStandaloneHomeScreenApp()) return;
+  setTimeout(() => {
+    loadStorageFromCloud({ force: true });
+  }, delay);
 }
 
 function loadTileViewMode() {
@@ -6902,11 +6956,12 @@ keySetPhotoList.addEventListener("change", (event) => {
 });
 
 async function initializeApp() {
+  if (await ensureFreshPublishedAppVersion()) return;
   resetLegacySyncMetadataIfNeeded();
   removeAutomaticBackupsFromLocalStorage();
-  migrateArchivedSlots();
   ensureDeviceName();
-  await loadStorageFromCloud();
+  await loadStorageFromCloud({ force: isStandaloneHomeScreenApp() });
+  migrateArchivedSlots();
   subscribeToCloudChanges();
   await migrateStoredPropertyAddresses();
   await optimizeStoredPhotos();
@@ -6917,7 +6972,9 @@ async function initializeApp() {
   updateTileViewToggle();
   updateUndoButton();
   render();
-  setInterval(loadStorageFromCloud, cloudPollIntervalMs);
+  queueStandaloneCloudRefresh(800);
+  queueStandaloneCloudRefresh(2500);
+  setInterval(() => loadStorageFromCloud({ force: isStandaloneHomeScreenApp() }), cloudPollIntervalMs);
   setInterval(retryFailedCloudSyncs, 30000);
 }
 
@@ -6926,7 +6983,7 @@ document.addEventListener("visibilitychange", () => {
     savePendingCloudKeys();
     syncCurrentRegistryNow();
   }
-  else loadStorageFromCloud();
+  else loadStorageFromCloud({ force: isStandaloneHomeScreenApp() });
 });
 window.addEventListener("pagehide", () => {
   savePendingCloudKeys();
@@ -6934,13 +6991,14 @@ window.addEventListener("pagehide", () => {
 });
 window.addEventListener("online", () => {
   retryFailedCloudSyncs();
-  loadStorageFromCloud();
+  loadStorageFromCloud({ force: true });
 });
 window.addEventListener("focus", () => {
   loadStorageFromCloud({ force: true });
 });
 window.addEventListener("pageshow", () => {
   loadStorageFromCloud({ force: true });
+  queueStandaloneCloudRefresh(800);
 });
 window.addEventListener("resize", () => requestAnimationFrame(syncSignatureHeightToActions));
 
