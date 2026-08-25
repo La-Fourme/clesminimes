@@ -19,7 +19,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260820-17";
+const syncMetadataVersion = "20260825-1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -202,6 +202,7 @@ let activeKeyInfoDraft = null;
 let hasLoadedCloudState = false;
 let hasCompletedInitialCloudLoad = false;
 let isCloudCheckRunning = false;
+let shouldReloadCloudAfterCurrentCheck = false;
 let lastSlotCloudSeenAt = "";
 
 function markLocalEdit() {
@@ -1429,7 +1430,10 @@ async function loadStorageFromCloud(options = {}) {
   const force = Boolean(options.force);
   if (!supabaseClient) return;
   if (isPhotoImporting) return;
-  if (isCloudCheckRunning) return;
+  if (isCloudCheckRunning) {
+    shouldReloadCloudAfterCurrentCheck = shouldReloadCloudAfterCurrentCheck || force;
+    return;
+  }
   if (!force && hasLoadedCloudState && document.visibilityState === "hidden") return;
   isCloudCheckRunning = true;
   await pendingCloudSync.catch(() => {});
@@ -1549,6 +1553,10 @@ async function loadStorageFromCloud(options = {}) {
   } finally {
     isApplyingCloudState = false;
     isCloudCheckRunning = false;
+    if (shouldReloadCloudAfterCurrentCheck) {
+      shouldReloadCloudAfterCurrentCheck = false;
+      setTimeout(() => loadStorageFromCloud({ force: true }), 0);
+    }
   }
 }
 
@@ -6927,6 +6935,12 @@ window.addEventListener("pagehide", () => {
 window.addEventListener("online", () => {
   retryFailedCloudSyncs();
   loadStorageFromCloud();
+});
+window.addEventListener("focus", () => {
+  loadStorageFromCloud({ force: true });
+});
+window.addEventListener("pageshow", () => {
+  loadStorageFromCloud({ force: true });
 });
 window.addEventListener("resize", () => requestAnimationFrame(syncSignatureHeightToActions));
 
