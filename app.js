@@ -2327,6 +2327,15 @@ function hasActiveReservations(set) {
   return Array.isArray(set?.reservations) && set.reservations.some(isActiveReservation);
 }
 
+function getSetForReservation(key, reservationId) {
+  if (!key || !reservationId) return null;
+  return (
+    key.sets.find((set) => (set.reservations || []).some((reservation) => reservation.id === reservationId)) ||
+    key.sets.find((set) => (set.history || []).some((entry) => entry.reservationId === reservationId)) ||
+    null
+  );
+}
+
 function isActiveReservation(reservation) {
   return Boolean(
     reservation &&
@@ -5370,7 +5379,7 @@ function renderPanel() {
     cancelButton.disabled = isReadOnlyArchive || isReservationOut;
     cancelButton.addEventListener("click", () => {
       selectedSetId = reservationSet.id;
-      cancelReservation(entry.reservationId);
+      void cancelReservation(entry.reservationId);
     });
 
     actions.append(movementButton, removeButton, cancelButton);
@@ -5525,7 +5534,9 @@ function renderPanel() {
       cancelButton.className = "reservation-history-button cancel";
       cancelButton.textContent = "Annulation";
       cancelButton.disabled = isReadOnlyArchive || isReservationOut;
-      cancelButton.addEventListener("click", () => cancelReservation(entry.reservationId));
+      cancelButton.addEventListener("click", () => {
+        void cancelReservation(entry.reservationId);
+      });
 
       const signatureField = document.createElement("div");
       const signatureLabel = document.createElement("div");
@@ -5949,8 +5960,9 @@ function promptMovementSignature(actionLabel) {
 async function toggleReservationMovement(reservationId) {
   if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
-  const selectedSet = getSelectedSet(key);
+  const selectedSet = getSetForReservation(key, reservationId) || getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+  selectedSetId = selectedSet.id;
 
   const reservation = (selectedSet.reservations || []).find((item) => item.id === reservationId);
   if (!reservation) return;
@@ -5999,11 +6011,12 @@ async function toggleReservationMovement(reservationId) {
   await syncCloudAfterAction();
 }
 
-function cancelReservation(reservationId) {
+async function cancelReservation(reservationId) {
   if (selectedArchiveRecord && !isSelectedCompromiseEditable()) return;
   const key = getSelectedKey();
-  const selectedSet = getSelectedSet(key);
+  const selectedSet = getSetForReservation(key, reservationId) || getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+  selectedSetId = selectedSet.id;
 
   const reservation = (selectedSet.reservations || []).find((item) => item.id === reservationId);
   if (!reservation) return;
@@ -6029,14 +6042,18 @@ function cancelReservation(reservationId) {
     history: [entry, ...selectedSet.history],
   });
   logActivity("Annulation r\u00e9servation", `${key.owner ? formatOwner(key.owner) : keyLabel(key)} - ${selectedSet.label}`, entry.person);
+  const actionArchivesChanged = Boolean(selectedArchiveRecord);
   if (selectedArchiveRecord) renderCompromisesPanel();
+  markKeyControlActionForSync(key.id, { keysChanged: !actionArchivesChanged, archivesChanged: actionArchivesChanged });
+  await syncCloudAfterAction();
 }
 
 async function archiveReservationKey(reservationId) {
   if (selectedArchiveRecord) return;
   const key = getSelectedKey();
-  const selectedSet = getSelectedSet(key);
+  const selectedSet = getSetForReservation(key, reservationId) || getSelectedSet(key);
   if (!key || !selectedSet || key.archived) return;
+  selectedSetId = selectedSet.id;
 
   const reservation = (selectedSet.reservations || []).find((item) => item.id === reservationId);
   if (!reservation) return;
