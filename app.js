@@ -4,7 +4,7 @@ const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
 const supabaseClient = globalThis.supabase?.createClient(supabaseUrl, supabaseAnonKey);
-const appBuildVersion = "20260825-4";
+const appBuildVersion = "20260826-1";
 const appBuildVersionStorageKey = "cles-app-build-version-v1";
 const appBuildReloadStorageKey = "cles-app-build-reload-v1";
 const appBuildVersionUrl = "app-version.json";
@@ -23,7 +23,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260825-2";
+const syncMetadataVersion = "20260826-1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -768,23 +768,57 @@ function saveKeySlotCloudRow(row, options = {}) {
   else saveStorageValue(storageKey, nextValue);
 }
 
-function applyLegacyKeyStorageFallback(row, slotCloudKeys, pendingStartupKeys) {
-  const storageKey = row?.key;
-  if (!isKeysStorageKey(storageKey) || pendingStartupKeys.has(storageKey)) return;
-  const legacyKeys = parseStorageValue(stringifyCloudValue(row.value));
-  if (!Array.isArray(legacyKeys)) return;
+function groupSlotRowsByStorageKey(slotRows) {
+  const rowsByStorageKey = new Map();
+  (Array.isArray(slotRows) ? slotRows : []).forEach((row) => {
+    const storageKey = getKeyStorageKeyFromSlotCloudKey(row?.key);
+    const keyId = getKeyIdFromSlotCloudKey(row?.key);
+    if (!storageKey || !keyId) return;
+    if (!rowsByStorageKey.has(storageKey)) rowsByStorageKey.set(storageKey, new Map());
+    rowsByStorageKey.get(storageKey).set(keyId, row);
+  });
+  return rowsByStorageKey;
+}
 
-  const legacyById = new Map(legacyKeys.map((key) => [key.id, normalizeKey(key)]));
-  const savedKeys = parseStoredArray(storageKey, makeInitialKeys()).map(normalizeKey);
-  const nextKeys = savedKeys.map((key) => {
-    const legacyKey = legacyById.get(key.id);
-    const cloudSlotKey = getKeySlotCloudKey(storageKey, key.id);
-    if (!legacyKey || slotCloudKeys.has(cloudSlotKey)) return key;
-    if (isKeyFilled(legacyKey)) markDirtyKeySlot(key.id, storageKey);
-    return normalizeKey({ ...legacyKey, id: key.id });
+function applyInitialCloudKeyStorageState(legacyKeyRows, slotRows, pendingStartupKeys) {
+  const legacyRowsByStorageKey = new Map(
+    (Array.isArray(legacyKeyRows) ? legacyKeyRows : [])
+      .filter((row) => isKeysStorageKey(row?.key))
+      .map((row) => [row.key, row]),
+  );
+  const slotRowsByStorageKey = groupSlotRowsByStorageKey(slotRows);
+  const keepRecentLocalSlots = hasRecentLocalEdit();
+
+  Object.values(registryConfig).forEach((config) => {
+    const storageKey = config.keysStorageKey;
+    const currentKeysById = new Map(parseStoredArray(storageKey, makeInitialKeys()).map((key) => [key.id, normalizeKey(key)]));
+    const legacyValue = legacyRowsByStorageKey.get(storageKey)?.value;
+    const legacyKeys = parseStorageValue(stringifyCloudValue(legacyValue));
+    const legacyKeysById = new Map(
+      (Array.isArray(legacyKeys) ? legacyKeys : []).map((key) => [key.id, normalizeKey(key)]),
+    );
+    const slotRowsById = slotRowsByStorageKey.get(storageKey) || new Map();
+
+    const nextKeys = makeInitialKeys().map((emptySlot) => {
+      const slotRow = slotRowsById.get(emptySlot.id);
+      const slotCloudKey = getKeySlotCloudKey(storageKey, emptySlot.id);
+      const currentKey = currentKeysById.get(emptySlot.id);
+      if (slotRow) {
+        if (keepRecentLocalSlots && hasPendingCloudRowChange(slotCloudKey) && currentKey) return currentKey;
+        return normalizeCloudSlotKey(slotRow);
+      }
+      if (keepRecentLocalSlots && hasPendingCloudRowChange(slotCloudKey) && currentKey) return currentKey;
+      const legacyKey = legacyKeysById.get(emptySlot.id);
+      return legacyKey ? normalizeKey({ ...legacyKey, id: emptySlot.id }) : emptySlot;
+    });
+
+    localStorage.setItem(storageKey, JSON.stringify(nextKeys));
   });
 
-  localStorage.setItem(storageKey, JSON.stringify(nextKeys));
+  (Array.isArray(slotRows) ? slotRows : []).forEach((row) => {
+    rememberSlotCloudSeenAt(row);
+    cloudRowVersions.set(row.key, row.updated_at || "");
+  });
 }
 
 function loadCloudRowVersions() {
@@ -1520,16 +1554,7 @@ async function loadStorageFromCloud(options = {}) {
         if (!pendingStartupKeys.has(row.key)) saveStorageValue(row.key, stringifyCloudValue(row.value));
         cloudRowVersions.set(row.key, row.updated_at || "");
       });
-      const slotCloudKeys = new Set(slotRows.map((row) => row.key));
-      (Array.isArray(legacyKeyRows) ? legacyKeyRows : []).forEach((row) => {
-        applyLegacyKeyStorageFallback(row, slotCloudKeys, pendingStartupKeys);
-      });
-      slotRows.forEach((row) => {
-        if (hasPendingCloudRowChange(row.key)) return;
-        saveKeySlotCloudRow(row, { protectLocal: false });
-        rememberSlotCloudSeenAt(row);
-        cloudRowVersions.set(row.key, row.updated_at || "");
-      });
+      applyInitialCloudKeyStorageState(legacyKeyRows, slotRows, pendingStartupKeys);
       isApplyingCloudState = false;
       hasLoadedCloudState = true;
       hasCompletedInitialCloudLoad = true;
