@@ -4,7 +4,7 @@ const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
 const supabaseClient = globalThis.supabase?.createClient(supabaseUrl, supabaseAnonKey);
-const appBuildVersion = "20260826-1";
+const appBuildVersion = "20260827-1";
 const appBuildVersionStorageKey = "cles-app-build-version-v1";
 const appBuildReloadStorageKey = "cles-app-build-reload-v1";
 const appBuildVersionUrl = "app-version.json";
@@ -23,7 +23,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260826-1";
+const syncMetadataVersion = "20260827-1";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -31,7 +31,10 @@ const automaticBackupRetentionCount = 2;
 const automaticBackupWeekday = 5;
 const automaticBackupHour = 12;
 const automaticBackupMinute = 0;
-const cloudPollIntervalMs = 5000;
+const cloudPollIntervalMs = 3000;
+const mobileCloudPollIntervalMs = 2000;
+const cloudInteractionRefreshThrottleMs = 1200;
+const cloudWakeRefreshDelays = [0, 800, 2500];
 const cloudWriteDebounceMs = 300;
 const recentSlotReplayMs = 30000;
 const pendingLocalEditGraceMs = 10 * 60 * 1000;
@@ -208,6 +211,8 @@ let hasCompletedInitialCloudLoad = false;
 let isCloudCheckRunning = false;
 let shouldReloadCloudAfterCurrentCheck = false;
 let lastSlotCloudSeenAt = "";
+let lastAutomaticCloudRefreshAt = 0;
+let automaticCloudRefreshTimer = null;
 
 function markLocalEdit() {
   if (isApplyingCloudState) return;
@@ -221,6 +226,19 @@ function hasRecentLocalEdit() {
 
 function isStandaloneHomeScreenApp() {
   return Boolean(window.navigator.standalone || window.matchMedia?.("(display-mode: standalone)")?.matches);
+}
+
+function isMobileLikeDevice() {
+  return Boolean(
+    window.navigator.standalone ||
+      window.matchMedia?.("(display-mode: standalone)")?.matches ||
+      window.matchMedia?.("(pointer: coarse)")?.matches ||
+      "ontouchstart" in window,
+  );
+}
+
+function getAutomaticCloudPollInterval() {
+  return isMobileLikeDevice() ? mobileCloudPollIntervalMs : cloudPollIntervalMs;
 }
 
 function canCheckPublishedAppVersion() {
@@ -267,6 +285,37 @@ function queueStandaloneCloudRefresh(delay = 0) {
   setTimeout(() => {
     loadStorageFromCloud({ force: true });
   }, delay);
+}
+
+function requestAutomaticCloudRefresh(options = {}) {
+  if (!supabaseClient || document.visibilityState === "hidden") return;
+  const force = options.force !== false;
+  const now = Date.now();
+  const elapsed = now - lastAutomaticCloudRefreshAt;
+  const run = () => {
+    lastAutomaticCloudRefreshAt = Date.now();
+    if (isKeyFormBeingEdited()) captureActiveKeyInfoDraft();
+    retryFailedCloudSyncs().catch((error) => console.warn("Supabase retry failed", error.message));
+    loadStorageFromCloud({ force });
+  };
+
+  clearTimeout(automaticCloudRefreshTimer);
+  if (options.immediate || elapsed >= cloudInteractionRefreshThrottleMs) run();
+  else automaticCloudRefreshTimer = setTimeout(run, cloudInteractionRefreshThrottleMs - elapsed);
+}
+
+function queueWakeCloudRefreshes() {
+  cloudWakeRefreshDelays.forEach((delay) => {
+    setTimeout(() => {
+      requestAutomaticCloudRefresh({ force: true, immediate: delay === 0 });
+    }, delay);
+  });
+}
+
+function startAutomaticCloudRefreshLoop() {
+  setInterval(() => {
+    requestAutomaticCloudRefresh({ force: true });
+  }, getAutomaticCloudPollInterval());
 }
 
 function loadTileViewMode() {
@@ -1498,7 +1547,7 @@ function subscribeToCloudChanges() {
         if (slotStorageKey && payload.new?.value && !hasPendingCloudRowChange(storageKey)) {
           isApplyingCloudState = true;
           try {
-            saveKeySlotCloudRow(payload.new, { protectLocal: false });
+            saveKeySlotCloudRow(payload.new);
             rememberSlotCloudSeenAt(payload.new);
             cloudRowVersions.set(storageKey, payload.new.updated_at || "");
             saveCloudRowVersions();
@@ -1611,7 +1660,7 @@ async function loadStorageFromCloud(options = {}) {
     isApplyingCloudState = true;
     changedRows.forEach((row) => {
       if (isKeySlotCloudKey(row.key)) {
-        saveKeySlotCloudRow(row, { protectLocal: false });
+        saveKeySlotCloudRow(row);
         rememberSlotCloudSeenAt(row);
       } else {
         saveStorageValue(row.key, stringifyCloudValue(row.value));
@@ -6997,9 +7046,8 @@ async function initializeApp() {
   updateTileViewToggle();
   updateUndoButton();
   render();
-  queueStandaloneCloudRefresh(800);
-  queueStandaloneCloudRefresh(2500);
-  setInterval(() => loadStorageFromCloud({ force: isStandaloneHomeScreenApp() }), cloudPollIntervalMs);
+  queueWakeCloudRefreshes();
+  startAutomaticCloudRefreshLoop();
   setInterval(retryFailedCloudSyncs, 30000);
 }
 
@@ -7008,22 +7056,28 @@ document.addEventListener("visibilitychange", () => {
     savePendingCloudKeys();
     syncCurrentRegistryNow();
   }
-  else loadStorageFromCloud({ force: isStandaloneHomeScreenApp() });
+  else queueWakeCloudRefreshes();
 });
 window.addEventListener("pagehide", () => {
   savePendingCloudKeys();
   syncCurrentRegistryNow();
 });
 window.addEventListener("online", () => {
-  retryFailedCloudSyncs();
-  loadStorageFromCloud({ force: true });
+  requestAutomaticCloudRefresh({ force: true, immediate: true });
+  queueWakeCloudRefreshes();
 });
 window.addEventListener("focus", () => {
-  loadStorageFromCloud({ force: true });
+  queueWakeCloudRefreshes();
 });
 window.addEventListener("pageshow", () => {
-  loadStorageFromCloud({ force: true });
-  queueStandaloneCloudRefresh(800);
+  queueWakeCloudRefreshes();
+});
+["pointerdown", "touchstart"].forEach((eventName) => {
+  window.addEventListener(
+    eventName,
+    () => requestAutomaticCloudRefresh({ force: true }),
+    { capture: true, passive: true },
+  );
 });
 window.addEventListener("resize", () => requestAnimationFrame(syncSignatureHeightToActions));
 
