@@ -4,7 +4,7 @@ const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
 const supabaseClient = createSupabaseClient();
-const appBuildVersion = "20260827-4";
+const appBuildVersion = "20260827-5";
 const appBuildVersionStorageKey = "cles-app-build-version-v1";
 const appBuildReloadStorageKey = "cles-app-build-reload-v1";
 const appBuildVersionUrl = "app-version.json";
@@ -23,7 +23,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260827-4";
+const syncMetadataVersion = "20260827-5";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -38,6 +38,50 @@ const cloudWakeRefreshDelays = [0, 800, 2500];
 const cloudWriteDebounceMs = 300;
 const recentSlotReplayMs = 30000;
 const pendingLocalEditGraceMs = 10 * 60 * 1000;
+const runtimeStorageFallback = new Map();
+const browserStorage = (() => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+})();
+
+function getRuntimeStorageValue(key) {
+  if (runtimeStorageFallback.has(key)) return runtimeStorageFallback.get(key);
+  try {
+    return browserStorage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function setRuntimeStorageValue(key, value) {
+  const stringValue = String(value);
+  runtimeStorageFallback.set(key, stringValue);
+  try {
+    browserStorage?.setItem(key, stringValue);
+    return true;
+  } catch (error) {
+    console.warn("Local storage fallback", key, error.message);
+    return false;
+  }
+}
+
+function removeRuntimeStorageValue(key) {
+  runtimeStorageFallback.delete(key);
+  try {
+    browserStorage?.removeItem(key);
+  } catch {}
+}
+
+function getRuntimeStorageKeys() {
+  const keys = new Set(runtimeStorageFallback.keys());
+  try {
+    Object.keys(browserStorage || {}).forEach((key) => keys.add(key));
+  } catch {}
+  return [...keys];
+}
 
 function createSupabaseClient() {
   return createRestSupabaseClient(supabaseUrl, supabaseAnonKey);
@@ -317,7 +361,7 @@ let saleCelebrationTimer = null;
 const celebrationAudioFiles = ["Ados.mp3", "Adultes.mp3", "Langue.mp3"];
 let celebrationAudioPlayers = [];
 let photoViewer = null;
-let lastLocalEditAt = Number(localStorage.getItem(lastLocalEditStorageKey) || 0);
+let lastLocalEditAt = Number(getRuntimeStorageValue(lastLocalEditStorageKey) || 0);
 let isApplyingCloudState = false;
 let isSavingKeyInfoDraft = false;
 let pendingCloudSync = Promise.resolve();
@@ -338,7 +382,7 @@ let automaticCloudRefreshTimer = null;
 function markLocalEdit() {
   if (isApplyingCloudState) return;
   lastLocalEditAt = Date.now();
-  localStorage.setItem(lastLocalEditStorageKey, String(lastLocalEditAt));
+  setRuntimeStorageValue(lastLocalEditStorageKey, String(lastLocalEditAt));
 }
 
 function hasRecentLocalEdit() {
@@ -368,7 +412,7 @@ function canCheckPublishedAppVersion() {
 
 function markAppBuildVersionAsSeen() {
   try {
-    localStorage.setItem(appBuildVersionStorageKey, appBuildVersion);
+    setRuntimeStorageValue(appBuildVersionStorageKey, appBuildVersion);
   } catch {
     // Le contrôle de version ne doit jamais bloquer l'ouverture du tableau.
   }
@@ -440,24 +484,24 @@ function startAutomaticCloudRefreshLoop() {
 }
 
 function loadTileViewMode() {
-  return localStorage.getItem(tileViewStorageKey) === "photo" ? "photo" : "text";
+  return getRuntimeStorageValue(tileViewStorageKey) === "photo" ? "photo" : "text";
 }
 
 function loadKeyStatusFilter() {
-  const saved = localStorage.getItem(keyStatusFilterStorageKey);
+  const saved = getRuntimeStorageValue(keyStatusFilterStorageKey);
   return ["all", "available", "reserved", "out"].includes(saved) ? saved : "all";
 }
 
 function setTileViewMode(mode) {
   tileViewMode = mode === "photo" ? "photo" : "text";
-  localStorage.setItem(tileViewStorageKey, tileViewMode);
+  setRuntimeStorageValue(tileViewStorageKey, tileViewMode);
   updateTileViewToggle();
   renderGrid();
 }
 
 function setKeyStatusFilter(filter) {
   keyStatusFilter = ["all", "available", "reserved", "out"].includes(filter) ? filter : "all";
-  localStorage.setItem(keyStatusFilterStorageKey, keyStatusFilter);
+  setRuntimeStorageValue(keyStatusFilterStorageKey, keyStatusFilter);
   renderGrid();
 }
 
@@ -514,7 +558,7 @@ function getDetectedDeviceName() {
 }
 
 function ensureDeviceName() {
-  const savedName = localStorage.getItem(deviceNameStorageKey)?.trim();
+  const savedName = getRuntimeStorageValue(deviceNameStorageKey)?.trim();
   if (savedName) return savedName;
 
   const detectedName = getDetectedDeviceName();
@@ -525,12 +569,12 @@ function ensureDeviceName() {
     console.warn("Device name prompt unavailable", error.message);
   }
   const deviceName = customName?.trim() || detectedName;
-  localStorage.setItem(deviceNameStorageKey, deviceName);
+  setRuntimeStorageValue(deviceNameStorageKey, deviceName);
   return deviceName;
 }
 
 function getDeviceName() {
-  return localStorage.getItem(deviceNameStorageKey)?.trim() || ensureDeviceName();
+  return getRuntimeStorageValue(deviceNameStorageKey)?.trim() || ensureDeviceName();
 }
 
 function loadActivityLog() {
@@ -539,7 +583,7 @@ function loadActivityLog() {
 
 function saveActivityLog(entries) {
   markLocalEdit();
-  localStorage.setItem(appActivityLogStorageKey, JSON.stringify(entries.slice(0, 600)));
+  setRuntimeStorageValue(appActivityLogStorageKey, JSON.stringify(entries.slice(0, 600)));
   scheduleStorageKeySync(appActivityLogStorageKey);
 }
 
@@ -549,7 +593,7 @@ function loadHiddenGlobalHistoryIds() {
 
 function saveHiddenGlobalHistoryIds(hiddenIds) {
   markLocalEdit();
-  localStorage.setItem(hiddenGlobalHistoryStorageKey, JSON.stringify([...hiddenIds]));
+  setRuntimeStorageValue(hiddenGlobalHistoryStorageKey, JSON.stringify([...hiddenIds]));
   scheduleStorageKeySync(hiddenGlobalHistoryStorageKey);
 }
 
@@ -646,13 +690,13 @@ function createHistoryId() {
 }
 
 function loadActiveRegistry() {
-  const saved = localStorage.getItem(registryStorageKey);
+  const saved = getRuntimeStorageValue(registryStorageKey);
   return saved === "transaction" ? "transaction" : "location";
 }
 
 function saveActiveRegistry() {
   markLocalEdit();
-  localStorage.setItem(registryStorageKey, activeRegistry);
+  setRuntimeStorageValue(registryStorageKey, activeRegistry);
   scheduleStorageKeySync(registryStorageKey);
 }
 
@@ -916,9 +960,9 @@ function protectLocalKeyEdits(storageKey, value) {
 function saveStorageValue(storageKey, value) {
   if (typeof value === "string") {
     const nextValue = isKeysStorageKey(storageKey) ? protectLocalKeyEdits(storageKey, value) : value;
-    localStorage.setItem(storageKey, nextValue);
+    setRuntimeStorageValue(storageKey, nextValue);
   } else {
-    localStorage.removeItem(storageKey);
+    removeRuntimeStorageValue(storageKey);
   }
 }
 
@@ -934,7 +978,7 @@ function saveKeySlotCloudRow(row, options = {}) {
     ? savedKeys.map((key) => (key.id === keyId ? incomingKey : key))
     : [...savedKeys, incomingKey];
   const nextValue = JSON.stringify(nextKeys);
-  if (options.protectLocal === false) localStorage.setItem(storageKey, nextValue);
+  if (options.protectLocal === false) setRuntimeStorageValue(storageKey, nextValue);
   else saveStorageValue(storageKey, nextValue);
 }
 
@@ -982,7 +1026,7 @@ function applyInitialCloudKeyStorageState(legacyKeyRows, slotRows, pendingStartu
       return legacyKey ? normalizeKey({ ...legacyKey, id: emptySlot.id }) : emptySlot;
     });
 
-    localStorage.setItem(storageKey, JSON.stringify(nextKeys));
+    setRuntimeStorageValue(storageKey, JSON.stringify(nextKeys));
   });
 
   (Array.isArray(slotRows) ? slotRows : []).forEach((row) => {
@@ -993,7 +1037,7 @@ function applyInitialCloudKeyStorageState(legacyKeyRows, slotRows, pendingStartu
 
 function loadCloudRowVersions() {
   try {
-    const saved = JSON.parse(localStorage.getItem(cloudVersionsStorageKey) || "{}");
+    const saved = JSON.parse(getRuntimeStorageValue(cloudVersionsStorageKey) || "{}");
     return new Map(Object.entries(saved && typeof saved === "object" ? saved : {}));
   } catch {
     return new Map();
@@ -1001,7 +1045,7 @@ function loadCloudRowVersions() {
 }
 
 function saveCloudRowVersions() {
-  localStorage.setItem(cloudVersionsStorageKey, JSON.stringify(Object.fromEntries(cloudRowVersions)));
+  setRuntimeStorageValue(cloudVersionsStorageKey, JSON.stringify(Object.fromEntries(cloudRowVersions)));
 }
 
 function isStaleCloudWriteError(error) {
@@ -1024,7 +1068,7 @@ async function upsertCloudRow(storageKey, value, expectedUpdatedAt = null, updat
 
 function loadPendingCloudKeys() {
   try {
-    const saved = JSON.parse(localStorage.getItem(pendingCloudKeysStorageKey) || "[]");
+    const saved = JSON.parse(getRuntimeStorageValue(pendingCloudKeysStorageKey) || "[]");
     return new Set(Array.isArray(saved) ? saved : []);
   } catch {
     return new Set();
@@ -1032,12 +1076,12 @@ function loadPendingCloudKeys() {
 }
 
 function savePendingCloudKeys() {
-  localStorage.setItem(pendingCloudKeysStorageKey, JSON.stringify([...dirtyCloudKeys]));
+  setRuntimeStorageValue(pendingCloudKeysStorageKey, JSON.stringify([...dirtyCloudKeys]));
 }
 
 function loadDirtyKeySlots() {
   try {
-    const saved = JSON.parse(localStorage.getItem(dirtyKeySlotsStorageKey) || "{}");
+    const saved = JSON.parse(getRuntimeStorageValue(dirtyKeySlotsStorageKey) || "{}");
     return new Map(
       Object.entries(saved && typeof saved === "object" ? saved : {}).map(([storageKey, keyIds]) => [
         storageKey,
@@ -1050,7 +1094,7 @@ function loadDirtyKeySlots() {
 }
 
 function saveDirtyKeySlots() {
-  localStorage.setItem(
+  setRuntimeStorageValue(
     dirtyKeySlotsStorageKey,
     JSON.stringify(
       Object.fromEntries([...dirtyKeySlots].map(([storageKey, keyIds]) => [storageKey, [...keyIds]])),
@@ -1059,17 +1103,17 @@ function saveDirtyKeySlots() {
 }
 
 function resetLegacySyncMetadataIfNeeded() {
-  if (localStorage.getItem(syncMetadataVersionStorageKey) === syncMetadataVersion) return;
+  if (getRuntimeStorageValue(syncMetadataVersionStorageKey) === syncMetadataVersion) return;
   dirtyCloudKeys = new Set();
   failedCloudSyncKeys = new Set();
   dirtyKeySlots = new Map();
   cloudRowVersions = new Map();
   cloudSyncTimers.forEach((timer) => clearTimeout(timer));
   cloudSyncTimers = new Map();
-  localStorage.removeItem(pendingCloudKeysStorageKey);
-  localStorage.removeItem(dirtyKeySlotsStorageKey);
-  localStorage.removeItem(cloudVersionsStorageKey);
-  localStorage.setItem(syncMetadataVersionStorageKey, syncMetadataVersion);
+  removeRuntimeStorageValue(pendingCloudKeysStorageKey);
+  removeRuntimeStorageValue(dirtyKeySlotsStorageKey);
+  removeRuntimeStorageValue(cloudVersionsStorageKey);
+  setRuntimeStorageValue(syncMetadataVersionStorageKey, syncMetadataVersion);
 }
 
 function markDirtyKeySlot(keyId, storageKey = getRegistryConfig().keysStorageKey) {
@@ -1239,7 +1283,7 @@ function prepareStorageValueForCloud(storageKey, localValue, remoteValue = null,
 
 function finishSuccessfulCloudWrite(storageKey, sentValue, updatedAt) {
   failedCloudSyncKeys.delete(storageKey);
-  const currentValue = localStorage.getItem(storageKey);
+  const currentValue = getRuntimeStorageValue(storageKey);
   const localStillMatchesSentValue = sentValue === null ? currentValue === null : currentValue === sentValue;
 
   if (localStillMatchesSentValue) {
@@ -1299,7 +1343,7 @@ async function writeKeySlotsToCloud(storageKey, options = {}) {
         key = mergeKeyRecord(key, parseCloudObjectValue(remoteRow.value));
         keyById.set(keyId, key);
         savedKeys = savedKeys.map((savedKey) => (savedKey.id === keyId ? key : savedKey));
-        localStorage.setItem(storageKey, JSON.stringify(savedKeys));
+        setRuntimeStorageValue(storageKey, JSON.stringify(savedKeys));
       }
       updatedAt = new Date().toISOString();
       ({ error } = await upsertCloudRow(cloudKey, normalizeKey(key), expectedUpdatedAt, updatedAt));
@@ -1349,7 +1393,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
   pendingCloudSync = pendingCloudSync
     .catch(() => {})
     .then(async () => {
-      let value = localStorage.getItem(storageKey);
+      let value = getRuntimeStorageValue(storageKey);
       let updatedAt = new Date().toISOString();
       const expectedUpdatedAt = cloudRowVersions.get(storageKey) || null;
       const { data: remoteRow, error: versionError } = await supabaseClient
@@ -1364,7 +1408,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
       const hasLocalKeySlotChanges = isKeysStorageKey(storageKey) && getDirtyKeySlotIds(storageKey).size > 0;
       if (value !== null && remoteRow) {
         value = prepareStorageValueForCloud(storageKey, value, remoteRow.value, { fullReplace: force });
-        localStorage.setItem(storageKey, value);
+        setRuntimeStorageValue(storageKey, value);
       }
       if (!force && hasRemoteVersionChanged) {
         if ((dirtyCloudKeys.has(storageKey) || hasLocalKeySlotChanges) && value !== null) {
@@ -1413,7 +1457,7 @@ function syncStorageKeyToCloud(storageKey, options = {}) {
         if (latestRemoteError) throw latestRemoteError;
         if (latestRemoteRow?.value) {
           value = prepareStorageValueForCloud(storageKey, value, latestRemoteRow.value);
-          localStorage.setItem(storageKey, value);
+          setRuntimeStorageValue(storageKey, value);
         }
         updatedAt = new Date().toISOString();
         const retryResult = await upsertCloudRow(
@@ -1538,7 +1582,7 @@ async function writeStorageKeyToCloudNow(storageKey, options = {}) {
   pendingCloudSync = pendingCloudSync
     .catch(() => {})
     .then(async () => {
-      let value = localStorage.getItem(storageKey);
+      let value = getRuntimeStorageValue(storageKey);
       let updatedAt = new Date().toISOString();
       const { data: remoteRow, error: versionError } = await supabaseClient
         .from("app_state")
@@ -1553,7 +1597,7 @@ async function writeStorageKeyToCloudNow(storageKey, options = {}) {
       }
       if (value !== null) {
         value = prepareStorageValueForCloud(storageKey, value, remoteRow?.value ?? null);
-        localStorage.setItem(storageKey, value);
+        setRuntimeStorageValue(storageKey, value);
       }
       let { error } =
         value === null
@@ -1569,7 +1613,7 @@ async function writeStorageKeyToCloudNow(storageKey, options = {}) {
         if (latestRemoteError) throw latestRemoteError;
         if (latestRemoteRow?.value) {
           value = prepareStorageValueForCloud(storageKey, value, latestRemoteRow.value);
-          localStorage.setItem(storageKey, value);
+          setRuntimeStorageValue(storageKey, value);
         }
         updatedAt = new Date().toISOString();
         const retryResult = await upsertCloudRow(
@@ -1611,9 +1655,9 @@ async function syncCurrentRegistryNow() {
 }
 
 function removeAutomaticBackupsFromLocalStorage() {
-  Object.keys(localStorage)
+  getRuntimeStorageKeys()
     .filter((key) => key.startsWith(automaticBackupKeyPrefix))
-    .forEach((key) => localStorage.removeItem(key));
+    .forEach((key) => removeRuntimeStorageValue(key));
 }
 
 function closeKeyPanelAfterAction() {
@@ -1759,7 +1803,7 @@ async function loadStorageFromCloud(options = {}) {
     const changedKeys = metadata
       .filter((row) => {
         const versionChanged = cloudRowVersions.get(row.key) !== (row.updated_at || "");
-        const missingLocalBaseRow = !isKeySlotCloudKey(row.key) && localStorage.getItem(row.key) === null;
+        const missingLocalBaseRow = !isKeySlotCloudKey(row.key) && getRuntimeStorageValue(row.key) === null;
         return versionChanged || missingLocalBaseRow;
       })
       .map((row) => row.key);
@@ -1792,7 +1836,7 @@ async function loadStorageFromCloud(options = {}) {
       }
     });
     deletedKeys.forEach((key) => {
-      if (!isKeySlotCloudKey(key) && !isKeysStorageKey(key)) localStorage.removeItem(key);
+      if (!isKeySlotCloudKey(key) && !isKeysStorageKey(key)) removeRuntimeStorageValue(key);
     });
     isApplyingCloudState = false;
     metadata.forEach((row) => {
@@ -1820,7 +1864,7 @@ function updateUndoButton() {
 function createUndoSnapshot() {
   const storage = {};
   getBackupStorageKeys().forEach((key) => {
-    storage[key] = localStorage.getItem(key);
+    storage[key] = getRuntimeStorageValue(key);
   });
 
   return {
@@ -1840,10 +1884,10 @@ function restoreStorageSnapshot(snapshot) {
   const changedKeys = [];
   getBackupStorageKeys().forEach((key) => {
     const value = snapshot.storage[key];
-    const previousValue = localStorage.getItem(key);
+    const previousValue = getRuntimeStorageValue(key);
     if (previousValue === value) return;
     saveStorageValue(key, value);
-    markChangedKeySlots(key, localStorage.getItem(key), previousValue);
+    markChangedKeySlots(key, getRuntimeStorageValue(key), previousValue);
     changedKeys.push(key);
   });
   changedKeys.forEach((key) => dirtyCloudKeys.add(key));
@@ -2058,7 +2102,7 @@ function normalizeKey(key) {
 }
 
 function loadKeys() {
-  const saved = localStorage.getItem(getRegistryConfig().keysStorageKey);
+  const saved = getRuntimeStorageValue(getRegistryConfig().keysStorageKey);
   if (!saved) return makeInitialKeys();
 
   try {
@@ -2072,7 +2116,7 @@ function loadKeys() {
 function loadKeysForRegistry(registry) {
   const config = registryConfig[registry];
   if (!config) return makeInitialKeys();
-  const saved = localStorage.getItem(config.keysStorageKey);
+  const saved = getRuntimeStorageValue(config.keysStorageKey);
   if (!saved) return makeInitialKeys();
 
   try {
@@ -2086,10 +2130,10 @@ function loadKeysForRegistry(registry) {
 function saveKeys() {
   try {
     const storageKey = getRegistryConfig().keysStorageKey;
-    const previousValue = localStorage.getItem(storageKey);
+    const previousValue = getRuntimeStorageValue(storageKey);
     const nextValue = JSON.stringify(keys);
     markLocalEdit();
-    localStorage.setItem(storageKey, nextValue);
+    setRuntimeStorageValue(storageKey, nextValue);
     markChangedKeySlots(storageKey, nextValue, previousValue);
     scheduleStorageKeySync(storageKey);
   } catch (error) {
@@ -2104,10 +2148,10 @@ function saveKeysForRegistry(registry, nextKeys) {
 
   try {
     const storageKey = config.keysStorageKey;
-    const previousValue = localStorage.getItem(storageKey);
+    const previousValue = getRuntimeStorageValue(storageKey);
     const nextValue = JSON.stringify(nextKeys.map(normalizeKey));
     markLocalEdit();
-    localStorage.setItem(storageKey, nextValue);
+    setRuntimeStorageValue(storageKey, nextValue);
     markChangedKeySlots(storageKey, nextValue, previousValue);
     scheduleStorageKeySync(storageKey);
   } catch (error) {
@@ -2127,7 +2171,7 @@ function normalizeArchive(record) {
 }
 
 function loadArchives() {
-  const saved = localStorage.getItem(getRegistryConfig().archivesStorageKey);
+  const saved = getRuntimeStorageValue(getRegistryConfig().archivesStorageKey);
   if (!saved) return [];
 
   try {
@@ -2141,7 +2185,7 @@ function loadArchives() {
 function saveArchives() {
   try {
     markLocalEdit();
-    localStorage.setItem(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
+    setRuntimeStorageValue(getRegistryConfig().archivesStorageKey, JSON.stringify(archives));
     scheduleStorageKeySync(getRegistryConfig().archivesStorageKey);
   } catch (error) {
     alert("La sauvegarde a échoué. Une photo ou une signature est probablement trop lourde.");
@@ -2251,9 +2295,9 @@ async function migrateStoredPropertyAddresses() {
       property: formatPropertyAddress(key.property || ""),
     }));
     if (JSON.stringify(formattedKeys) !== JSON.stringify(savedKeys)) {
-      const previousValue = localStorage.getItem(config.keysStorageKey);
+      const previousValue = getRuntimeStorageValue(config.keysStorageKey);
       const nextValue = JSON.stringify(formattedKeys);
-      localStorage.setItem(config.keysStorageKey, nextValue);
+      setRuntimeStorageValue(config.keysStorageKey, nextValue);
       markChangedKeySlots(config.keysStorageKey, nextValue, previousValue);
       changedStorageKeys.push(config.keysStorageKey);
     }
@@ -2266,7 +2310,7 @@ async function migrateStoredPropertyAddresses() {
         : record.key,
     }));
     if (JSON.stringify(formattedArchives) !== JSON.stringify(savedArchives)) {
-      localStorage.setItem(config.archivesStorageKey, JSON.stringify(formattedArchives));
+      setRuntimeStorageValue(config.archivesStorageKey, JSON.stringify(formattedArchives));
       changedStorageKeys.push(config.archivesStorageKey);
     }
   });
@@ -2457,7 +2501,7 @@ function normalizeContact(contact) {
 }
 
 function loadContacts() {
-  const saved = localStorage.getItem(sharedContactsStorageKey);
+  const saved = getRuntimeStorageValue(sharedContactsStorageKey);
   if (!saved) return [];
 
   try {
@@ -2472,7 +2516,7 @@ function loadContacts() {
 
 function saveContacts() {
   markLocalEdit();
-  localStorage.setItem(sharedContactsStorageKey, JSON.stringify(contacts));
+  setRuntimeStorageValue(sharedContactsStorageKey, JSON.stringify(contacts));
   scheduleStorageKeySync(sharedContactsStorageKey);
 }
 
@@ -2946,7 +2990,7 @@ function captureActiveKeyInfoDraft() {
   keys = keys.map((key) => (key.id === selectedId ? { ...key, ...changes } : key));
   try {
     markLocalEdit();
-    localStorage.setItem(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
+    setRuntimeStorageValue(getRegistryConfig().keysStorageKey, JSON.stringify(keys));
     scheduleStorageKeySync(getRegistryConfig().keysStorageKey);
   } catch (error) {
     console.warn("Local draft save failed", error.message);
@@ -3450,7 +3494,7 @@ function exportFilledDataCsv() {
 function createDataBackupPayload(options = {}) {
   const data = {};
   getBackupStorageKeys().forEach((key) => {
-    data[key] = localStorage.getItem(key);
+    data[key] = getRuntimeStorageValue(key);
   });
 
   return {
@@ -3635,7 +3679,7 @@ function refreshDataFromStorage({ keepSelection = false } = {}) {
 }
 
 function parseStoredArray(storageKey, fallback = []) {
-  const saved = localStorage.getItem(storageKey);
+  const saved = getRuntimeStorageValue(storageKey);
   if (!saved) return fallback;
 
   try {
@@ -4463,10 +4507,10 @@ function applyBackupPayload(payload, sourceLabel = "cette sauvegarde") {
   const changedKeys = [];
   getBackupStorageKeys().forEach((key) => {
     const value = payload.data[key];
-    const previousValue = localStorage.getItem(key);
+    const previousValue = getRuntimeStorageValue(key);
     if (previousValue === value) return;
     saveStorageValue(key, value);
-    markChangedKeySlots(key, localStorage.getItem(key), previousValue);
+    markChangedKeySlots(key, getRuntimeStorageValue(key), previousValue);
     changedKeys.push(key);
   });
   changedKeys.forEach((key) => dirtyCloudKeys.add(key));
@@ -5282,7 +5326,7 @@ async function compressKeyPhotos(key) {
 }
 
 async function optimizeStoredPhotos() {
-  if (localStorage.getItem(photoOptimizationStorageKey) === "done") return;
+  if (getRuntimeStorageValue(photoOptimizationStorageKey) === "done") return;
 
   markLocalEdit();
   const registries = ["location", "transaction"];
@@ -5309,8 +5353,8 @@ async function optimizeStoredPhotos() {
     }
 
     if (changed) {
-      localStorage.setItem(config.keysStorageKey, JSON.stringify(nextKeys));
-      localStorage.setItem(config.archivesStorageKey, JSON.stringify(nextArchives));
+      setRuntimeStorageValue(config.keysStorageKey, JSON.stringify(nextKeys));
+      setRuntimeStorageValue(config.archivesStorageKey, JSON.stringify(nextArchives));
       changedKeyIds.forEach((keyId) => markDirtyKeySlot(keyId, config.keysStorageKey));
       dirtyCloudKeys.add(config.keysStorageKey);
       dirtyCloudKeys.add(config.archivesStorageKey);
@@ -5320,7 +5364,7 @@ async function optimizeStoredPhotos() {
     }
   }
 
-  localStorage.setItem(photoOptimizationStorageKey, "done");
+  setRuntimeStorageValue(photoOptimizationStorageKey, "done");
   keys = loadKeys();
   archives = loadArchives();
   render();
