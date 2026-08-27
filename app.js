@@ -4,7 +4,7 @@ const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
 const supabaseClient = createSupabaseClient();
-const appBuildVersion = "20260827-2";
+const appBuildVersion = "20260827-3";
 const appBuildVersionStorageKey = "cles-app-build-version-v1";
 const appBuildReloadStorageKey = "cles-app-build-reload-v1";
 const appBuildVersionUrl = "app-version.json";
@@ -23,7 +23,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260827-2";
+const syncMetadataVersion = "20260827-3";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -40,6 +40,7 @@ const recentSlotReplayMs = 30000;
 const pendingLocalEditGraceMs = 10 * 60 * 1000;
 
 function createSupabaseClient() {
+  if (isMobileLikeDevice()) return createRestSupabaseClient(supabaseUrl, supabaseAnonKey);
   if (globalThis.supabase?.createClient) return globalThis.supabase.createClient(supabaseUrl, supabaseAnonKey);
   return createRestSupabaseClient(supabaseUrl, supabaseAnonKey);
 }
@@ -1498,8 +1499,12 @@ async function loadCloudRowsByKeys(keys) {
   }
 
   if (slotKeys.size) {
-    const slotRows = await loadKeySlotCloudRows();
-    rows.push(...slotRows.filter((row) => slotKeys.has(row.key)));
+    const { data, error } = await supabaseClient
+      .from("app_state")
+      .select("key,value,updated_at")
+      .in("key", [...slotKeys]);
+    if (error) throw error;
+    if (Array.isArray(data)) rows.push(...data);
   }
 
   return rows;
