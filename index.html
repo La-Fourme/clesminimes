@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Tableau cles" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
@@ -388,8 +391,25 @@ TABLEAU CL&Eacute;S TRANSACTION</button>
       </aside>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260827-3"></script>
+    <script>
+      (() => {
+        const fallbackVersion = "20260827-4";
+        const loadApp = (version) => {
+          const script = document.createElement("script");
+          script.src = `app.js?v=${encodeURIComponent(version || fallbackVersion)}&t=${Date.now()}`;
+          document.body.append(script);
+        };
+
+        if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+          navigator.serviceWorker.register(`sw.js?v=${fallbackVersion}`).catch(() => {});
+        }
+
+        fetch(`app-version.json?t=${Date.now()}`, { cache: "no-store" })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((published) => loadApp(published?.version || fallbackVersion))
+          .catch(() => loadApp(fallbackVersion));
+      })();
+    </script>
   </body>
 </html>
 
