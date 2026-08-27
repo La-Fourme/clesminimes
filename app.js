@@ -3,8 +3,8 @@ const slotsPerCategory = 20;
 const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
-const supabaseClient = globalThis.supabase?.createClient(supabaseUrl, supabaseAnonKey);
-const appBuildVersion = "20260827-1";
+const supabaseClient = createSupabaseClient();
+const appBuildVersion = "20260827-2";
 const appBuildVersionStorageKey = "cles-app-build-version-v1";
 const appBuildReloadStorageKey = "cles-app-build-reload-v1";
 const appBuildVersionUrl = "app-version.json";
@@ -23,7 +23,7 @@ const cloudVersionsStorageKey = "cles-cloud-row-versions-v1";
 const pendingCloudKeysStorageKey = "cles-pending-cloud-keys-v1";
 const dirtyKeySlotsStorageKey = "cles-dirty-key-slots-v1";
 const syncMetadataVersionStorageKey = "cles-sync-metadata-version-v1";
-const syncMetadataVersion = "20260827-1";
+const syncMetadataVersion = "20260827-2";
 const lastLocalEditStorageKey = "cles-last-local-edit-v1";
 const keySlotCloudSeparator = "::slot::";
 const automaticBackupKeyPrefix = "cles-auto-backup-";
@@ -38,6 +38,118 @@ const cloudWakeRefreshDelays = [0, 800, 2500];
 const cloudWriteDebounceMs = 300;
 const recentSlotReplayMs = 30000;
 const pendingLocalEditGraceMs = 10 * 60 * 1000;
+
+function createSupabaseClient() {
+  if (globalThis.supabase?.createClient) return globalThis.supabase.createClient(supabaseUrl, supabaseAnonKey);
+  return createRestSupabaseClient(supabaseUrl, supabaseAnonKey);
+}
+
+function createRestSupabaseClient(projectUrl, anonKey) {
+  const restBaseUrl = `${projectUrl.replace(/\/$/, "")}/rest/v1`;
+  const baseHeaders = {
+    apikey: anonKey,
+    Authorization: `Bearer ${anonKey}`,
+  };
+
+  class RestQuery {
+    constructor(table) {
+      this.table = table;
+      this.method = "GET";
+      this.params = new URLSearchParams();
+      this.body = null;
+      this.prefer = "";
+      this.readSingle = false;
+    }
+
+    select(columns = "*") {
+      this.method = "GET";
+      this.params.set("select", columns);
+      return this;
+    }
+
+    in(column, values) {
+      const quotedValues = (Array.isArray(values) ? values : [])
+        .map((value) => `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
+        .join(",");
+      this.params.set(column, `in.(${quotedValues})`);
+      return this;
+    }
+
+    like(column, pattern) {
+      this.params.set(column, `like.${pattern}`);
+      return this;
+    }
+
+    eq(column, value) {
+      this.params.set(column, `eq.${value}`);
+      return this;
+    }
+
+    gt(column, value) {
+      this.params.set(column, `gt.${value}`);
+      return this;
+    }
+
+    upsert(value) {
+      this.method = "POST";
+      this.body = JSON.stringify(value);
+      this.params.set("on_conflict", "key");
+      this.prefer = "resolution=merge-duplicates,return=representation";
+      return this.execute();
+    }
+
+    delete() {
+      this.method = "DELETE";
+      this.prefer = "return=minimal";
+      return this;
+    }
+
+    maybeSingle() {
+      this.readSingle = true;
+      return this.execute();
+    }
+
+    then(resolve, reject) {
+      return this.execute().then(resolve, reject);
+    }
+
+    async execute() {
+      const query = this.params.toString();
+      const response = await fetch(`${restBaseUrl}/${this.table}${query ? `?${query}` : ""}`, {
+        method: this.method,
+        headers: {
+          ...baseHeaders,
+          Accept: "application/json",
+          ...(this.body ? { "Content-Type": "application/json" } : {}),
+          ...(this.prefer ? { Prefer: this.prefer } : {}),
+        },
+        ...(this.body ? { body: this.body } : {}),
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        let message = response.statusText || "Supabase request failed";
+        try {
+          const payload = await response.json();
+          message = payload?.message || payload?.details || message;
+        } catch {}
+        return { data: null, error: { message } };
+      }
+
+      if (response.status === 204) return { data: null, error: null };
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : null;
+      return { data: this.readSingle ? (Array.isArray(data) ? data[0] || null : data) : data, error: null };
+    }
+  }
+
+  return {
+    from(table) {
+      return new RestQuery(table);
+    },
+  };
+}
+
 const registryConfig = {
   location: {
     title: "LOCATION",
@@ -288,7 +400,7 @@ function queueStandaloneCloudRefresh(delay = 0) {
 }
 
 function requestAutomaticCloudRefresh(options = {}) {
-  if (!supabaseClient || document.visibilityState === "hidden") return;
+  if (!supabaseClient) return;
   const force = options.force !== false;
   const now = Date.now();
   const elapsed = now - lastAutomaticCloudRefreshAt;
