@@ -4,7 +4,7 @@ const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
 const supabaseClient = createSupabaseClient();
-const appBuildVersion = "20260827-6";
+const appBuildVersion = "20260829-1";
 const appBuildVersionStorageKey = "cles-app-build-version-v1";
 const appBuildReloadStorageKey = "cles-app-build-reload-v1";
 const appBuildVersionUrl = "app-version.json";
@@ -206,7 +206,7 @@ function createRestSupabaseClient(projectUrl, anonKey) {
 const registryConfig = {
   location: {
     title: "LOCATION",
-    toggleLabel: "BASCULER VERS\nTABLEAU CL\u00c9S TRANSACTION",
+    toggleLabel: "BASCULER VERS\nTABLEAU TRANSACTION",
     keysStorageKey: "cles-immobilieres-v1",
     archivesStorageKey: "cles-location-archives-v1",
     archiveActionLabel: "Loué",
@@ -216,7 +216,7 @@ const registryConfig = {
   },
   transaction: {
     title: "TRANSACTION",
-    toggleLabel: "BASCULER VERS\nTABLEAU CL\u00c9S LOCATION",
+    toggleLabel: "BASCULER VERS\nTABLEAU LOCATION",
     keysStorageKey: "cles-transaction-v1",
     archivesStorageKey: "cles-transaction-archives-v1",
     archiveActionLabel: "Compromis",
