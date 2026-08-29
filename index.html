@@ -27,8 +27,7 @@
     <main class="app-shell">
       <section class="workspace">
         <header class="topbar">
-          <button id="registryToggleBtn" class="registry-toggle-button" type="button">BASCULER VERS
-TABLEAU TRANSACTION</button>
+          <button id="registryToggleBtn" class="registry-toggle-button" type="button">BASCULER VERS TABLEAU TRANSACTION</button>
           <div>
             <h1 id="appTitle">
               <span class="app-title-text">LOCATION</span>
@@ -393,7 +392,7 @@ TABLEAU TRANSACTION</button>
 
     <script>
       (() => {
-        const fallbackVersion = "20260829-1";
+        const fallbackVersion = "20260829-2";
         const loadApp = (version) => {
           const script = document.createElement("script");
           script.src = `app.js?v=${encodeURIComponent(version || fallbackVersion)}&t=${Date.now()}`;
