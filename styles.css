@@ -237,7 +237,7 @@ button {
 
 .topbar {
   display: grid;
-  grid-template-columns: 310px minmax(0, 1fr) 260px;
+  grid-template-columns: 330px minmax(0, 1fr) 260px;
   align-items: start;
   column-gap: 24px;
 }
@@ -347,7 +347,7 @@ h3 {
 .registry-toggle-button {
   justify-self: start;
   align-self: center;
-  width: 290px;
+  width: 320px;
   min-width: 0;
   min-height: 45px;
   padding: 0 18px;
@@ -357,7 +357,7 @@ h3 {
   font-size: 13px;
   font-weight: 900;
   line-height: 1.28;
-  white-space: pre-line;
+  white-space: nowrap;
   box-shadow:
     0 14px 26px rgba(30, 37, 40, 0.28),
     inset 0 2px 0 rgba(255, 255, 255, 0.34),
@@ -2705,7 +2705,7 @@ body.is-moving-key .photo-hover {
 
   .top-actions {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .registry-toggle-button,
