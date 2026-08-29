@@ -4,7 +4,7 @@ const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
 const supabaseClient = createSupabaseClient();
-const appBuildVersion = "20260829-5";
+const appBuildVersion = "20260829-6";
 const appBuildVersionStorageKey = "cles-app-build-version-v1";
 const appBuildReloadStorageKey = "cles-app-build-reload-v1";
 const appBuildVersionUrl = "app-version.json";
@@ -236,6 +236,7 @@ const keySetOptions = [
 const appTitle = document.querySelector("#appTitle");
 const appTitleText = document.querySelector(".app-title-text");
 const registryToggleBtn = document.querySelector("#registryToggleBtn");
+const topActions = document.querySelector(".top-actions");
 const grid = document.querySelector("#keyGrid");
 const detailPanel = document.querySelector("#detailPanel");
 const form = document.querySelector("#keyForm");
@@ -1931,6 +1932,7 @@ function updateRegistryHeader() {
   transferKeyBtn.textContent = `Transférer vers ${targetConfig.title}`;
   rentedArchiveTitle.textContent = config.rentedArchiveTitle;
   compromisesTabBtn.hidden = activeRegistry !== "transaction";
+  topActions?.classList.toggle("is-location-only", activeRegistry === "location");
   rentedArchiveSection.hidden = activeRegistry === "transaction";
   authenticatedArchiveSection.hidden = activeRegistry !== "transaction";
   if (registryHistoryDataLabel) {

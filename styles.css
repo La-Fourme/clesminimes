@@ -344,6 +344,10 @@ h3 {
   gap: 10px;
 }
 
+.top-actions.is-location-only .archive-tab-button {
+  grid-column: 1 / -1;
+}
+
 .registry-toggle-button {
   justify-self: start;
   align-self: center;
