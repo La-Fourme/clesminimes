@@ -349,7 +349,7 @@ h3 {
   align-self: center;
   width: 290px;
   min-width: 0;
-  min-height: 60px;
+  min-height: 45px;
   padding: 0 18px;
   color: #2f2f2f;
   background: var(--c21-gold);
