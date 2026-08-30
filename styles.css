@@ -652,7 +652,7 @@ h3 {
 .backup-panel {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 18px;
   margin-top: 18px;
   padding: 10px;
@@ -685,12 +685,14 @@ h3 {
   display: grid;
   grid-template-columns: repeat(6, auto);
   gap: 7px;
+  margin-left: auto;
 }
 
 .filled-export-button,
 .history-data-button,
 .backup-button,
-.saved-backups-button {
+.saved-backups-button,
+.settings-data-button {
   min-height: 34px;
   padding: 0 10px;
   border-radius: 7px;
@@ -723,6 +725,12 @@ h3 {
   border-color: #6f8fa0;
   cursor: pointer;
   opacity: 1;
+}
+
+.settings-data-button {
+  color: #f4f7f5;
+  background: #315d73;
+  border-color: #6f8fa0;
 }
 
 .history-data-button .history-data-label {
@@ -841,6 +849,124 @@ h3 {
   color: #f4f7f5;
   background: #315d73;
   border-color: #6f8fa0;
+}
+
+.settings-panel {
+  width: min(620px, calc(100vw - 28px));
+}
+
+.settings-form {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.settings-section h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.settings-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.settings-form input {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.42);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.settings-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.settings-row,
+.settings-replacement-row {
+  display: grid;
+  gap: 8px;
+  align-items: end;
+}
+
+.settings-row {
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+}
+
+.settings-replacement-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.settings-row-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 1px solid rgba(44, 58, 61, 0.16);
+  border-radius: 7px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.34);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.settings-secondary-button,
+.settings-remove-button,
+.settings-save-button {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.settings-secondary-button,
+.settings-save-button {
+  color: #f4f7f5;
+  background: #315d73;
+  border: 1px solid #6f8fa0;
+}
+
+.settings-remove-button {
+  color: var(--ink);
+  background: #d8dcd8;
+  border: 1px solid var(--line);
 }
 
 .import-button {
@@ -2654,6 +2780,19 @@ body.is-moving-key .photo-hover {
   #compromisesPanel {
     width: 100vw;
     border-left: 0;
+  }
+
+  .settings-grid,
+  .settings-row,
+  .settings-replacement-row {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-data-button,
+  .settings-secondary-button,
+  .settings-remove-button,
+  .settings-save-button {
+    width: 100%;
   }
 
   .topbar {

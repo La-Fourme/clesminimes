@@ -1,10 +1,21 @@
-const categories = ["T1", "T2", "T3", "T4+", "Maison", "Autre"];
-const slotsPerCategory = 20;
+const defaultCategoryLabels = ["T1", "T2", "T3", "T4+", "Maison", "Autre"];
+const defaultSlotsPerCategory = 20;
+const defaultAddressReplacements = [
+  { id: "avenue", word: "Avenue", replacement: "Av." },
+  { id: "boulevard", word: "Boulevard", replacement: "Blv." },
+  { id: "place", word: "Place", replacement: "Pl." },
+  { id: "route", word: "Route", replacement: "Rte" },
+  { id: "allee", word: "All\u00e9e", replacement: "All." },
+  { id: "chemin", word: "Chemin", replacement: "Ch." },
+  { id: "impasse", word: "Impasse", replacement: "Imp." },
+  { id: "passage", word: "Passage", replacement: "Pas." },
+  { id: "esplanade", word: "Esplanade", replacement: "Esp." },
+];
 const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
 const supabaseClient = createSupabaseClient();
-const appBuildVersion = "20260829-6";
+const appBuildVersion = "20260830-1";
 const appBuildVersionStorageKey = "cles-app-build-version-v1";
 const appBuildReloadStorageKey = "cles-app-build-reload-v1";
 const appBuildVersionUrl = "app-version.json";
@@ -15,6 +26,7 @@ const hiddenGlobalHistoryStorageKey = "cles-hidden-global-history-v1";
 const deviceNameStorageKey = "cles-device-name-v1";
 const tileViewStorageKey = "cles-tile-view-mode-v1";
 const keyStatusFilterStorageKey = "cles-key-status-filter-v1";
+const tableSettingsStorageKey = "cles-table-settings-v1";
 const photoMaxSize = 560;
 const photoJpegQuality = 0.36;
 const photoMaxDataUrlLength = 260000;
@@ -81,6 +93,154 @@ function getRuntimeStorageKeys() {
     Object.keys(browserStorage || {}).forEach((key) => keys.add(key));
   } catch {}
   return [...keys];
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function removeDiacritics(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function createCategoryId(label = "Ligne") {
+  const slug =
+    removeDiacritics(label)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 24) || "ligne";
+  return `${slug}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`;
+}
+
+function createReplacementId() {
+  return `replacement-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`;
+}
+
+function getDefaultTableSettings() {
+  return {
+    categories: defaultCategoryLabels.map((label) => ({ id: label, label, aliases: [] })),
+    slotsPerCategory: defaultSlotsPerCategory,
+    addressReplacements: defaultAddressReplacements.map((item) => ({ ...item })),
+  };
+}
+
+function normalizeCategorySetting(category, index, usedIds) {
+  const fallbackLabel = defaultCategoryLabels[index] || `Ligne ${index + 1}`;
+  const rawLabel = typeof category === "string" ? category : category?.label;
+  const label = String(rawLabel || fallbackLabel).trim() || fallbackLabel;
+  const preferredDefaultId = defaultCategoryLabels.includes(label) ? label : "";
+  let id = String((typeof category === "object" && category?.id) || preferredDefaultId || "").trim();
+  if (!id || usedIds.has(id)) id = createCategoryId(label);
+  usedIds.add(id);
+  const aliases = Array.isArray(category?.aliases)
+    ? category.aliases.map((alias) => String(alias || "").trim()).filter(Boolean)
+    : [];
+  return { id, label, aliases: [...new Set(aliases.filter((alias) => alias !== label))] };
+}
+
+function normalizeAddressReplacement(item) {
+  const word = String(item?.word || item?.from || "").trim();
+  const replacement = String(item?.replacement || item?.to || "").trim();
+  if (!word || !replacement) return null;
+  return {
+    id: String(item?.id || createReplacementId()),
+    word,
+    replacement,
+  };
+}
+
+function normalizeTableSettings(value) {
+  const parsed = typeof value === "string" ? parseStorageValue(value) : value;
+  const fallback = getDefaultTableSettings();
+  const source = parsed && typeof parsed === "object" ? parsed : fallback;
+  const usedIds = new Set();
+  const rawCategories = Array.isArray(source.categories) ? source.categories : fallback.categories;
+  const categories = rawCategories
+    .slice(0, 16)
+    .map((category, index) => normalizeCategorySetting(category, index, usedIds))
+    .filter((category) => category.label);
+  const slotsPerCategory = Math.max(1, Math.min(60, Number.parseInt(source.slotsPerCategory, 10) || fallback.slotsPerCategory));
+  const addressReplacements =
+    (Array.isArray(source.addressReplacements) ? source.addressReplacements : fallback.addressReplacements)
+      .map(normalizeAddressReplacement)
+      .filter(Boolean);
+
+  return {
+    categories: categories.length ? categories : fallback.categories,
+    slotsPerCategory,
+    addressReplacements,
+  };
+}
+
+function loadTableSettings() {
+  return normalizeTableSettings(getRuntimeStorageValue(tableSettingsStorageKey));
+}
+
+function getTableCategories() {
+  return tableSettings?.categories?.length ? tableSettings.categories : getDefaultTableSettings().categories;
+}
+
+function getVisibleCategoryIds() {
+  return new Set(getTableCategories().map((category) => category.id));
+}
+
+function getSlotsPerCategory() {
+  return tableSettings?.slotsPerCategory || defaultSlotsPerCategory;
+}
+
+function getAddressReplacements() {
+  return tableSettings?.addressReplacements?.length ? tableSettings.addressReplacements : defaultAddressReplacements;
+}
+
+function getCategorySetting(categoryId) {
+  return getTableCategories().find((category) => category.id === categoryId || category.label === categoryId);
+}
+
+function getAllKnownCategorySettings() {
+  const known = new Map();
+  getDefaultTableSettings().categories.forEach((category) => known.set(category.id, category));
+  getTableCategories().forEach((category) => known.set(category.id, category));
+  return [...known.values()];
+}
+
+function getCategoryLabel(categoryId) {
+  return getCategorySetting(categoryId)?.label || categoryId;
+}
+
+function getCategoryAliases(category) {
+  return [...new Set([category.label, category.id, ...(category.aliases || [])].filter(Boolean))];
+}
+
+function getCategoryIdFromLabel(label) {
+  const normalizedLabel = String(label || "").trim().toLocaleLowerCase("fr-FR");
+  return (
+    getAllKnownCategorySettings().find((category) =>
+      getCategoryAliases(category).some((alias) => alias.toLocaleLowerCase("fr-FR") === normalizedLabel),
+    )?.id || ""
+  );
+}
+
+function parseKeyLabelFromTitle(title) {
+  const text = String(title || "").trim();
+  const candidates = getAllKnownCategorySettings()
+    .flatMap((category) => getCategoryAliases(category).map((alias) => ({ alias, id: category.id })))
+    .sort((first, second) => second.alias.length - first.alias.length);
+
+  for (const candidate of candidates) {
+    const match = text.match(new RegExp(`^(${escapeRegExp(candidate.alias)})\\s+#(\\d+)`, "iu"));
+    if (match) {
+      return {
+        id: `${candidate.id}-${Number(match[2])}`,
+        category: candidate.id,
+        number: Number(match[2]),
+        text: match[0],
+      };
+    }
+  }
+  return null;
 }
 
 function createSupabaseClient() {
@@ -311,6 +471,15 @@ const undoBtn = document.querySelector("#undoBtn");
 const historyDataBtn = document.querySelector("#historyDataBtn");
 const registryHistoryDataBtn = document.querySelector("#registryHistoryDataBtn");
 const registryHistoryDataLabel = document.querySelector("#registryHistoryDataLabel");
+const settingsDataBtn = document.querySelector("#settingsDataBtn");
+const settingsPanel = document.querySelector("#settingsPanel");
+const closeSettingsBtn = document.querySelector("#closeSettingsBtn");
+const settingsForm = document.querySelector("#settingsForm");
+const settingsRowCountInput = document.querySelector("#settingsRowCountInput");
+const settingsSlotsInput = document.querySelector("#settingsSlotsInput");
+const settingsCategoriesList = document.querySelector("#settingsCategoriesList");
+const settingsReplacementsList = document.querySelector("#settingsReplacementsList");
+const addSettingsReplacementBtn = document.querySelector("#addSettingsReplacementBtn");
 const globalHistoryPanel = document.querySelector("#globalHistoryPanel");
 const globalHistoryEyebrow = document.querySelector("#globalHistoryEyebrow");
 const globalHistoryTitle = document.querySelector("#globalHistoryTitle");
@@ -325,6 +494,8 @@ const savedBackupsList = document.querySelector("#savedBackupsList");
 const importDataBtn = document.querySelector("#importDataBtn");
 const backupFileInput = document.querySelector("#backupFileInput");
 
+let tableSettings = loadTableSettings();
+let settingsDraft = null;
 let activeRegistry = loadActiveRegistry();
 let keys = loadKeys();
 let archives = loadArchives();
@@ -707,6 +878,7 @@ function getBackupStorageKeys() {
     sharedContactsStorageKey,
     appActivityLogStorageKey,
     hiddenGlobalHistoryStorageKey,
+    tableSettingsStorageKey,
     registryConfig.location.keysStorageKey,
     registryConfig.location.archivesStorageKey,
     registryConfig.transaction.keysStorageKey,
@@ -1025,6 +1197,16 @@ function applyInitialCloudKeyStorageState(legacyKeyRows, slotRows, pendingStartu
       if (keepRecentLocalSlots && hasPendingCloudRowChange(slotCloudKey) && currentKey) return currentKey;
       const legacyKey = legacyKeysById.get(emptySlot.id);
       return legacyKey ? normalizeKey({ ...legacyKey, id: emptySlot.id }) : emptySlot;
+    });
+    const visibleLayoutIds = new Set(nextKeys.map((key) => key.id));
+    slotRowsById.forEach((slotRow, keyId) => {
+      if (!visibleLayoutIds.has(keyId)) {
+        nextKeys.push(normalizeCloudSlotKey(slotRow));
+        visibleLayoutIds.add(keyId);
+      }
+    });
+    legacyKeysById.forEach((legacyKey, keyId) => {
+      if (!visibleLayoutIds.has(keyId) && isKeyFilled(legacyKey)) nextKeys.push(normalizeKey(legacyKey));
     });
 
     setRuntimeStorageValue(storageKey, JSON.stringify(nextKeys));
@@ -1773,6 +1955,7 @@ async function loadStorageFromCloud(options = {}) {
         if (!pendingStartupKeys.has(row.key)) saveStorageValue(row.key, stringifyCloudValue(row.value));
         cloudRowVersions.set(row.key, row.updated_at || "");
       });
+      tableSettings = loadTableSettings();
       applyInitialCloudKeyStorageState(legacyKeyRows, slotRows, pendingStartupKeys);
       isApplyingCloudState = false;
       hasLoadedCloudState = true;
@@ -1902,6 +2085,7 @@ function undoPreviousStep() {
   const snapshot = undoSnapshot;
   undoSnapshot = null;
   restoreStorageSnapshot(snapshot);
+  tableSettings = loadTableSettings();
   activeRegistry = loadActiveRegistry();
   keys = loadKeys();
   archives = loadArchives();
@@ -1949,6 +2133,7 @@ function closeSidePanels() {
   archivesPanel.hidden = true;
   globalHistoryPanel.hidden = true;
   savedBackupsPanel.hidden = true;
+  if (settingsPanel) settingsPanel.hidden = true;
   clearTimeout(contactsCloseTimer);
   clearTimeout(archivesCloseTimer);
 }
@@ -1956,6 +2141,7 @@ function closeSidePanels() {
 function switchRegistry() {
   activeRegistry = activeRegistry === "location" ? "transaction" : "location";
   saveActiveRegistry();
+  tableSettings = loadTableSettings();
   keys = loadKeys();
   archives = loadArchives();
   contacts = loadContacts();
@@ -1973,10 +2159,10 @@ function switchRegistry() {
 }
 
 function makeInitialKeys() {
-  return categories.flatMap((category) =>
-    Array.from({ length: slotsPerCategory }, (_, index) => ({
-      id: `${category}-${index + 1}`,
-      category,
+  return getTableCategories().flatMap((category) =>
+    Array.from({ length: getSlotsPerCategory() }, (_, index) => ({
+      id: `${category.id}-${index + 1}`,
+      category: category.id,
       number: index + 1,
       property: "",
       postalCode: "",
@@ -1989,6 +2175,15 @@ function makeInitialKeys() {
       sets: [makeKeySet("main")],
     })),
   );
+}
+
+function mergeKeysWithCurrentLayout(savedKeys) {
+  const normalizedSavedKeys = Array.isArray(savedKeys) ? savedKeys.map(normalizeKey) : [];
+  const savedById = new Map(normalizedSavedKeys.map((key) => [key.id, key]));
+  const layoutKeys = makeInitialKeys().map((emptyKey) => savedById.get(emptyKey.id) || emptyKey);
+  const layoutIds = new Set(layoutKeys.map((key) => key.id));
+  const hiddenSavedKeys = normalizedSavedKeys.filter((key) => !layoutIds.has(key.id));
+  return [...layoutKeys, ...hiddenSavedKeys];
 }
 
 function makeEmptyKey(key) {
@@ -2091,7 +2286,7 @@ function normalizeKey(key) {
     id: key.id,
     category: key.category,
     number: key.number,
-    property: formatPropertyAddress(key.property || ""),
+    property: formatConfigurablePropertyAddress(key.property || ""),
     postalCode: key.postalCode || "",
     city: key.city || "",
     owner: key.owner || "",
@@ -2109,7 +2304,7 @@ function loadKeys() {
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed.map(normalizeKey) : makeInitialKeys();
+    return Array.isArray(parsed) ? mergeKeysWithCurrentLayout(parsed) : makeInitialKeys();
   } catch {
     return makeInitialKeys();
   }
@@ -2123,7 +2318,7 @@ function loadKeysForRegistry(registry) {
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed.map(normalizeKey) : makeInitialKeys();
+    return Array.isArray(parsed) ? mergeKeysWithCurrentLayout(parsed) : makeInitialKeys();
   } catch {
     return makeInitialKeys();
   }
@@ -2286,6 +2481,24 @@ function formatPropertyAddress(value) {
   });
 }
 
+function formatConfigurablePropertyAddress(value) {
+  let address = String(value || "").toLocaleLowerCase("fr-FR");
+  getAddressReplacements().forEach(({ word, replacement }) => {
+    const normalizedWord = String(word || "").trim();
+    const abbreviation = String(replacement || "").trim();
+    if (!normalizedWord || !abbreviation) return;
+    const variants = [...new Set([normalizedWord, removeDiacritics(normalizedWord)].map((item) => item.toLocaleLowerCase("fr-FR")))];
+    const pattern = variants.map(escapeRegExp).join("|");
+    address = address.replace(
+      new RegExp(`(^|[^\\p{L}])(?:${pattern})s?(?=$|[^\\p{L}])`, "giu"),
+      (match, prefix) => `${prefix}${abbreviation}`,
+    );
+  });
+  return address.replace(/(^|[\s'\-\u2019])(\p{L})/gu, (match, separator, letter) => {
+    return `${separator}${letter.toLocaleUpperCase("fr-FR")}`;
+  });
+}
+
 async function migrateStoredPropertyAddresses() {
   const changedStorageKeys = [];
 
@@ -2294,7 +2507,7 @@ async function migrateStoredPropertyAddresses() {
     const savedKeys = parseStoredArray(config.keysStorageKey, []);
     const formattedKeys = savedKeys.map((key) => ({
       ...key,
-      property: formatPropertyAddress(key.property || ""),
+      property: formatConfigurablePropertyAddress(key.property || ""),
     }));
     if (JSON.stringify(formattedKeys) !== JSON.stringify(savedKeys)) {
       const previousValue = getRuntimeStorageValue(config.keysStorageKey);
@@ -2308,7 +2521,7 @@ async function migrateStoredPropertyAddresses() {
     const formattedArchives = savedArchives.map((record) => ({
       ...record,
       key: record.key
-        ? { ...record.key, property: formatPropertyAddress(record.key.property || "") }
+        ? { ...record.key, property: formatConfigurablePropertyAddress(record.key.property || "") }
         : record.key,
     }));
     if (JSON.stringify(formattedArchives) !== JSON.stringify(savedArchives)) {
@@ -2577,13 +2790,14 @@ function toggleSelectedDetails() {
 }
 
 function keyLabel(key) {
-  return `${key.category} #${key.number}`;
+  return `${getCategoryLabel(key.category)} #${key.number}`;
 }
 
 function tilePrefix(key) {
-  if (key.category === "Maison") return "M";
-  if (key.category === "Autre") return "A";
-  return key.category;
+  const label = getCategoryLabel(key.category);
+  if (label === "Maison") return "M";
+  if (label === "Autre") return "A";
+  return label;
 }
 
 function tileLabel(key) {
@@ -2838,7 +3052,7 @@ async function transferSelectedKeyToOtherRegistry() {
   const targetKey = targetKeys.find((key) => key.category === sourceKey.category && !isKeyFilled(key));
 
   if (!targetKey) {
-    alert(`Aucun emplacement disponible dans les ${sourceKey.category} du tableau ${targetConfig.title}.`);
+    alert(`Aucun emplacement disponible dans les ${getCategoryLabel(sourceKey.category)} du tableau ${targetConfig.title}.`);
     return;
   }
 
@@ -2966,7 +3180,7 @@ function isProtectedKeyInfoInputActive() {
 
 function getKeyInfoDraftChanges() {
   return {
-    property: formatPropertyAddress(propertyInput.value),
+    property: formatConfigurablePropertyAddress(propertyInput.value),
     postalCode: postalCodeInput.value,
     city: formatCity(cityInput.value),
     owner: formatOwner(ownerInput.value),
@@ -3661,6 +3875,7 @@ async function ensureMissedAutomaticBackupOnOpen() {
 function refreshDataFromStorage({ keepSelection = false } = {}) {
   const previousSelectedId = selectedId;
   const previousSelectedSetId = selectedSetId;
+  tableSettings = loadTableSettings();
   activeRegistry = loadActiveRegistry();
   keys = loadKeys();
   archives = loadArchives();
@@ -3816,9 +4031,7 @@ function getGlobalHistoryEntryId(entry) {
 }
 
 function getKeyIdFromHistoryTitle(title) {
-  const match = String(title || "").match(/^(T[1-3]|T4\+|Maison|Autre)\s+#(\d+)/);
-  if (!match) return "";
-  return `${match[1]}-${Number(match[2])}`;
+  return parseKeyLabelFromTitle(title)?.id || "";
 }
 
 function activateRegistry(registry) {
@@ -3929,7 +4142,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   };
   const isSetCountDetail = (value) => /^\d+\s+jeux?\s+au total$/i.test(String(value || "").trim());
   const getActivityRegistryLabel = (entry) => (entry.registry === "transaction" ? "Transaction" : "Location");
-  const getTitleKeyLabel = (title) => String(title || "").match(/^(T[1-3]|T4\+|Maison|Autre)\s+#\d+/)?.[0] || "";
+  const getTitleKeyLabel = (title) => parseKeyLabelFromTitle(title)?.text || "";
   const titleHasOwner = (title) => {
     const parts = String(title || "").split(" - ").map((part) => part.trim()).filter(Boolean);
     return Boolean(getTitleKeyLabel(parts[0]) && parts[2] && !/^jeu\s+\d+$/i.test(parts[2]));
@@ -4391,6 +4604,7 @@ function openGlobalHistoryPanel(registryFilter = "") {
   archivesPanel.hidden = true;
   compromisesPanel.hidden = true;
   savedBackupsPanel.hidden = true;
+  if (settingsPanel) settingsPanel.hidden = true;
   globalHistoryPanel.hidden = false;
   renderGlobalHistoryPanel(registryFilter);
 }
@@ -4573,6 +4787,199 @@ async function renderSavedBackupsPanel() {
   }
 }
 
+function cloneTableSettings(settings = tableSettings) {
+  return normalizeTableSettings(JSON.parse(JSON.stringify(settings || getDefaultTableSettings())));
+}
+
+function updateSettingsDraftFromDom() {
+  if (!settingsDraft) return;
+
+  const previousCategories = settingsDraft.categories || [];
+  const categoryItems = settingsCategoriesList ? [...settingsCategoriesList.querySelectorAll("[data-settings-category-index]")] : [];
+  if (categoryItems.length) {
+    settingsDraft.categories = categoryItems.map((item, index) => {
+      const previous = previousCategories[Number(item.dataset.settingsCategoryIndex)] || {};
+      const input = item.querySelector("[data-settings-category-label]");
+      const label = input?.value.trim() || defaultCategoryLabels[index] || `Ligne ${index + 1}`;
+      return { ...previous, label };
+    });
+  }
+
+  if (settingsSlotsInput) {
+    settingsDraft.slotsPerCategory = Number.parseInt(settingsSlotsInput.value, 10) || defaultSlotsPerCategory;
+  }
+
+  const replacementItems = settingsReplacementsList ? [...settingsReplacementsList.querySelectorAll("[data-settings-replacement-index]")] : [];
+  settingsDraft.addressReplacements = replacementItems.map((item) => {
+    const previous = settingsDraft.addressReplacements?.[Number(item.dataset.settingsReplacementIndex)] || {};
+    return {
+      ...previous,
+      word: item.querySelector("[data-settings-replacement-word]")?.value.trim() || "",
+      replacement: item.querySelector("[data-settings-replacement-value]")?.value.trim() || "",
+    };
+  });
+}
+
+function setSettingsDraftRowCount(rowCount) {
+  if (!settingsDraft) settingsDraft = cloneTableSettings();
+  const safeRowCount = Math.max(1, Math.min(12, Number.parseInt(rowCount, 10) || defaultCategoryLabels.length));
+  const nextCategories = [...settingsDraft.categories];
+
+  while (nextCategories.length < safeRowCount) {
+    const usedIds = new Set(nextCategories.map((category) => category.id));
+    const label = defaultCategoryLabels[nextCategories.length] || `Ligne ${nextCategories.length + 1}`;
+    const id = defaultCategoryLabels.includes(label) && !usedIds.has(label) ? label : createCategoryId(label);
+    nextCategories.push({ id, label, aliases: [] });
+  }
+
+  settingsDraft.categories = nextCategories.slice(0, safeRowCount);
+}
+
+function createSettingsCategoryRow(category, index) {
+  const item = document.createElement("li");
+  const indexBadge = document.createElement("span");
+  const label = document.createElement("label");
+  const input = document.createElement("input");
+  const removeButton = document.createElement("button");
+
+  item.className = "settings-row";
+  item.dataset.settingsCategoryIndex = String(index);
+  indexBadge.className = "settings-row-index";
+  indexBadge.textContent = String(index + 1);
+  label.textContent = "Nom de la ligne";
+  input.type = "text";
+  input.value = category.label;
+  input.dataset.settingsCategoryLabel = "true";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  removeButton.type = "button";
+  removeButton.className = "settings-remove-button";
+  removeButton.textContent = "Supprimer";
+  removeButton.disabled = settingsDraft.categories.length <= 1;
+  removeButton.addEventListener("click", () => {
+    updateSettingsDraftFromDom();
+    settingsDraft.categories.splice(index, 1);
+    if (settingsRowCountInput) settingsRowCountInput.value = String(settingsDraft.categories.length);
+    renderSettingsPanel();
+  });
+
+  label.append(input);
+  item.append(indexBadge, label, removeButton);
+  return item;
+}
+
+function createSettingsReplacementRow(replacement, index) {
+  const item = document.createElement("li");
+  const wordLabel = document.createElement("label");
+  const wordInput = document.createElement("input");
+  const replacementLabel = document.createElement("label");
+  const replacementInput = document.createElement("input");
+  const removeButton = document.createElement("button");
+
+  item.className = "settings-replacement-row";
+  item.dataset.settingsReplacementIndex = String(index);
+  wordLabel.textContent = "Mot";
+  wordInput.type = "text";
+  wordInput.value = replacement.word || "";
+  wordInput.placeholder = "Chemin";
+  wordInput.dataset.settingsReplacementWord = "true";
+  wordInput.autocomplete = "off";
+  wordInput.spellcheck = false;
+  replacementLabel.textContent = "Remplacement";
+  replacementInput.type = "text";
+  replacementInput.value = replacement.replacement || "";
+  replacementInput.placeholder = "Ch.";
+  replacementInput.dataset.settingsReplacementValue = "true";
+  replacementInput.autocomplete = "off";
+  replacementInput.spellcheck = false;
+  removeButton.type = "button";
+  removeButton.className = "settings-remove-button";
+  removeButton.textContent = "Supprimer";
+  removeButton.addEventListener("click", () => {
+    updateSettingsDraftFromDom();
+    settingsDraft.addressReplacements.splice(index, 1);
+    renderSettingsPanel();
+  });
+
+  wordLabel.append(wordInput);
+  replacementLabel.append(replacementInput);
+  item.append(wordLabel, replacementLabel, removeButton);
+  return item;
+}
+
+function renderSettingsPanel() {
+  if (!settingsPanel || !settingsForm) return;
+  if (!settingsDraft) settingsDraft = cloneTableSettings();
+
+  if (settingsRowCountInput) settingsRowCountInput.value = String(settingsDraft.categories.length);
+  if (settingsSlotsInput) settingsSlotsInput.value = String(settingsDraft.slotsPerCategory || defaultSlotsPerCategory);
+
+  if (settingsCategoriesList) {
+    settingsCategoriesList.innerHTML = "";
+    settingsDraft.categories.forEach((category, index) => {
+      settingsCategoriesList.append(createSettingsCategoryRow(category, index));
+    });
+  }
+
+  if (settingsReplacementsList) {
+    settingsReplacementsList.innerHTML = "";
+    const replacements = settingsDraft.addressReplacements?.length
+      ? settingsDraft.addressReplacements
+      : [{ id: createReplacementId(), word: "", replacement: "" }];
+    replacements.forEach((replacement, index) => {
+      settingsReplacementsList.append(createSettingsReplacementRow(replacement, index));
+    });
+  }
+}
+
+function saveTableSettings(nextSettings) {
+  const previousSettings = tableSettings || getDefaultTableSettings();
+  const normalized = normalizeTableSettings(nextSettings);
+  normalized.categories = normalized.categories.map((category) => {
+    const previousCategory = previousSettings.categories?.find((item) => item.id === category.id);
+    const aliases = new Set(category.aliases || []);
+    if (previousCategory?.label && previousCategory.label !== category.label) aliases.add(previousCategory.label);
+    return {
+      ...category,
+      aliases: [...aliases].filter((alias) => alias !== category.label),
+    };
+  });
+
+  const previousValue = getRuntimeStorageValue(tableSettingsStorageKey);
+  const nextValue = JSON.stringify(normalized);
+  if (previousValue === nextValue) return false;
+
+  rememberUndoStep();
+  markLocalEdit();
+  setRuntimeStorageValue(tableSettingsStorageKey, nextValue);
+  dirtyCloudKeys.add(tableSettingsStorageKey);
+  savePendingCloudKeys();
+  scheduleStorageKeySync(tableSettingsStorageKey, 0);
+  tableSettings = normalized;
+  keys = loadKeys();
+  archives = loadArchives();
+  return true;
+}
+
+function openSettingsPanel() {
+  clearTimeout(contactsCloseTimer);
+  clearTimeout(archivesCloseTimer);
+  contactsPanel.hidden = true;
+  archivesPanel.hidden = true;
+  compromisesPanel.hidden = true;
+  globalHistoryPanel.hidden = true;
+  savedBackupsPanel.hidden = true;
+  detailPanel.hidden = true;
+  settingsDraft = cloneTableSettings();
+  settingsPanel.hidden = false;
+  renderSettingsPanel();
+}
+
+function closeSettingsPanel() {
+  if (settingsPanel) settingsPanel.hidden = true;
+  settingsDraft = null;
+}
+
 function openSavedBackupsPanel() {
   clearTimeout(contactsCloseTimer);
   clearTimeout(archivesCloseTimer);
@@ -4580,6 +4987,7 @@ function openSavedBackupsPanel() {
   archivesPanel.hidden = true;
   compromisesPanel.hidden = true;
   globalHistoryPanel.hidden = true;
+  if (settingsPanel) settingsPanel.hidden = true;
   savedBackupsPanel.hidden = false;
   renderSavedBackupsPanel();
 }
@@ -5043,19 +5451,19 @@ function renderGrid() {
   grid.innerHTML = "";
   updateKeyStatusFilterBar();
 
-  categories.forEach((category) => {
+  getTableCategories().forEach((category) => {
     const row = document.createElement("section");
     row.className = "category-row";
 
     const title = document.createElement("div");
     title.className = "category-title";
-    title.textContent = category;
+    title.textContent = category.label;
 
     const keyRow = document.createElement("div");
     keyRow.className = "key-row";
 
     const visibleKeys = keys
-      .filter((key) => key.category === category)
+      .filter((key) => key.category === category.id && key.number <= getSlotsPerCategory())
       .filter(matchesFilter);
 
     visibleKeys.forEach((key) => {
@@ -6679,6 +7087,7 @@ function openContactsPanel() {
   archivesPanel.hidden = true;
   globalHistoryPanel.hidden = true;
   savedBackupsPanel.hidden = true;
+  if (settingsPanel) settingsPanel.hidden = true;
   contactsPanel.hidden = false;
   renderContactsPanel();
 }
@@ -6690,6 +7099,7 @@ function openCompromisesPanel() {
   archivesPanel.hidden = true;
   globalHistoryPanel.hidden = true;
   savedBackupsPanel.hidden = true;
+  if (settingsPanel) settingsPanel.hidden = true;
   compromisesPanel.hidden = false;
   renderCompromisesPanel();
 }
@@ -6701,6 +7111,7 @@ function openArchivesPanel() {
   compromisesPanel.hidden = true;
   globalHistoryPanel.hidden = true;
   savedBackupsPanel.hidden = true;
+  if (settingsPanel) settingsPanel.hidden = true;
   archivesPanel.hidden = false;
   renderArchivesPanel();
 }
@@ -6791,7 +7202,7 @@ propertyInput.addEventListener(
   debounce(updateSelectedKeyInfoFromDraft),
 );
 propertyInput.addEventListener("blur", () => {
-  propertyInput.value = formatPropertyAddress(propertyInput.value);
+  propertyInput.value = formatConfigurablePropertyAddress(propertyInput.value);
   updateSelectedKeyInfoFromDraft();
 });
 postalCodeInput.addEventListener("input", debounce(updateSelectedKeyInfoFromDraft));
@@ -7093,6 +7504,38 @@ closeGlobalHistoryBtn.addEventListener("click", () => {
 });
 exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
 backupDataBtn.addEventListener("click", exportAllDataBackup);
+settingsDataBtn?.addEventListener("click", openSettingsPanel);
+closeSettingsBtn?.addEventListener("click", closeSettingsPanel);
+settingsRowCountInput?.addEventListener("change", () => {
+  updateSettingsDraftFromDom();
+  setSettingsDraftRowCount(settingsRowCountInput.value);
+  renderSettingsPanel();
+});
+settingsSlotsInput?.addEventListener("blur", () => {
+  const slots = Math.max(1, Math.min(60, Number.parseInt(settingsSlotsInput.value, 10) || defaultSlotsPerCategory));
+  settingsSlotsInput.value = String(slots);
+});
+addSettingsReplacementBtn?.addEventListener("click", () => {
+  if (!settingsDraft) settingsDraft = cloneTableSettings();
+  updateSettingsDraftFromDom();
+  settingsDraft.addressReplacements.push({ id: createReplacementId(), word: "", replacement: "" });
+  renderSettingsPanel();
+});
+settingsForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  updateSettingsDraftFromDom();
+  const saved = saveTableSettings(settingsDraft);
+  if (saved) {
+    logActivity(
+      "Modification r\u00e9glages",
+      "Tableau",
+      `${getTableCategories().length} lignes - ${getSlotsPerCategory()} cases par ligne`,
+    );
+  }
+  closeSettingsPanel();
+  render();
+  if (saved) await syncCloudAfterAction();
+});
 savedBackupsBtn.addEventListener("click", (event) => {
   if (!event.ctrlKey || !event.shiftKey) {
     return;

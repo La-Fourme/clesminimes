@@ -12,7 +12,7 @@
     <title>CENTURY 21 LES MINIMES - TABLEAUX DE GESTION DES CL&Eacute;S</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20260713" />
     <link rel="shortcut icon" href="favicon.svg?v=20260713" />
-    <link rel="stylesheet" href="styles.css?v=20260829-6" />
+    <link rel="stylesheet" href="styles.css?v=20260830-1" />
   </head>
   <body>
     <div id="saleCelebration" class="sale-celebration" aria-live="polite" hidden>
@@ -117,6 +117,10 @@
             <span class="backup-panel-title">Données</span>
             <span class="backup-panel-subtitle">Sauvegarde complète et exports du registre</span>
           </div>
+          <button id="settingsDataBtn" class="settings-data-button icon-button" type="button">
+            <span aria-hidden="true">⚙</span>
+            RÉGLAGES
+          </button>
           <div class="backup-actions">
             <button id="historyDataBtn" class="history-data-button icon-button" type="button">
               <svg class="history-button-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -349,6 +353,43 @@
         <ol id="savedBackupsList" class="global-history-list saved-backups-list"></ol>
       </aside>
 
+      <aside id="settingsPanel" class="global-history-panel settings-panel" aria-label="Réglages" hidden>
+        <form id="settingsForm" class="settings-form">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Tableau</p>
+              <h2>RÉGLAGES</h2>
+            </div>
+            <button id="closeSettingsBtn" class="close-button" type="button" aria-label="Fermer les réglages">x</button>
+          </div>
+
+          <section class="settings-section">
+            <h3>Organisation du tableau</h3>
+            <div class="settings-grid">
+              <label>
+                Nombre de lignes
+                <input id="settingsRowCountInput" type="number" min="1" max="12" step="1" />
+              </label>
+              <label>
+                Cases par ligne
+                <input id="settingsSlotsInput" type="number" min="1" max="60" step="1" />
+              </label>
+            </div>
+            <ol id="settingsCategoriesList" class="settings-list settings-categories-list"></ol>
+          </section>
+
+          <section class="settings-section">
+            <div class="settings-section-heading">
+              <h3>Mots remplacés</h3>
+              <button id="addSettingsReplacementBtn" class="settings-secondary-button" type="button">Ajouter</button>
+            </div>
+            <ol id="settingsReplacementsList" class="settings-list settings-replacements-list"></ol>
+          </section>
+
+          <button class="settings-save-button" type="submit">Enregistrer les réglages</button>
+        </form>
+      </aside>
+
       <aside id="compromisesPanel" class="archives-panel" aria-label="Compromis" hidden>
         <div class="panel-header">
           <div>
@@ -392,7 +433,7 @@
 
     <script>
       (() => {
-        const fallbackVersion = "20260829-6";
+        const fallbackVersion = "20260830-1";
         const loadApp = (version) => {
           const script = document.createElement("script");
           script.src = `app.js?v=${encodeURIComponent(version || fallbackVersion)}&t=${Date.now()}`;
