@@ -12,7 +12,7 @@
     <title>CENTURY 21 LES MINIMES - TABLEAUX DE GESTION DES CL&Eacute;S</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20260713" />
     <link rel="shortcut icon" href="favicon.svg?v=20260713" />
-    <link rel="stylesheet" href="styles.css?v=20260830-6" />
+    <link rel="stylesheet" href="styles.css?v=20260830-7" />
   </head>
   <body>
     <div id="saleCelebration" class="sale-celebration" aria-live="polite" hidden>
@@ -113,14 +113,12 @@
 
         <section id="keyGrid" class="key-grid" aria-label="Jeux de cles"></section>
         <div class="backup-panel-row">
-        <section class="backup-panel backup-info-panel" aria-label="Sauvegarde et export des données">
-          <div>
-            <span class="backup-panel-title">Données</span>
-            <span class="backup-panel-subtitle">Sauvegarde complète et exports du registre</span>
-          </div>
-        </section>
-          <section class="backup-panel backup-actions-panel" aria-label="Actions de sauvegarde et export">
-          <div class="backup-actions">
+          <section class="backup-panel backup-main-panel" aria-label="Sauvegarde et export des données">
+            <div class="backup-info-panel">
+              <span class="backup-panel-title">Données</span>
+              <span class="backup-panel-subtitle">Sauvegarde complète et exports du registre</span>
+            </div>
+            <div class="backup-actions">
             <button id="historyDataBtn" class="history-data-button icon-button" type="button">
               <svg class="history-button-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 7v5h5"></path>
@@ -153,7 +151,7 @@
               <span aria-hidden="true">↓</span>
               Importer sauvegarde
             </button>
-          </div>
+            </div>
           </section>
           <button id="settingsDataBtn" class="settings-data-button icon-button" type="button">
             <span aria-hidden="true">⚙</span>

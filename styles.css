@@ -650,10 +650,11 @@ h3 {
 }
 
 .backup-panel-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  align-items: stretch;
   gap: 8px;
+  width: 100%;
   margin-top: 18px;
 }
 
@@ -669,15 +670,15 @@ h3 {
   box-shadow: var(--soft-shadow);
 }
 
-.backup-info-panel {
-  flex: 0 0 auto;
-  min-width: 270px;
+.backup-main-panel {
+  display: grid;
+  grid-template-columns: minmax(240px, auto) minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
 }
 
-.backup-actions-panel {
-  flex: 0 1 auto;
-  justify-content: flex-start;
-  min-width: 0;
+.backup-info-panel {
+  min-width: 270px;
 }
 
 .backup-panel-title,
@@ -702,6 +703,7 @@ h3 {
 .backup-actions {
   display: grid;
   grid-template-columns: repeat(6, auto);
+  justify-content: end;
   gap: 7px;
   margin-left: 0;
 }
@@ -746,10 +748,11 @@ h3 {
 }
 
 .settings-data-button {
-  flex: 0 0 auto;
-  align-self: center;
-  min-height: 34px;
-  min-width: 132px;
+  align-self: stretch;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
   padding: 0 14px;
   color: var(--ink);
   background: #d8dcd8;
@@ -2918,13 +2921,11 @@ body.is-moving-key .photo-hover {
   }
 
   .backup-panel-row,
-  .backup-panel {
-    align-items: stretch;
-    flex-direction: column;
+  .backup-main-panel {
+    grid-template-columns: 1fr;
   }
 
-  .backup-info-panel,
-  .backup-actions-panel {
+  .backup-info-panel {
     width: 100%;
     min-width: 0;
   }
