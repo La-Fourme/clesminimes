@@ -4574,7 +4574,8 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     const isInlineDetailAction =
       normalizedEntryAction.includes("transfert") ||
       normalizedEntryAction.includes("ajout jeu") ||
-      normalizedEntryAction.includes("creation jeu");
+      normalizedEntryAction.includes("creation jeu") ||
+      normalizedEntryAction.includes("modification reglages");
     const isRegisteredAction = String(entry.actor || "").toLocaleLowerCase("fr-FR") === "action enregistr\u00e9e";
     const fallbackActorParts =
       isRegisteredAction && ["in", "out", "signed", "removed"].includes(actionClass)
