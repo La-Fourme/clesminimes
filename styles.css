@@ -2856,6 +2856,15 @@ body.is-moving-key .photo-hover {
     width: 100%;
   }
 
+  .backup-panel-row {
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 24%);
+  }
+
+  .settings-data-button {
+    min-width: 180px;
+    padding-inline: 20px;
+  }
+
   .topbar {
     grid-template-columns: 1fr;
     align-items: stretch;
@@ -2954,6 +2963,10 @@ body.is-moving-key .photo-hover {
   .backup-panel-row,
   .backup-main-panel {
     grid-template-columns: 1fr;
+  }
+
+  .settings-data-button {
+    min-width: 0;
   }
 
   .backup-info-panel {
