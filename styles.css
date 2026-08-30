@@ -757,7 +757,9 @@ h3 {
   color: var(--ink);
   background: #d8dcd8;
   border-color: var(--line);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .history-data-button .history-data-label {
