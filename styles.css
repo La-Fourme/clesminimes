@@ -240,7 +240,7 @@ button {
 .topbar {
   display: grid;
   grid-template-columns: 330px minmax(0, 1fr) 260px;
-  align-items: start;
+  align-items: center;
   column-gap: 24px;
 }
 
@@ -341,6 +341,7 @@ h3 {
 
 .top-actions {
   display: flex;
+  align-self: center;
   justify-self: end;
   justify-content: flex-end;
   gap: 10px;
@@ -442,7 +443,7 @@ h3 {
 
 .filters {
   display: grid;
-  grid-template-columns: auto auto minmax(220px, 1fr) minmax(360px, 448px) auto;
+  grid-template-columns: minmax(360px, 448px) auto auto minmax(220px, 1fr) auto;
   column-gap: 6px;
   margin: 12px 0 18px;
   align-items: end;
