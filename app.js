@@ -1,4 +1,12 @@
 const defaultCategoryLabels = ["T1", "T2", "T3", "T4+", "Maison", "Autre"];
+const defaultCategoryPrefixes = {
+  T1: "T1",
+  T2: "T2",
+  T3: "T3",
+  "T4+": "T4+",
+  Maison: "M",
+  Autre: "A",
+};
 const defaultSlotsPerCategory = 20;
 const defaultAddressReplacements = [
   { id: "avenue", word: "Avenue", replacement: "Av." },
@@ -15,7 +23,7 @@ const supabaseUrl = "https://ivwvrtnbzvsxrsmqkrff.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2d3ZydG5ienZzeHJzbXFrcmZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMjM3MjUsImV4cCI6MjA5ODc5OTcyNX0.-vxDlYB1L6t-NZnjEdrJXbpbQn1n-s3XCA--CEqcK-w";
 const supabaseClient = createSupabaseClient();
-const appBuildVersion = "20260830-1";
+const appBuildVersion = "20260830-2";
 const appBuildVersionStorageKey = "cles-app-build-version-v1";
 const appBuildReloadStorageKey = "cles-app-build-reload-v1";
 const appBuildVersionUrl = "app-version.json";
@@ -121,10 +129,21 @@ function createReplacementId() {
 
 function getDefaultTableSettings() {
   return {
-    categories: defaultCategoryLabels.map((label) => ({ id: label, label, aliases: [] })),
+    categories: defaultCategoryLabels.map((label) => ({
+      id: label,
+      label,
+      prefix: defaultCategoryPrefixes[label] || label,
+      aliases: [],
+    })),
     slotsPerCategory: defaultSlotsPerCategory,
     addressReplacements: defaultAddressReplacements.map((item) => ({ ...item })),
   };
+}
+
+function sortAddressReplacements(replacements) {
+  return [...replacements].sort((first, second) =>
+    first.word.localeCompare(second.word, "fr", { sensitivity: "base" }),
+  );
 }
 
 function normalizeCategorySetting(category, index, usedIds) {
@@ -135,10 +154,13 @@ function normalizeCategorySetting(category, index, usedIds) {
   let id = String((typeof category === "object" && category?.id) || preferredDefaultId || "").trim();
   if (!id || usedIds.has(id)) id = createCategoryId(label);
   usedIds.add(id);
+  const prefix = String(
+    (typeof category === "object" && category?.prefix) || defaultCategoryPrefixes[label] || label,
+  ).trim() || label;
   const aliases = Array.isArray(category?.aliases)
     ? category.aliases.map((alias) => String(alias || "").trim()).filter(Boolean)
     : [];
-  return { id, label, aliases: [...new Set(aliases.filter((alias) => alias !== label))] };
+  return { id, label, prefix, aliases: [...new Set(aliases.filter((alias) => alias !== label && alias !== prefix))] };
 }
 
 function normalizeAddressReplacement(item) {
@@ -164,9 +186,9 @@ function normalizeTableSettings(value) {
     .filter((category) => category.label);
   const slotsPerCategory = Math.max(1, Math.min(60, Number.parseInt(source.slotsPerCategory, 10) || fallback.slotsPerCategory));
   const addressReplacements =
-    (Array.isArray(source.addressReplacements) ? source.addressReplacements : fallback.addressReplacements)
+    sortAddressReplacements((Array.isArray(source.addressReplacements) ? source.addressReplacements : fallback.addressReplacements)
       .map(normalizeAddressReplacement)
-      .filter(Boolean);
+      .filter(Boolean));
 
   return {
     categories: categories.length ? categories : fallback.categories,
@@ -210,8 +232,13 @@ function getCategoryLabel(categoryId) {
   return getCategorySetting(categoryId)?.label || categoryId;
 }
 
+function getCategoryCasePrefix(categoryId) {
+  const category = getCategorySetting(categoryId);
+  return category?.prefix || category?.label || categoryId;
+}
+
 function getCategoryAliases(category) {
-  return [...new Set([category.label, category.id, ...(category.aliases || [])].filter(Boolean))];
+  return [...new Set([category.prefix, category.label, category.id, ...(category.aliases || [])].filter(Boolean))];
 }
 
 function getCategoryIdFromLabel(label) {
@@ -2790,18 +2817,21 @@ function toggleSelectedDetails() {
 }
 
 function keyLabel(key) {
-  return `${getCategoryLabel(key.category)} #${key.number}`;
+  return `${getCategoryCasePrefix(key.category)} #${key.number}`;
 }
 
 function tilePrefix(key) {
-  const label = getCategoryLabel(key.category);
-  if (label === "Maison") return "M";
-  if (label === "Autre") return "A";
-  return label;
+  return getCategoryCasePrefix(key.category);
 }
 
 function tileLabel(key) {
   return `${tilePrefix(key)} #${key.number}`;
+}
+
+function keyLabelVariants(key) {
+  const category = getCategorySetting(key.category);
+  if (!category) return [keyLabel(key)];
+  return getCategoryAliases(category).map((alias) => `${alias} #${key.number}`);
 }
 
 function isValidPhoto(photo) {
@@ -4110,7 +4140,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
       const registryKeys = parseStoredArray(config.keysStorageKey, makeInitialKeys()).map(normalizeKey);
       return [
         registry,
-        new Map(registryKeys.map((key) => [keyLabel(key), key])),
+        new Map(registryKeys.flatMap((key) => keyLabelVariants(key).map((label) => [label, key]))),
       ];
     }),
   );
@@ -4124,7 +4154,7 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
         new Map(
           [...archivedKeys, ...registryKeys]
             .filter((key) => key.owner)
-            .map((key) => [keyLabel(key), formatOwner(key.owner)]),
+            .flatMap((key) => keyLabelVariants(key).map((label) => [label, formatOwner(key.owner)])),
         ),
       ];
     }),
@@ -4799,9 +4829,11 @@ function updateSettingsDraftFromDom() {
   if (categoryItems.length) {
     settingsDraft.categories = categoryItems.map((item, index) => {
       const previous = previousCategories[Number(item.dataset.settingsCategoryIndex)] || {};
-      const input = item.querySelector("[data-settings-category-label]");
-      const label = input?.value.trim() || defaultCategoryLabels[index] || `Ligne ${index + 1}`;
-      return { ...previous, label };
+      const labelInput = item.querySelector("[data-settings-category-label]");
+      const prefixInput = item.querySelector("[data-settings-category-prefix]");
+      const label = labelInput?.value.trim() || defaultCategoryLabels[index] || `Ligne ${index + 1}`;
+      const prefix = prefixInput?.value.trim() || defaultCategoryPrefixes[label] || label;
+      return { ...previous, label, prefix };
     });
   }
 
@@ -4829,7 +4861,7 @@ function setSettingsDraftRowCount(rowCount) {
     const usedIds = new Set(nextCategories.map((category) => category.id));
     const label = defaultCategoryLabels[nextCategories.length] || `Ligne ${nextCategories.length + 1}`;
     const id = defaultCategoryLabels.includes(label) && !usedIds.has(label) ? label : createCategoryId(label);
-    nextCategories.push({ id, label, aliases: [] });
+    nextCategories.push({ id, label, prefix: defaultCategoryPrefixes[label] || label, aliases: [] });
   }
 
   settingsDraft.categories = nextCategories.slice(0, safeRowCount);
@@ -4838,20 +4870,29 @@ function setSettingsDraftRowCount(rowCount) {
 function createSettingsCategoryRow(category, index) {
   const item = document.createElement("li");
   const indexBadge = document.createElement("span");
-  const label = document.createElement("label");
-  const input = document.createElement("input");
+  const nameLabel = document.createElement("label");
+  const nameInput = document.createElement("input");
+  const prefixLabel = document.createElement("label");
+  const prefixInput = document.createElement("input");
   const removeButton = document.createElement("button");
 
   item.className = "settings-row";
   item.dataset.settingsCategoryIndex = String(index);
   indexBadge.className = "settings-row-index";
   indexBadge.textContent = String(index + 1);
-  label.textContent = "Nom de la ligne";
-  input.type = "text";
-  input.value = category.label;
-  input.dataset.settingsCategoryLabel = "true";
-  input.autocomplete = "off";
-  input.spellcheck = false;
+  nameLabel.textContent = "Nom de la ligne";
+  nameInput.type = "text";
+  nameInput.value = category.label;
+  nameInput.dataset.settingsCategoryLabel = "true";
+  nameInput.autocomplete = "off";
+  nameInput.spellcheck = false;
+  prefixLabel.textContent = "Préfixe des cases";
+  prefixInput.type = "text";
+  prefixInput.value = category.prefix || category.label;
+  prefixInput.placeholder = "M";
+  prefixInput.dataset.settingsCategoryPrefix = "true";
+  prefixInput.autocomplete = "off";
+  prefixInput.spellcheck = false;
   removeButton.type = "button";
   removeButton.className = "settings-remove-button";
   removeButton.textContent = "Supprimer";
@@ -4863,8 +4904,9 @@ function createSettingsCategoryRow(category, index) {
     renderSettingsPanel();
   });
 
-  label.append(input);
-  item.append(indexBadge, label, removeButton);
+  nameLabel.append(nameInput);
+  prefixLabel.append(prefixInput);
+  item.append(indexBadge, nameLabel, prefixLabel, removeButton);
   return item;
 }
 
@@ -4924,8 +4966,9 @@ function renderSettingsPanel() {
   if (settingsReplacementsList) {
     settingsReplacementsList.innerHTML = "";
     const replacements = settingsDraft.addressReplacements?.length
-      ? settingsDraft.addressReplacements
+      ? sortAddressReplacements(settingsDraft.addressReplacements)
       : [{ id: createReplacementId(), word: "", replacement: "" }];
+    settingsDraft.addressReplacements = replacements;
     replacements.forEach((replacement, index) => {
       settingsReplacementsList.append(createSettingsReplacementRow(replacement, index));
     });
@@ -4939,9 +4982,10 @@ function saveTableSettings(nextSettings) {
     const previousCategory = previousSettings.categories?.find((item) => item.id === category.id);
     const aliases = new Set(category.aliases || []);
     if (previousCategory?.label && previousCategory.label !== category.label) aliases.add(previousCategory.label);
+    if (previousCategory?.prefix && previousCategory.prefix !== category.prefix) aliases.add(previousCategory.prefix);
     return {
       ...category,
-      aliases: [...aliases].filter((alias) => alias !== category.label),
+      aliases: [...aliases].filter((alias) => alias !== category.label && alias !== category.prefix),
     };
   });
 

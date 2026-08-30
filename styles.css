@@ -925,7 +925,7 @@ h3 {
 }
 
 .settings-row {
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(96px, 0.42fr) auto;
 }
 
 .settings-replacement-row {
