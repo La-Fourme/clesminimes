@@ -5047,6 +5047,13 @@ function updateImportButtonAvailability(event = {}) {
   savedBackupsBtn.setAttribute("aria-disabled", String(!isSavedBackupsUnlocked));
 }
 
+function updateSettingsButtonAvailability(event = {}) {
+  if (!settingsDataBtn) return;
+  const isUnlocked = Boolean(event.ctrlKey && event.altKey && settingsDataBtn.matches(":hover"));
+  settingsDataBtn.classList.toggle("is-unlocked", isUnlocked);
+  settingsDataBtn.setAttribute("aria-disabled", String(!isUnlocked));
+}
+
 function importAllDataBackup(file) {
   const reader = new FileReader();
   reader.addEventListener("load", () => {
@@ -7549,7 +7556,12 @@ closeGlobalHistoryBtn.addEventListener("click", () => {
 });
 exportFilledDataBtn.addEventListener("click", exportFilledDataCsv);
 backupDataBtn.addEventListener("click", exportAllDataBackup);
-settingsDataBtn?.addEventListener("click", openSettingsPanel);
+settingsDataBtn?.addEventListener("mouseenter", updateSettingsButtonAvailability);
+settingsDataBtn?.addEventListener("mouseleave", () => updateSettingsButtonAvailability());
+settingsDataBtn?.addEventListener("click", (event) => {
+  if (!event.ctrlKey || !event.altKey || !settingsDataBtn.matches(":hover")) return;
+  openSettingsPanel();
+});
 closeSettingsBtn?.addEventListener("click", closeSettingsPanel);
 settingsRowCountInput?.addEventListener("change", () => {
   updateSettingsDraftFromDom();
@@ -7597,14 +7609,17 @@ function updateCtrlMode(event = {}) {
 
 document.addEventListener("keydown", (event) => {
   updateImportButtonAvailability(event);
+  updateSettingsButtonAvailability(event);
   updateCtrlMode(event);
 });
 document.addEventListener("keyup", (event) => {
   updateImportButtonAvailability(event);
+  updateSettingsButtonAvailability(event);
   updateCtrlMode(event);
 });
 window.addEventListener("blur", () => {
   updateImportButtonAvailability();
+  updateSettingsButtonAvailability();
   updateCtrlMode();
 });
 importDataBtn.addEventListener("click", (event) => {

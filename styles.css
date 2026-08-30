@@ -760,6 +760,13 @@ h3 {
   font-size: 14px;
   font-weight: 900;
   text-transform: uppercase;
+  cursor: default;
+  opacity: 0.45;
+}
+
+.settings-data-button.is-unlocked {
+  cursor: pointer;
+  opacity: 1;
 }
 
 .history-data-button .history-data-label {
