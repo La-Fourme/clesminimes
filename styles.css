@@ -747,10 +747,10 @@ h3 {
 
 .settings-data-button {
   flex: 0 0 auto;
-  align-self: stretch;
-  min-height: 56px;
-  min-width: 122px;
-  padding: 0 16px;
+  align-self: center;
+  min-height: 34px;
+  min-width: 132px;
+  padding: 0 14px;
   color: var(--ink);
   background: #d8dcd8;
   border-color: var(--line);
