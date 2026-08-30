@@ -16,6 +16,7 @@
   --red: #a8463d;
   --red-soft: #f1c7c2;
   --empty-tile: #e4e8e4;
+  --data-panel: #c3c9c4;
   --shadow: 0 20px 60px rgba(26, 38, 43, 0.12);
   --soft-shadow: 0 6px 16px rgba(30, 37, 40, 0.24);
   --lift-shadow: 0 16px 34px rgba(30, 37, 40, 0.28);
@@ -667,7 +668,7 @@ h3 {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--empty-tile);
+  background: var(--data-panel);
   box-shadow: var(--soft-shadow);
 }
 
