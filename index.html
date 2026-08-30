@@ -12,7 +12,7 @@
     <title>CENTURY 21 LES MINIMES - TABLEAUX DE GESTION DES CL&Eacute;S</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20260713" />
     <link rel="shortcut icon" href="favicon.svg?v=20260713" />
-    <link rel="stylesheet" href="styles.css?v=20260830-2" />
+    <link rel="stylesheet" href="styles.css?v=20260830-3" />
   </head>
   <body>
     <div id="saleCelebration" class="sale-celebration" aria-live="polite" hidden>
@@ -112,15 +112,18 @@
         </section>
 
         <section id="keyGrid" class="key-grid" aria-label="Jeux de cles"></section>
-        <section class="backup-panel" aria-label="Sauvegarde et export des données">
+        <div class="backup-panel-row">
+        <section class="backup-panel backup-info-panel" aria-label="Sauvegarde et export des données">
           <div>
             <span class="backup-panel-title">Données</span>
             <span class="backup-panel-subtitle">Sauvegarde complète et exports du registre</span>
           </div>
+        </section>
           <button id="settingsDataBtn" class="settings-data-button icon-button" type="button">
             <span aria-hidden="true">⚙</span>
             RÉGLAGES
           </button>
+          <section class="backup-panel backup-actions-panel" aria-label="Actions de sauvegarde et export">
           <div class="backup-actions">
             <button id="historyDataBtn" class="history-data-button icon-button" type="button">
               <svg class="history-button-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -155,8 +158,9 @@
               Importer sauvegarde
             </button>
           </div>
+          </section>
           <input id="backupFileInput" type="file" accept="application/json,.json" hidden />
-        </section>
+        </div>
       </section>
 
       <aside id="detailPanel" class="detail-panel" aria-label="Detail du jeu de cles" hidden>
@@ -433,7 +437,7 @@
 
     <script>
       (() => {
-        const fallbackVersion = "20260830-2";
+        const fallbackVersion = "20260830-3";
         const loadApp = (version) => {
           const script = document.createElement("script");
           script.src = `app.js?v=${encodeURIComponent(version || fallbackVersion)}&t=${Date.now()}`;
