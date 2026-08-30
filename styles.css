@@ -442,7 +442,7 @@ h3 {
 
 .filters {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(220px, 1fr) minmax(360px, 448px) auto;
   column-gap: 6px;
   margin: 12px 0 18px;
   align-items: end;
@@ -517,7 +517,8 @@ h3 {
   box-sizing: border-box;
   width: min(100%, 448px);
   max-width: 100%;
-  margin: -16px 0 10px auto;
+  height: 42px;
+  margin: 0;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #d8dcd8;
@@ -2769,9 +2770,20 @@ body.is-moving-key .photo-hover {
 }
 
 @media (max-width: 1180px) {
+  .filters {
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+  }
+
   .key-status-filter {
+    grid-column: 1 / -1;
+    grid-row: 2;
     width: 100%;
-    margin: 12px 0 10px;
+    margin: 0;
+  }
+
+  .filters > .filter-action {
+    grid-column: 4;
+    grid-row: 1;
   }
 }
 
@@ -2789,7 +2801,7 @@ body.is-moving-key .photo-hover {
 
   .key-status-filter {
     width: 100%;
-    margin: 12px 0 10px;
+    margin: 0;
   }
 
   .key-number,
@@ -2920,6 +2932,7 @@ body.is-moving-key .photo-hover {
   .key-status-filter {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
+    height: auto;
     margin: 8px 0 10px;
     border-radius: 14px;
   }
@@ -3016,6 +3029,7 @@ body.is-moving-key .photo-hover {
 
   .key-status-filter {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-column: 1 / -1;
     width: 100%;
     margin: 14px 0 8px;
   }
