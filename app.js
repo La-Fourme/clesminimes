@@ -154,9 +154,8 @@ function normalizeCategorySetting(category, index, usedIds) {
   let id = String((typeof category === "object" && category?.id) || preferredDefaultId || "").trim();
   if (!id || usedIds.has(id)) id = createCategoryId(label);
   usedIds.add(id);
-  const prefix = String(
-    (typeof category === "object" && category?.prefix) || defaultCategoryPrefixes[label] || label,
-  ).trim() || label;
+  const hasStoredPrefix = typeof category === "object" && Object.prototype.hasOwnProperty.call(category, "prefix");
+  const prefix = String(hasStoredPrefix ? category.prefix ?? "" : defaultCategoryPrefixes[label] || label).trim();
   const aliases = Array.isArray(category?.aliases)
     ? category.aliases.map((alias) => String(alias || "").trim()).filter(Boolean)
     : [];
@@ -234,7 +233,10 @@ function getCategoryLabel(categoryId) {
 
 function getCategoryCasePrefix(categoryId) {
   const category = getCategorySetting(categoryId);
-  return category?.prefix || category?.label || categoryId;
+  if (!category) return categoryId;
+  return Object.prototype.hasOwnProperty.call(category, "prefix")
+    ? String(category.prefix || "")
+    : category.label || categoryId;
 }
 
 function getCategoryAliases(category) {
@@ -252,6 +254,19 @@ function getCategoryIdFromLabel(label) {
 
 function parseKeyLabelFromTitle(title) {
   const text = String(title || "").trim();
+  const bareMatch = text.match(/^#(\d+)/u);
+  const prefixlessCategories = getAllKnownCategorySettings().filter(
+    (category) => Object.prototype.hasOwnProperty.call(category, "prefix") && !String(category.prefix || "").trim(),
+  );
+  if (bareMatch && prefixlessCategories.length === 1) {
+    const category = prefixlessCategories[0];
+    return {
+      id: `${category.id}-${Number(bareMatch[1])}`,
+      category: category.id,
+      number: Number(bareMatch[1]),
+      text: bareMatch[0],
+    };
+  }
   const candidates = getAllKnownCategorySettings()
     .flatMap((category) => getCategoryAliases(category).map((alias) => ({ alias, id: category.id })))
     .sort((first, second) => second.alias.length - first.alias.length);
@@ -2817,7 +2832,8 @@ function toggleSelectedDetails() {
 }
 
 function keyLabel(key) {
-  return `${getCategoryCasePrefix(key.category)} #${key.number}`;
+  const prefix = getCategoryCasePrefix(key.category);
+  return `${prefix ? `${prefix} ` : ""}#${key.number}`;
 }
 
 function tilePrefix(key) {
@@ -2825,13 +2841,14 @@ function tilePrefix(key) {
 }
 
 function tileLabel(key) {
-  return `${tilePrefix(key)} #${key.number}`;
+  const prefix = tilePrefix(key);
+  return `${prefix ? `${prefix} ` : ""}#${key.number}`;
 }
 
 function keyLabelVariants(key) {
   const category = getCategorySetting(key.category);
   if (!category) return [keyLabel(key)];
-  return getCategoryAliases(category).map((alias) => `${alias} #${key.number}`);
+  return [...new Set([keyLabel(key), ...getCategoryAliases(category).map((alias) => `${alias} #${key.number}`)])];
 }
 
 function isValidPhoto(photo) {
@@ -4833,7 +4850,7 @@ function updateSettingsDraftFromDom() {
       const labelInput = item.querySelector("[data-settings-category-label]");
       const prefixInput = item.querySelector("[data-settings-category-prefix]");
       const label = labelInput?.value.trim() || defaultCategoryLabels[index] || `Ligne ${index + 1}`;
-      const prefix = prefixInput?.value.trim() || defaultCategoryPrefixes[label] || label;
+      const prefix = prefixInput ? prefixInput.value.trim() : String(previous.prefix || "").trim();
       return { ...previous, label, prefix };
     });
   }
@@ -4889,7 +4906,7 @@ function createSettingsCategoryRow(category, index) {
   nameInput.spellcheck = false;
   prefixLabel.textContent = "Préfixe";
   prefixInput.type = "text";
-  prefixInput.value = category.prefix || category.label;
+  prefixInput.value = category.prefix ?? "";
   prefixInput.placeholder = "M";
   prefixInput.dataset.settingsCategoryPrefix = "true";
   prefixInput.autocomplete = "off";
