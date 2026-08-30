@@ -12,7 +12,7 @@
     <title>CENTURY 21 LES MINIMES - TABLEAUX DE GESTION DES CL&Eacute;S</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20260713" />
     <link rel="shortcut icon" href="favicon.svg?v=20260713" />
-    <link rel="stylesheet" href="styles.css?v=20260830-15" />
+    <link rel="stylesheet" href="styles.css?v=20260830-16" />
   </head>
   <body>
     <div id="saleCelebration" class="sale-celebration" aria-live="polite" hidden>
@@ -54,20 +54,6 @@
         </header>
 
         <section class="filters" aria-label="Filtres">
-          <section class="key-status-filter" aria-label="Filtrer les jeux de cl&eacute;s">
-            <button class="key-status-filter-button is-active" type="button" data-key-status-filter="all">
-              <span class="key-status-dot" aria-hidden="true"></span>TOUS <span data-key-status-count="all">0</span>
-            </button>
-            <button class="key-status-filter-button" type="button" data-key-status-filter="available">
-              <span class="key-status-dot" aria-hidden="true"></span>DISPO. <span data-key-status-count="available">0</span>
-            </button>
-            <button class="key-status-filter-button" type="button" data-key-status-filter="reserved">
-              <span class="key-status-dot" aria-hidden="true"></span>RESER. <span data-key-status-count="reserved">0</span>
-            </button>
-            <button class="key-status-filter-button" type="button" data-key-status-filter="out">
-              <span class="key-status-dot" aria-hidden="true"></span>INDISP. <span data-key-status-count="out">0</span>
-            </button>
-          </section>
           <div class="view-filter-action">
             <span>Affichage</span>
             <div class="view-toggle" role="group" aria-label="Mode d'affichage du tableau">
@@ -108,6 +94,20 @@
             <span>Répertoire</span>
             <button id="contactsTabBtn" class="tab-button contacts-filter-button" type="button">Intervenants</button>
           </div>
+          <section class="key-status-filter" aria-label="Filtrer les jeux de cl&eacute;s">
+            <button class="key-status-filter-button is-active" type="button" data-key-status-filter="all">
+              <span class="key-status-dot" aria-hidden="true"></span>TOUS <span data-key-status-count="all">0</span>
+            </button>
+            <button class="key-status-filter-button" type="button" data-key-status-filter="available">
+              <span class="key-status-dot" aria-hidden="true"></span>DISPO. <span data-key-status-count="available">0</span>
+            </button>
+            <button class="key-status-filter-button" type="button" data-key-status-filter="reserved">
+              <span class="key-status-dot" aria-hidden="true"></span>RESER. <span data-key-status-count="reserved">0</span>
+            </button>
+            <button class="key-status-filter-button" type="button" data-key-status-filter="out">
+              <span class="key-status-dot" aria-hidden="true"></span>INDISP. <span data-key-status-count="out">0</span>
+            </button>
+          </section>
         </section>
 
         <section id="keyGrid" class="key-grid" aria-label="Jeux de cles"></section>

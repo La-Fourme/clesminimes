@@ -443,7 +443,7 @@ h3 {
 
 .filters {
   display: grid;
-  grid-template-columns: minmax(360px, 448px) auto auto minmax(220px, 1fr) auto;
+  grid-template-columns: auto auto minmax(220px, 1fr) auto minmax(360px, 448px);
   column-gap: 6px;
   margin: 12px 0 18px;
   align-items: end;
