@@ -746,6 +746,7 @@ h3 {
 }
 
 .settings-data-button {
+  flex: 0 0 auto;
   color: var(--ink);
   background: #d8dcd8;
   border-color: var(--line);
@@ -943,7 +944,7 @@ h3 {
 }
 
 .settings-row {
-  grid-template-columns: 34px minmax(170px, 1fr) minmax(132px, 0.5fr) auto;
+  grid-template-columns: 34px minmax(145px, 1fr) minmax(104px, 0.42fr) auto;
 }
 
 .settings-replacement-row {
@@ -1443,7 +1444,7 @@ body.is-moving-key .photo-hover {
 }
 
 .global-history-panel.settings-panel {
-  width: min(640px, 100vw);
+  width: min(560px, 100vw);
 }
 
 .contacts-panel > * {

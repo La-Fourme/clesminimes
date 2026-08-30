@@ -12,7 +12,7 @@
     <title>CENTURY 21 LES MINIMES - TABLEAUX DE GESTION DES CL&Eacute;S</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20260713" />
     <link rel="shortcut icon" href="favicon.svg?v=20260713" />
-    <link rel="stylesheet" href="styles.css?v=20260830-3" />
+    <link rel="stylesheet" href="styles.css?v=20260830-4" />
   </head>
   <body>
     <div id="saleCelebration" class="sale-celebration" aria-live="polite" hidden>
@@ -119,10 +119,6 @@
             <span class="backup-panel-subtitle">Sauvegarde complète et exports du registre</span>
           </div>
         </section>
-          <button id="settingsDataBtn" class="settings-data-button icon-button" type="button">
-            <span aria-hidden="true">⚙</span>
-            RÉGLAGES
-          </button>
           <section class="backup-panel backup-actions-panel" aria-label="Actions de sauvegarde et export">
           <div class="backup-actions">
             <button id="historyDataBtn" class="history-data-button icon-button" type="button">
@@ -159,6 +155,10 @@
             </button>
           </div>
           </section>
+          <button id="settingsDataBtn" class="settings-data-button icon-button" type="button">
+            <span aria-hidden="true">⚙</span>
+            RÉGLAGES
+          </button>
           <input id="backupFileInput" type="file" accept="application/json,.json" hidden />
         </div>
       </section>
@@ -437,7 +437,7 @@
 
     <script>
       (() => {
-        const fallbackVersion = "20260830-3";
+        const fallbackVersion = "20260830-4";
         const loadApp = (version) => {
           const script = document.createElement("script");
           script.src = `app.js?v=${encodeURIComponent(version || fallbackVersion)}&t=${Date.now()}`;
