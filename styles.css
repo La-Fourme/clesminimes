@@ -1177,7 +1177,7 @@ textarea {
 
 .key-row {
   display: grid;
-  grid-template-columns: repeat(10, minmax(58px, 1fr));
+  grid-template-columns: repeat(var(--key-column-count, 10), minmax(58px, 1fr));
   gap: 8px;
 }
 
@@ -3174,7 +3174,7 @@ body.is-moving-key .photo-hover {
 
   .key-row {
     gap: 4px;
-    grid-template-columns: repeat(10, minmax(66px, 1fr));
+    grid-template-columns: repeat(var(--key-column-count, 10), minmax(66px, 1fr));
   }
 
   .key-grid[data-view-mode="photo"] .key-row {

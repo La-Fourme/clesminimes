@@ -177,7 +177,7 @@ function normalizeAddressReplacement(item) {
 
 function normalizeEvenSlotCount(value, fallback = defaultSlotsPerCategory) {
   const parsed = Number.parseInt(value, 10);
-  const clamped = Math.max(2, Math.min(60, Number.isFinite(parsed) ? parsed : fallback));
+  const clamped = Math.max(10, Math.min(60, Number.isFinite(parsed) ? parsed : fallback));
   return clamped % 2 === 0 ? clamped : Math.min(60, clamped + 1);
 }
 
@@ -5670,6 +5670,7 @@ function renderGrid() {
 
     const keyRow = document.createElement("div");
     keyRow.className = "key-row";
+    keyRow.style.setProperty("--key-column-count", String(getSlotsPerCategory() / 2));
 
     const visibleKeys = keys
       .filter((key) => key.category === category.id && key.number <= getSlotsPerCategory())
