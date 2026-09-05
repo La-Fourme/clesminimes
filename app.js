@@ -174,6 +174,12 @@ function normalizeAddressReplacement(item) {
   };
 }
 
+function normalizeEvenSlotCount(value, fallback = defaultSlotsPerCategory) {
+  const parsed = Number.parseInt(value, 10);
+  const clamped = Math.max(2, Math.min(60, Number.isFinite(parsed) ? parsed : fallback));
+  return clamped % 2 === 0 ? clamped : Math.min(60, clamped + 1);
+}
+
 function normalizeTableSettings(value) {
   const parsed = typeof value === "string" ? parseStorageValue(value) : value;
   const fallback = getDefaultTableSettings();
@@ -184,7 +190,7 @@ function normalizeTableSettings(value) {
     .slice(0, 16)
     .map((category, index) => normalizeCategorySetting(category, index, usedIds))
     .filter((category) => category.label);
-  const slotsPerCategory = Math.max(1, Math.min(60, Number.parseInt(source.slotsPerCategory, 10) || fallback.slotsPerCategory));
+  const slotsPerCategory = normalizeEvenSlotCount(source.slotsPerCategory, fallback.slotsPerCategory);
   const normalizedAddressReplacements = (Array.isArray(source.addressReplacements) ? source.addressReplacements : fallback.addressReplacements)
     .map(normalizeAddressReplacement)
     .filter(Boolean);
@@ -4948,7 +4954,7 @@ function updateSettingsDraftFromDom() {
   }
 
   if (settingsSlotsInput) {
-    settingsDraft.slotsPerCategory = Number.parseInt(settingsSlotsInput.value, 10) || defaultSlotsPerCategory;
+    settingsDraft.slotsPerCategory = normalizeEvenSlotCount(settingsSlotsInput.value);
   }
 
   const replacementItems = settingsReplacementsList ? [...settingsReplacementsList.querySelectorAll("[data-settings-replacement-index]")] : [];
@@ -7739,7 +7745,7 @@ settingsRowCountInput?.addEventListener("change", () => {
   renderSettingsPanel();
 });
 settingsSlotsInput?.addEventListener("blur", () => {
-  const slots = Math.max(1, Math.min(60, Number.parseInt(settingsSlotsInput.value, 10) || defaultSlotsPerCategory));
+  const slots = normalizeEvenSlotCount(settingsSlotsInput.value);
   settingsSlotsInput.value = String(slots);
 });
 addSettingsReplacementBtn?.addEventListener("click", () => {
