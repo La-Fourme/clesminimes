@@ -4054,7 +4054,7 @@ function getRegistryHistoryEntries(registry) {
           date: movement.date || "Date non renseignée",
           title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${set.label}`,
           action: getMovementActionLabel(movement, set.history),
-          actor: movement.person || "Intervenant non renseigné",
+          actor: movement.person || movement.company || "Intervenant non renseigné",
           actorPhone: movement.phone || "",
           details: movementDetails.filter(Boolean).join(" | "),
           device: "",
@@ -4071,7 +4071,7 @@ function getRegistryHistoryEntries(registry) {
     const latestMovement = archiveMovement || getLatestMovementEntry(archiveSet.history || []);
     const usesMovementActor = record.reason === "rented" || record.reason === "authenticated";
     const defaultInternalActor = usesMovementActor ? getDefaultInternalContactActor() : { person: "", phone: "" };
-    const archiveActor = latestMovement?.person || defaultInternalActor.person;
+    const archiveActor = latestMovement?.person || latestMovement?.company || defaultInternalActor.person;
     const archiveActorPhone = latestMovement?.phone || defaultInternalActor.phone;
     const action =
       record.reason === "authenticated"
@@ -6715,7 +6715,7 @@ async function addMovement(type) {
     history: [entry, ...selectedSet.history],
   });
   if (isNewKeyDraft) commitPendingNewKeyDraft();
-  logActivity(getMovementActionLabel(entry), `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
+  logActivity(getMovementActionLabel(entry), `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${selectedSet.label}`, [entry.person || entry.company, entry.phone, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
   movementNameInput.value = "";
@@ -6910,7 +6910,7 @@ async function toggleReservationMovement(reservationId) {
   logActivity(
     getMovementActionLabel(entry),
     `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${selectedSet.label}`,
-    [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "),
+    [entry.person || entry.company, entry.phone, entry.note].filter(Boolean).join(" | "),
   );
   const actionArchivesChanged = Boolean(selectedArchiveRecord);
   if (selectedArchiveRecord) renderCompromisesPanel();
