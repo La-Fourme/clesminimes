@@ -955,6 +955,67 @@ h3 {
   font-weight: 600;
 }
 
+.settings-celebration-section {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.settings-switch-control {
+  position: relative;
+  display: flex !important;
+  align-items: center;
+  gap: 10px !important;
+  color: var(--ink) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+}
+
+.settings-switch-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.settings-switch-track {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex: 0 0 44px;
+  border: 1px solid #8b9490;
+  border-radius: 999px;
+  background: #c5cac7;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.settings-switch-track::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(30, 37, 40, 0.28);
+  content: "";
+  transition: transform 0.16s ease;
+}
+
+.settings-switch-control input:checked + .settings-switch-track {
+  border-color: #2c6079;
+  background: #2c6079;
+}
+
+.settings-switch-control input:checked + .settings-switch-track::after {
+  transform: translateX(20px);
+}
+
+.settings-switch-control input:focus-visible + .settings-switch-track {
+  outline: 2px solid rgba(44, 96, 121, 0.42);
+  outline-offset: 2px;
+}
+
 .settings-list {
   display: grid;
   gap: 8px;

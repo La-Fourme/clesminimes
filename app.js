@@ -138,6 +138,7 @@ function getDefaultTableSettings() {
     })),
     slotsPerCategory: defaultSlotsPerCategory,
     addressReplacements: defaultAddressReplacements.map((item) => ({ ...item })),
+    saleCelebrationEnabled: true,
   };
 }
 
@@ -201,11 +202,13 @@ function normalizeTableSettings(value) {
     normalizedAddressReplacements.push({ id: "allee-sans-accent", word: "allee", replacement: "All." });
   }
   const addressReplacements = sortAddressReplacements(normalizedAddressReplacements);
+  const saleCelebrationEnabled = source.saleCelebrationEnabled !== false;
 
   return {
     categories: categories.length ? categories : fallback.categories,
     slotsPerCategory,
     addressReplacements,
+    saleCelebrationEnabled,
   };
 }
 
@@ -537,6 +540,7 @@ const settingsSlotsInput = document.querySelector("#settingsSlotsInput");
 const settingsCategoriesList = document.querySelector("#settingsCategoriesList");
 const settingsReplacementsList = document.querySelector("#settingsReplacementsList");
 const addSettingsReplacementBtn = document.querySelector("#addSettingsReplacementBtn");
+const settingsCelebrationInput = document.querySelector("#settingsCelebrationInput");
 const globalHistoryPanel = document.querySelector("#globalHistoryPanel");
 const globalHistoryEyebrow = document.querySelector("#globalHistoryEyebrow");
 const globalHistoryTitle = document.querySelector("#globalHistoryTitle");
@@ -4956,6 +4960,9 @@ function updateSettingsDraftFromDom() {
   if (settingsSlotsInput) {
     settingsDraft.slotsPerCategory = normalizeEvenSlotCount(settingsSlotsInput.value);
   }
+  if (settingsCelebrationInput) {
+    settingsDraft.saleCelebrationEnabled = settingsCelebrationInput.checked;
+  }
 
   const replacementItems = settingsReplacementsList ? [...settingsReplacementsList.querySelectorAll("[data-settings-replacement-index]")] : [];
   settingsDraft.addressReplacements = replacementItems.map((item) => {
@@ -5077,6 +5084,7 @@ function renderSettingsPanel() {
 
   if (settingsRowCountInput) settingsRowCountInput.value = String(settingsDraft.categories.length);
   if (settingsSlotsInput) settingsSlotsInput.value = String(settingsDraft.slotsPerCategory || defaultSlotsPerCategory);
+  if (settingsCelebrationInput) settingsCelebrationInput.checked = settingsDraft.saleCelebrationEnabled !== false;
 
   if (settingsCategoriesList) {
     settingsCategoriesList.innerHTML = "";
@@ -5360,7 +5368,7 @@ function markCompromiseAsAuthenticated(recordId) {
   );
   saveArchives();
   render();
-  showSaleCelebration();
+  if (tableSettings.saleCelebrationEnabled !== false) showSaleCelebration();
 }
 
 async function editCompromiseDate(recordId) {
