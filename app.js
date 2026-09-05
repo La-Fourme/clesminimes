@@ -4483,17 +4483,23 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     normalizeMovementWords(value);
   const getGlobalHistoryActionLabel = (action) =>
     String(action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation jeu") ? "Ajout jeu" : normalizeMovementWord(action);
-  const removeRedundantTransactionLabel = (entry, value) => {
+  const removeRedundantRegistryLabel = (entry, value) => {
     const action = String(entry.action || "")
       .toLocaleLowerCase("fr-FR")
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
-    if (!action.includes("compromis") && !action.includes("acte authentique")) return value;
+    const redundantRegistry =
+      action.includes("compromis") || action.includes("acte authentique")
+        ? "transaction"
+        : action.includes("loue")
+          ? "location"
+          : "";
+    if (!redundantRegistry) return value;
 
     return String(value || "")
       .split(" - ")
       .map((part) => part.trim())
-      .filter((part) => part && part.toLocaleLowerCase("fr-FR") !== "transaction")
+      .filter((part) => part && part.toLocaleLowerCase("fr-FR") !== redundantRegistry)
       .join(" - ");
   };
   const addMissingOwnerToHistoryRest = (entry, keyLabelEntry, rest) => {
@@ -4516,10 +4522,10 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     const actionLabel = getGlobalHistoryActionLabel(entry.action);
     const keyLabelEntry = getTitleKeyLabel(entry.title);
     if (!keyLabelEntry) {
-      return normalizeMovementWord(removeRedundantTransactionLabel(entry, `${actionLabel} - ${entry.title}`));
+      return normalizeMovementWord(removeRedundantRegistryLabel(entry, `${actionLabel} - ${entry.title}`));
     }
 
-    const rest = removeRedundantTransactionLabel(
+    const rest = removeRedundantRegistryLabel(
       entry,
       addMissingOwnerToHistoryRest(
         entry,
