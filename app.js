@@ -14,6 +14,7 @@ const defaultAddressReplacements = [
   { id: "place", word: "Place", replacement: "Pl." },
   { id: "route", word: "Route", replacement: "Rte" },
   { id: "allee", word: "All\u00e9e", replacement: "All." },
+  { id: "allee-sans-accent", word: "allee", replacement: "All." },
   { id: "chemin", word: "Chemin", replacement: "Ch." },
   { id: "impasse", word: "Impasse", replacement: "Imp." },
   { id: "passage", word: "Passage", replacement: "Pas." },
@@ -184,10 +185,16 @@ function normalizeTableSettings(value) {
     .map((category, index) => normalizeCategorySetting(category, index, usedIds))
     .filter((category) => category.label);
   const slotsPerCategory = Math.max(1, Math.min(60, Number.parseInt(source.slotsPerCategory, 10) || fallback.slotsPerCategory));
-  const addressReplacements =
-    sortAddressReplacements((Array.isArray(source.addressReplacements) ? source.addressReplacements : fallback.addressReplacements)
-      .map(normalizeAddressReplacement)
-      .filter(Boolean));
+  const normalizedAddressReplacements = (Array.isArray(source.addressReplacements) ? source.addressReplacements : fallback.addressReplacements)
+    .map(normalizeAddressReplacement)
+    .filter(Boolean);
+  const hasUnaccentedAllee = normalizedAddressReplacements.some(
+    (item) => item.word.toLocaleLowerCase("fr-FR") === "allee",
+  );
+  if (!hasUnaccentedAllee) {
+    normalizedAddressReplacements.push({ id: "allee-sans-accent", word: "allee", replacement: "All." });
+  }
+  const addressReplacements = sortAddressReplacements(normalizedAddressReplacements);
 
   return {
     categories: categories.length ? categories : fallback.categories,
