@@ -164,8 +164,8 @@ function normalizeCategorySetting(category, index, usedIds) {
 }
 
 function normalizeAddressReplacement(item) {
-  const word = String(item?.word || item?.from || "").trim();
-  const replacement = String(item?.replacement || item?.to || "").trim();
+  const word = formatSentenceStart(String(item?.word || item?.from || "")).trim();
+  const replacement = formatSentenceStart(String(item?.replacement || item?.to || "")).trim();
   if (!word || !replacement) return null;
   return {
     id: String(item?.id || createReplacementId()),
@@ -5004,6 +5004,9 @@ function createSettingsReplacementRow(replacement, index) {
   wordInput.dataset.settingsReplacementWord = "true";
   wordInput.autocomplete = "off";
   wordInput.spellcheck = false;
+  wordInput.addEventListener("blur", () => {
+    wordInput.value = formatSentenceStart(wordInput.value).trim();
+  });
   replacementLabel.textContent = "Remplacement";
   replacementInput.type = "text";
   replacementInput.value = replacement.replacement || "";
@@ -5011,6 +5014,9 @@ function createSettingsReplacementRow(replacement, index) {
   replacementInput.dataset.settingsReplacementValue = "true";
   replacementInput.autocomplete = "off";
   replacementInput.spellcheck = false;
+  replacementInput.addEventListener("blur", () => {
+    replacementInput.value = formatSentenceStart(replacementInput.value).trim();
+  });
   removeButton.type = "button";
   removeButton.className = "settings-remove-button";
   removeButton.textContent = "Supprimer";
