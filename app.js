@@ -5443,7 +5443,11 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
           meta.append(lineElement);
         });
     } else {
-      meta.textContent = [address || "Adresse non renseignée", formatArchiveDate(record.archivedAt)].filter(Boolean).join(" | ");
+      [address || "Adresse non renseignée", formatArchiveDate(record.archivedAt)].forEach((line) => {
+        const lineElement = document.createElement("span");
+        lineElement.textContent = line;
+        meta.append(lineElement);
+      });
     }
     actions.className = "archive-item-actions";
     exportButton.type = "button";
