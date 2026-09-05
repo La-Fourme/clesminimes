@@ -4066,11 +4066,13 @@ function getRegistryHistoryEntries(registry) {
 
   registryArchives.forEach((record) => {
     const key = record.key;
-    const archiveSet = key.sets?.find((set) => set.history?.some((entry) => entry.type === "rented")) || key.sets?.[0] || {};
-    const archiveMovement = [...(archiveSet.history || [])].find((entry) => entry.type === "rented");
-    const latestMovement = archiveMovement || getLatestMovementEntry(archiveSet.history || []);
-    const usesMovementActor = record.reason === "rented" || record.reason === "authenticated";
-    const defaultInternalActor = usesMovementActor ? getDefaultInternalContactActor() : { person: "", phone: "" };
+    const archiveMovementType = record.reason === "removed" ? "removed" : "rented";
+    const archiveSet = key.sets?.find((set) => set.history?.some((entry) => entry.type === archiveMovementType)) || key.sets?.[0] || {};
+    const archiveMovement = [...(archiveSet.history || [])].find((entry) => entry.type === archiveMovementType);
+    const latestMovement =
+      archiveMovement || (record.reason === "removed" ? null : getLatestMovementEntry(archiveSet.history || []));
+    const usesMovementActor = ["removed", "rented", "authenticated"].includes(record.reason);
+    const defaultInternalActor = record.reason === "removed" ? { person: "", phone: "" } : getDefaultInternalContactActor();
     const archiveActor = latestMovement?.person || latestMovement?.company || defaultInternalActor.person;
     const archiveActorPhone = latestMovement?.phone || defaultInternalActor.phone;
     const action =
@@ -4089,7 +4091,7 @@ function getRegistryHistoryEntries(registry) {
       date: formatArchiveDate(record.archivedAt),
       title: `${keyLabel(key)} - ${registryLabel}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`,
       action,
-      actor: usesMovementActor && archiveActor ? archiveActor : key.owner ? formatOwner(key.owner) : "Fiche clé",
+      actor: usesMovementActor ? archiveActor || "Intervenant non renseigné" : key.owner ? formatOwner(key.owner) : "Fiche clé",
       actorPhone: usesMovementActor ? archiveActorPhone || "" : "",
       details: usesMovementActor ? "" : [key.property || "", [key.postalCode, key.city].filter(Boolean).join(" ")].filter(Boolean).join(" - "),
       device: "",
@@ -6994,6 +6996,9 @@ async function archiveReservationKey(reservationId) {
   }
 
   const actionLabel = "Archiv\u00e9";
+  if (!ensureMovementActor(actionLabel)) return;
+  if (!ensureCompletePhoneNumber(movementPhoneInput, "num\u00e9ro de t\u00e9l\u00e9phone de l'intervenant")) return;
+  const archiveActor = getTypedMovementActor();
   const confirmed = confirm(`Archiver ${keyLabel(key)} et lib\u00e9rer la case ?`);
   if (!confirmed) return;
   const signature = await promptMovementSignature(actionLabel);
@@ -7005,9 +7010,9 @@ async function archiveReservationKey(reservationId) {
     id: createHistoryId(),
     type: "removed",
     actionLabel,
-    person: reservation.person || "",
-    company: reservation.company || "",
-    phone: formatPhoneNumber(reservation.phone || ""),
+    person: archiveActor.person,
+    company: archiveActor.company,
+    phone: archiveActor.phone,
     note: formatSentenceStart(getInlineReservationComment(reservationId)).trim(),
     signature,
     date: getMovementDateText(),
