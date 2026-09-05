@@ -496,6 +496,7 @@ const compromisesList = document.querySelector("#compromisesList");
 const archivesTabBtn = document.querySelector("#archivesTabBtn");
 const archivesPanel = document.querySelector("#archivesPanel");
 const closeArchivesBtn = document.querySelector("#closeArchivesBtn");
+const archiveSearchInput = document.querySelector("#archiveSearchInput");
 const rentedArchiveSection = document.querySelector("#rentedArchiveSection");
 const authenticatedArchiveSection = document.querySelector("#authenticatedArchiveSection");
 const rentedArchiveTitle = document.querySelector("#rentedArchiveTitle");
@@ -5385,8 +5386,32 @@ function openArchivedKeyRecord(record) {
 }
 
 function renderArchiveList(list, reason, emptyText, options = {}) {
+  const normalizeArchiveSearchText = (value) =>
+    String(value || "")
+      .toLocaleLowerCase("fr-FR")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  const archiveQuery = normalizeArchiveSearchText(archiveSearchInput?.value).trim();
   const archivedRecords = archives
     .filter((record) => record.reason === reason)
+    .filter((record) => {
+      if (!archiveQuery) return true;
+
+      const key = record.key;
+      const searchableText = [
+        keyLabel(key),
+        key.owner,
+        key.ownerFirstName,
+        key.property,
+        key.postalCode,
+        key.city,
+        key.notes,
+        ...key.sets.flatMap((set) =>
+          (set.history || []).flatMap((entry) => [entry.person, entry.company, entry.phone, entry.note]),
+        ),
+      ].join(" ");
+      return normalizeArchiveSearchText(searchableText).includes(archiveQuery);
+    })
     .sort((first, second) => {
       if (!options.sortByCompromiseDate) return 0;
       return String(first.compromiseSignedAt || first.archivedAt).localeCompare(
@@ -5397,7 +5422,7 @@ function renderArchiveList(list, reason, emptyText, options = {}) {
 
   if (!archivedRecords.length) {
     const item = document.createElement("li");
-    item.textContent = emptyText;
+    item.textContent = archiveQuery ? "Aucun résultat." : emptyText;
     list.append(item);
     return;
   }
@@ -7680,6 +7705,7 @@ signatureCanvas.addEventListener("pointermove", drawSignature);
 signatureCanvas.addEventListener("pointerup", stopSignature);
 signatureCanvas.addEventListener("pointercancel", stopSignature);
 searchInput.addEventListener("input", render);
+archiveSearchInput?.addEventListener("input", renderArchivesPanel);
 textViewBtn.addEventListener("click", () => setTileViewMode("text"));
 photoViewBtn.addEventListener("click", () => setTileViewMode("photo"));
 keyStatusFilterButtons.forEach((button) => {
