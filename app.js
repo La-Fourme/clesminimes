@@ -4483,6 +4483,19 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
     normalizeMovementWords(value);
   const getGlobalHistoryActionLabel = (action) =>
     String(action || "").toLocaleLowerCase("fr-FR").includes("cr\u00e9ation jeu") ? "Ajout jeu" : normalizeMovementWord(action);
+  const removeRedundantTransactionLabel = (entry, value) => {
+    const action = String(entry.action || "")
+      .toLocaleLowerCase("fr-FR")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    if (!action.includes("compromis") && !action.includes("acte authentique")) return value;
+
+    return String(value || "")
+      .split(" - ")
+      .map((part) => part.trim())
+      .filter((part) => part && part.toLocaleLowerCase("fr-FR") !== "transaction")
+      .join(" - ");
+  };
   const addMissingOwnerToHistoryRest = (entry, keyLabelEntry, rest) => {
     const owner = (ownerMaps[entry.registry] || new Map()).get(keyLabelEntry) || "";
     if (!owner || titleHasOwner(entry.title)) return rest;
@@ -4502,12 +4515,17 @@ function renderGlobalHistoryItems(targetList = globalHistoryList, registryFilter
   const getGlobalHistoryTitleText = (entry) => {
     const actionLabel = getGlobalHistoryActionLabel(entry.action);
     const keyLabelEntry = getTitleKeyLabel(entry.title);
-    if (!keyLabelEntry) return normalizeMovementWord(`${actionLabel} - ${entry.title}`);
+    if (!keyLabelEntry) {
+      return normalizeMovementWord(removeRedundantTransactionLabel(entry, `${actionLabel} - ${entry.title}`));
+    }
 
-    const rest = addMissingOwnerToHistoryRest(
+    const rest = removeRedundantTransactionLabel(
       entry,
-      keyLabelEntry,
-      String(entry.title || "").slice(keyLabelEntry.length).replace(/^\s+-\s+/, ""),
+      addMissingOwnerToHistoryRest(
+        entry,
+        keyLabelEntry,
+        String(entry.title || "").slice(keyLabelEntry.length).replace(/^\s+-\s+/, ""),
+      ),
     );
     return normalizeMovementWord(`${keyLabelEntry} - ${actionLabel}${rest ? ` - ${rest}` : ""}`);
   };
