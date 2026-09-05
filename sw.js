@@ -1,4 +1,4 @@
-const runtimeCacheName = "cles-runtime-20260905-19";
+const runtimeCacheName = "cles-runtime-20260905-20";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
