@@ -498,6 +498,7 @@ const archivesPanel = document.querySelector("#archivesPanel");
 const closeArchivesBtn = document.querySelector("#closeArchivesBtn");
 const archiveSearchInput = document.querySelector("#archiveSearchInput");
 const rentedArchiveSection = document.querySelector("#rentedArchiveSection");
+const removedArchiveSection = document.querySelector("#removedArchiveSection");
 const authenticatedArchiveSection = document.querySelector("#authenticatedArchiveSection");
 const rentedArchiveTitle = document.querySelector("#rentedArchiveTitle");
 const rentedList = document.querySelector("#rentedList");
@@ -2171,6 +2172,11 @@ function updateRegistryHeader() {
   topActions?.classList.toggle("is-location-only", activeRegistry === "location");
   rentedArchiveSection.hidden = activeRegistry === "transaction";
   authenticatedArchiveSection.hidden = activeRegistry !== "transaction";
+  const orderedArchiveSections =
+    activeRegistry === "transaction"
+      ? [authenticatedArchiveSection, removedArchiveSection, rentedArchiveSection]
+      : [rentedArchiveSection, removedArchiveSection, authenticatedArchiveSection];
+  orderedArchiveSections.forEach((section) => archivesPanel.append(section));
   if (registryHistoryDataLabel) {
     registryHistoryDataLabel.textContent = activeRegistry === "location" ? "Historique Location" : "Historique Transaction";
   }
