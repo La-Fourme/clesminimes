@@ -1354,10 +1354,6 @@ body.is-moving-key .photo-hover {
   text-align: center;
 }
 
-.key-photo-content:not(.is-empty) {
-  transform: translateY(7px);
-}
-
 .key-set-strip {
   position: absolute;
   right: 7px;
@@ -3196,9 +3192,6 @@ body.is-moving-key .photo-hover {
     background: rgba(255, 255, 255, 0.36);
   }
 
-  .key-grid[data-view-mode="photo"] .key-photo-content:not(.is-empty) {
-    transform: translateY(5.5px);
-  }
 }
 
 @media (max-width: 1040px), (pointer: coarse) {
