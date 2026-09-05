@@ -585,6 +585,7 @@ let dirtyCloudKeys = loadPendingCloudKeys();
 let dirtyKeySlots = loadDirtyKeySlots();
 let cloudRowVersions = loadCloudRowVersions();
 let activeKeyInfoDraft = null;
+let pendingNewKeyDraft = null;
 let hasLoadedCloudState = false;
 let hasCompletedInitialCloudLoad = false;
 let isCloudCheckRunning = false;
@@ -1887,6 +1888,7 @@ function removeAutomaticBackupsFromLocalStorage() {
 
 function closeKeyPanelAfterAction() {
   activeKeyInfoDraft = null;
+  pendingNewKeyDraft = null;
   selectedId = null;
   selectedArchiveRecord = null;
   selectedSetId = "main";
@@ -2181,6 +2183,7 @@ function closeSidePanels() {
 }
 
 function switchRegistry() {
+  pendingNewKeyDraft = null;
   activeRegistry = activeRegistry === "location" ? "transaction" : "location";
   saveActiveRegistry();
   tableSettings = loadTableSettings();
@@ -2784,7 +2787,46 @@ function getSelectedKey() {
       archived: true,
     };
   }
+  if (pendingNewKeyDraft?.id === selectedId) return pendingNewKeyDraft;
   return keys.find((key) => key.id === selectedId);
+}
+
+function isPendingNewKeyDraft(keyId = selectedId) {
+  return Boolean(keyId && pendingNewKeyDraft?.id === keyId);
+}
+
+function beginPendingNewKeyDraft(key) {
+  pendingNewKeyDraft = key && !isKeyFilled(key) ? normalizeKey(JSON.parse(JSON.stringify(key))) : null;
+}
+
+function discardPendingNewKeyDraft() {
+  pendingNewKeyDraft = null;
+  activeKeyInfoDraft = null;
+}
+
+function commitPendingNewKeyDraft() {
+  if (!isPendingNewKeyDraft()) return null;
+  const draft = normalizeKey(pendingNewKeyDraft);
+  const storageKey = getRegistryConfig().keysStorageKey;
+  rememberUndoStep();
+  pendingNewKeyDraft = null;
+  activeKeyInfoDraft = null;
+  keys = keys.map((key) => (key.id === draft.id ? draft : key));
+  markDirtyKeySlot(draft.id, storageKey);
+  saveKeys();
+  logActivity(
+    "Cr\u00e9ation fiche",
+    `${keyLabel(draft)}${draft.owner ? ` - ${formatOwner(draft.owner)}` : ""}`,
+    [draft.owner, draft.property].filter(Boolean).join(" - "),
+  );
+  if (draft.sets.length > 1) {
+    logActivity(
+      "Ajout jeu",
+      `${keyLabel(draft)}${draft.owner ? ` - ${formatOwner(draft.owner)}` : ""}`,
+      `${draft.sets.length} jeux au total`,
+    );
+  }
+  return draft;
 }
 
 function getSelectedSet(key = getSelectedKey()) {
@@ -3248,6 +3290,10 @@ function rememberActiveKeyInfoDraft(changes = getKeyInfoDraftChanges()) {
 function captureActiveKeyInfoDraft() {
   if (!selectedId || selectedArchiveRecord || isSavingKeyInfoDraft) return;
   const changes = getKeyInfoDraftChanges();
+  if (isPendingNewKeyDraft()) {
+    pendingNewKeyDraft = { ...pendingNewKeyDraft, ...changes };
+    return;
+  }
   rememberActiveKeyInfoDraft(changes);
   markDirtyKeySlot(selectedId);
   keys = keys.map((key) => (key.id === selectedId ? { ...key, ...changes } : key));
@@ -3261,6 +3307,7 @@ function captureActiveKeyInfoDraft() {
 }
 
 function restoreActiveKeyInfoDraftIfNeeded() {
+  if (isPendingNewKeyDraft()) return;
   if (!activeKeyInfoDraft || !selectedId || selectedArchiveRecord) return;
   if (activeKeyInfoDraft.keyId !== selectedId) return;
   if (Date.now() - activeKeyInfoDraft.editedAt > 30000) {
@@ -3275,6 +3322,10 @@ function updateSelectedKeyInfoFromDraft() {
   isSavingKeyInfoDraft = true;
   try {
     const changes = getKeyInfoDraftChanges();
+    if (isPendingNewKeyDraft()) {
+      pendingNewKeyDraft = { ...pendingNewKeyDraft, ...changes };
+      return;
+    }
     rememberActiveKeyInfoDraft(changes);
     markDirtyKeySlot(selectedId);
     updateSelectedKey(changes, { renderPanel: false });
@@ -3930,6 +3981,7 @@ function refreshDataFromStorage({ keepSelection = false } = {}) {
   selectedId = keepSelection && keys.some((key) => key.id === previousSelectedId) ? previousSelectedId : null;
   selectedSetId = keepSelection ? previousSelectedSetId || "main" : "main";
   if (keepSelection) restoreActiveKeyInfoDraftIfNeeded();
+  else discardPendingNewKeyDraft();
   hoveredKeyId = null;
   isDetailPanelHovered = false;
   if (!keepSelection) {
@@ -5622,11 +5674,13 @@ function renderGrid() {
             event.stopPropagation();
             return;
           }
-          if (selectedId !== key.id) activeKeyInfoDraft = null;
+          if (selectedId !== key.id) discardPendingNewKeyDraft();
           closeSidePanels();
           selectedArchiveRecord = null;
           selectedId = key.id;
           selectedSetId = key.sets[0]?.id || "main";
+          if (!isKeyFilled(key) && !isPendingNewKeyDraft(key.id)) beginPendingNewKeyDraft(key);
+          else pendingNewKeyDraft = null;
           resetKeyInfoEditUnlock(key);
           render();
         });
@@ -5977,6 +6031,7 @@ function renderPanel() {
   const isArchiveView = Boolean(selectedArchiveRecord);
   const isCompromiseView = isSelectedCompromiseEditable();
   const isReadOnlyArchive = isArchiveView && !isSelectedCompromiseEditable();
+  const isNewKeyDraft = isPendingNewKeyDraft(key.id);
   selectedSetId = selectedSet.id;
   detailPanel.hidden = false;
   form.hidden = false;
@@ -6006,6 +6061,7 @@ function renderPanel() {
   }
   const isKeyInfoLocked =
     !isArchiveView &&
+    !isNewKeyDraft &&
     hasProtectedKeyInfo(key) &&
     !isKeyInfoEditUnlocked &&
     !isSavingKeyInfoDraft &&
@@ -6017,7 +6073,7 @@ function renderPanel() {
     input.title = isKeyInfoLocked ? "Double-cliquez pour modifier" : "";
     input.setAttribute("aria-readonly", String(isKeyInfoLocked));
   });
-  const canCollapseKeyDetails = hasProtectedKeyInfo(key);
+  const canCollapseKeyDetails = hasProtectedKeyInfo(key) && !isNewKeyDraft;
   const forceShowKeyDetails = !canCollapseKeyDetails || isKeyInfoEditUnlocked || isProtectedKeyInfoInputActive();
   const areKeyDetailsExpanded = forceShowKeyDetails || isSelectedDetailsExpanded(key);
   keyDetailsHeading.hidden = !canCollapseKeyDetails;
@@ -6031,16 +6087,16 @@ function renderPanel() {
   const needsSelectedSetCheckIn = Boolean(selectedSet.needsCheckIn);
   const needsSelectedSetCheckInReason = selectedSet.needsCheckInReason || "";
   const isMainMovementLocked = isReadOnlyArchive || isSelectedSetOutForReservation;
-  const canCheckInSelectedKey = canMoveSelectedKey && (isSelectedSetOut || needsSelectedSetCheckIn) && !isSelectedSetOutForReservation;
+  const canCheckInSelectedKey = canMoveSelectedKey && (isNewKeyDraft || isSelectedSetOut || needsSelectedSetCheckIn) && !isSelectedSetOutForReservation;
   checkinBtn.textContent = selectedSet.status === "out" ? "Rentr\u00e9" : "Entr\u00e9";
   reservedBtn.textContent = "R\u00e9serv\u00e9";
   checkoutBtn.textContent = "Sorti";
-  checkoutBtn.disabled = !canMoveSelectedKey || isSelectedSetOut || needsSelectedSetCheckIn;
+  checkoutBtn.disabled = isNewKeyDraft || !canMoveSelectedKey || isSelectedSetOut || needsSelectedSetCheckIn;
   checkinBtn.disabled = !canCheckInSelectedKey;
-  reservedBtn.disabled = !canMoveSelectedKey;
-  rentedBtn.disabled = isArchiveView || key.archived;
-  removedBtn.disabled = isArchiveView || key.archived;
-  transferKeyBtn.disabled = isArchiveView || key.archived;
+  reservedBtn.disabled = isNewKeyDraft || !canMoveSelectedKey;
+  rentedBtn.disabled = isNewKeyDraft || isArchiveView || key.archived;
+  removedBtn.disabled = isNewKeyDraft || isArchiveView || key.archived;
+  transferKeyBtn.disabled = isNewKeyDraft || isArchiveView || key.archived;
   keySetCountSelect.disabled = isReadOnlyArchive;
   propertyInput.disabled = isArchiveView;
   postalCodeInput.disabled = isArchiveView;
@@ -6440,6 +6496,15 @@ function deleteHistoryEntry(historyId) {
 function updateSelectedKey(changes, options = {}) {
   if (selectedArchiveRecord) return;
   const shouldRenderPanel = options.renderPanel !== false;
+  if (isPendingNewKeyDraft()) {
+    pendingNewKeyDraft = { ...pendingNewKeyDraft, ...changes };
+    if (shouldRenderPanel) render();
+    else {
+      renderGrid();
+      renderCompromisesPanel();
+    }
+    return;
+  }
   const previousKey = getSelectedKey();
   const wasFilled = previousKey ? isKeyFilled(previousKey) : false;
   markDirtyKeySlot(selectedId);
@@ -6556,9 +6621,13 @@ function setKeySetCount(count) {
   selectedSetId = nextSets.some((set) => set.id === selectedSetId) ? selectedSetId : nextSets[0].id;
   if (nextCount > previousCount) {
     selectedSetId = nextSets[nextCount - 1]?.id || selectedSetId;
-    logActivity("Ajout jeu", `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`, [key.owner, `${nextCount} jeux au total`].filter(Boolean).join(" - "));
+    if (!isPendingNewKeyDraft()) {
+      logActivity("Ajout jeu", `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""}`, [key.owner, `${nextCount} jeux au total`].filter(Boolean).join(" - "));
+    }
   } else if (nextCount < previousCount) {
-    logActivity("Suppression jeu", keyLabel(key), `${removedSets.map((set) => set.label).join(", ")} supprimé(s)`);
+    if (!isPendingNewKeyDraft()) {
+      logActivity("Suppression jeu", keyLabel(key), `${removedSets.map((set) => set.label).join(", ")} supprimé(s)`);
+    }
   }
   if (selectedArchiveRecord) {
     const nextArchiveRecord = {
@@ -6583,6 +6652,11 @@ async function addMovement(type) {
   const key = getSelectedKey();
   const selectedSet = getSelectedSet(key);
   if (!key || !selectedSet || (key.archived && !selectedArchiveRecord)) return;
+  const isNewKeyDraft = isPendingNewKeyDraft(key.id);
+  if (isNewKeyDraft && type !== "in") {
+    alert("Valide d'abord la création de cette fiche avec le bouton Entré.");
+    return;
+  }
   if (selectedSet.status === "out" && selectedSet.holderReservationId) {
     alert("Cette sortie vient d'une r\u00e9servation : utilise la case orange de r\u00e9servation au-dessus.");
     return;
@@ -6627,6 +6701,7 @@ async function addMovement(type) {
         : selectedSet.reservations || [],
     history: [entry, ...selectedSet.history],
   });
+  if (isNewKeyDraft) commitPendingNewKeyDraft();
   logActivity(getMovementActionLabel(entry), `${keyLabel(key)}${key.owner ? ` - ${formatOwner(key.owner)}` : ""} - ${selectedSet.label}`, [entry.person, entry.phone, entry.note].filter(Boolean).join(" | "));
 
   movementPersonInput.value = "";
@@ -7656,8 +7731,8 @@ backupFileInput.addEventListener("change", () => {
 });
 closePanelBtn.addEventListener("click", () => {
   clearTimeout(detailCloseTimer);
-  syncCurrentRegistryNow();
-  activeKeyInfoDraft = null;
+  if (!isPendingNewKeyDraft()) syncCurrentRegistryNow();
+  discardPendingNewKeyDraft();
   selectedId = null;
   selectedArchiveRecord = null;
   resetKeyInfoEditUnlock(null);
@@ -7671,7 +7746,7 @@ document.addEventListener("pointerdown", (event) => {
   if (event.target.closest(".photo-viewer, .date-dialog, .movement-signature-dialog")) return;
 
   clearTimeout(detailCloseTimer);
-  activeKeyInfoDraft = null;
+  discardPendingNewKeyDraft();
   selectedId = null;
   selectedArchiveRecord = null;
   resetKeyInfoEditUnlock(null);
