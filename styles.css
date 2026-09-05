@@ -1317,7 +1317,7 @@ body.is-moving-key .photo-hover {
 
 .key-tile.photo-view {
   place-items: stretch;
-  padding: 20px 6px;
+  padding: 6px 6px 20px;
 }
 
 .key-tile-shell.photo-view-shell .key-tile.photo-view {
@@ -1352,6 +1352,10 @@ body.is-moving-key .photo-hover {
   font-size: 11px;
   line-height: 1.1;
   text-align: center;
+}
+
+.key-photo-content:not(.is-empty) {
+  transform: translateY(7px);
 }
 
 .key-set-strip {
@@ -3184,12 +3188,16 @@ body.is-moving-key .photo-hover {
   }
 
   .key-grid[data-view-mode="photo"] .key-tile.photo-view {
-    padding: 15px 4px;
+    padding: 4px 4px 15px;
   }
 
   .key-grid[data-view-mode="photo"] .key-photo-content {
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.36);
+  }
+
+  .key-grid[data-view-mode="photo"] .key-photo-content:not(.is-empty) {
+    transform: translateY(5.5px);
   }
 }
 
