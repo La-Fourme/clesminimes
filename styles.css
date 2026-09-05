@@ -1317,7 +1317,7 @@ body.is-moving-key .photo-hover {
 
 .key-tile.photo-view {
   place-items: stretch;
-  padding: 6px 6px 20px;
+  padding: 20px 6px;
 }
 
 .key-tile-shell.photo-view-shell .key-tile.photo-view {
@@ -3184,7 +3184,7 @@ body.is-moving-key .photo-hover {
   }
 
   .key-grid[data-view-mode="photo"] .key-tile.photo-view {
-    padding: 4px 4px 15px;
+    padding: 15px 4px;
   }
 
   .key-grid[data-view-mode="photo"] .key-photo-content {
